@@ -1,0 +1,12 @@
+{
+  "schema_version": "0.1",
+  "nodes": [
+    { "id": "file:src/allocation/domain/model.py", "kind": "file", "path": "src/allocation/domain/model.py" },
+    { "id": "file:src/allocation/service_layer/services.py", "kind": "file", "path": "src/allocation/service_layer/services.py" },
+    { "id": "file:src/allocation/adapters/repository.py", "kind": "file", "path": "src/allocation/adapters/repository.py" },
+    { "id": "file:src/allocation/entrypoints/flask_app.py", "kind": "file", "path": "src/allocation/entrypoints/flask_app.py" },
+    { "id": "file:tests/unit/test_batches.py", "kind": "file", "path": "tests/unit/test_batches.py" },
+    { "id": "file:tests/integration/test_repository.py", "kind": "file", "path": "tests/integration/test_repository.py" }
+  ],
+  "edges": []
+}
