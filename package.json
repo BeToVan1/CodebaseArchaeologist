@@ -4,6 +4,7 @@
   "private": true,
   "engines": { "node": ">=22.13.0" },
   "scripts": {
+    "analyze": "python analyzer.py . --output public/graph.json",
     "dev": "vinext dev",
     "build": "vinext build",
     "start": "vinext start"
