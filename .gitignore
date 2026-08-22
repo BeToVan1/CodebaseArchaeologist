@@ -1,0 +1,22 @@
+# dependencies
+/node_modules
+/.pnpm-store/
+/.pnp
+.pnp.*
+
+# testing
+/coverage
+
+# build output
+/.next/
+/.vinext/
+/out/
+/dist/
+/.wrangler/
+
+# local files
+.DS_Store
+*.pem
+.env*
+npm-debug.log*
+pnpm-debug.log*
