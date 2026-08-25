@@ -1,0 +1,24 @@
+.nav-item.muted { color: #9ba39d; }
+.legend i { display: inline-block; width: 18px; height: 2px; margin-left: 8px; background: var(--moss); }
+.graph-surface { position: relative; z-index: 1; height: calc(100vh - 174px); min-height: 520px; margin-top: 20px; overflow: hidden; border: 1px solid #d9dfd8; border-radius: 14px; background: rgba(250,251,248,.78); box-shadow: 0 12px 34px rgba(44,62,49,.07); }
+.react-flow__node.flow-node { width: 240px; padding: 15px 17px; border: 1px solid #d9dfd8; border-radius: 11px; background: #fff; color: var(--ink); font: 700 12px ui-monospace,SFMono-Regular,Menlo,monospace; box-shadow: 0 6px 18px rgba(44,62,49,.08); text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.react-flow__node.flow-node::before { content: "PY"; display: inline-grid; place-items: center; width: 31px; height: 31px; margin-right: 10px; border-radius: 7px; background: var(--moss-soft); color: #295338; font-size: 9px; }
+.react-flow__node.flow-node:hover { border-color: #9dae9f; }
+.react-flow__node.flow-node.selected { border-color: var(--moss); box-shadow: 0 0 0 3px rgba(49,91,61,.13), 0 8px 22px rgba(44,62,49,.12); }
+.react-flow__handle { width: 7px; height: 7px; border: 1px solid #fff; background: var(--moss); }
+.react-flow__controls { overflow: hidden; border: 1px solid var(--line); border-radius: 8px; box-shadow: none; }
+.react-flow__controls-button { border-bottom-color: var(--line); }
+.react-flow__minimap { overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: #f7f8f4; }
+.empty.overlay { position: absolute; z-index: 5; inset: 0; display: grid; place-items: center; margin: 0; background: rgba(247,248,244,.86); }
+.connection-count { color: var(--muted); font-size: 10px; }
+.connections { margin-top: 25px; }
+.connections h3 { margin: 0 0 15px; font: 500 18px Georgia,serif; }
+.connection-group { margin-bottom: 16px; }
+.connection-group > span { display: block; margin-bottom: 7px; color: #828b84; font-size: 9px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
+.connection-group button { display: block; width: 100%; margin: 0 0 6px; padding: 7px 8px; border: 0; border-radius: 6px; background: #f3f6f1; color: #315b3d; font: 10px/1.4 ui-monospace,monospace; text-align: left; overflow-wrap: anywhere; cursor: pointer; }
+.connection-group button:hover { background: var(--moss-soft); }
+.connection-group p { margin: 0; color: #929a94; font-size: 10px; }
+.detail { overflow-y: auto; max-height: calc(100vh - 72px); }
+@media (max-width: 940px) { .graph-surface { height: 620px; } .detail { max-height: none; } }
+@media (max-width: 650px) { .graph-surface { height: 560px; } }
+
