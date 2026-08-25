@@ -1,0 +1,2 @@
+# The Python analyzer currently uses only the Python standard library.
+# Add pinned third-party Python packages here when the analyzer adopts them.
