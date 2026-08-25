@@ -8,5 +8,37 @@
     { "id": "file:tests/unit/test_batches.py", "kind": "file", "path": "tests/unit/test_batches.py" },
     { "id": "file:tests/integration/test_repository.py", "kind": "file", "path": "tests/integration/test_repository.py" }
   ],
-  "edges": []
+  "edges": [
+    {
+      "id": "import:flask-app-to-services",
+      "source": "file:src/allocation/entrypoints/flask_app.py",
+      "target": "file:src/allocation/service_layer/services.py",
+      "kind": "imports"
+    },
+    {
+      "id": "import:services-to-model",
+      "source": "file:src/allocation/service_layer/services.py",
+      "target": "file:src/allocation/domain/model.py",
+      "kind": "imports"
+    },
+    {
+      "id": "import:services-to-repository",
+      "source": "file:src/allocation/service_layer/services.py",
+      "target": "file:src/allocation/adapters/repository.py",
+      "kind": "imports"
+    },
+    {
+      "id": "import:test-repository-to-repository",
+      "source": "file:tests/integration/test_repository.py",
+      "target": "file:src/allocation/adapters/repository.py",
+      "kind": "imports"
+    },
+    {
+      "id": "import:test-batches-to-model",
+      "source": "file:tests/unit/test_batches.py",
+      "target": "file:src/allocation/domain/model.py",
+      "kind": "imports"
+    }
+  ]
 }
+
