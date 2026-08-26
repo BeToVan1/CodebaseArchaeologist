@@ -1,11 +1,36 @@
 {
-  "schema_version": "0.1",
+  "schema_version": "0.2",
   "nodes": [
-    { "id": "file:src/allocation/domain/model.py", "kind": "file", "path": "src/allocation/domain/model.py" },
-    { "id": "file:src/allocation/service_layer/services.py", "kind": "file", "path": "src/allocation/service_layer/services.py" },
-    { "id": "file:src/allocation/adapters/repository.py", "kind": "file", "path": "src/allocation/adapters/repository.py" },
-    { "id": "file:src/allocation/entrypoints/flask_app.py", "kind": "file", "path": "src/allocation/entrypoints/flask_app.py" },
-    { "id": "file:tests/unit/test_batches.py", "kind": "file", "path": "tests/unit/test_batches.py" },
+    {
+      "id": "file:src/allocation/domain/model.py",
+      "kind": "file",
+      "path": "src/allocation/domain/model.py",
+      "source": "from dataclasses import dataclass\nfrom datetime import date\n\n\n@dataclass(frozen=True)\nclass OrderLine:\n    orderid: str\n    sku: str\n    qty: int\n\n\nclass Batch:\n    def __init__(self, ref: str, sku: str, qty: int, eta: date | None):\n        self.reference = ref\n        self.sku = sku\n        self.eta = eta\n        self._purchased_quantity = qty\n        self._allocations: set[OrderLine] = set()\n\n    def allocate(self, line: OrderLine) -> None:\n        if self.can_allocate(line):\n            self._allocations.add(line)\n\n    def can_allocate(self, line: OrderLine) -> bool:\n        return self.sku == line.sku and self.available_quantity >= line.qty\n\n    @property\n    def available_quantity(self) -> int:\n        return self._purchased_quantity - sum(line.qty for line in self._allocations)\n"
+    },
+    {
+      "id": "file:src/allocation/service_layer/services.py",
+      "kind": "file",
+      "path": "src/allocation/service_layer/services.py",
+      "source": "from allocation.domain import model\nfrom allocation.adapters import repository\n\n\ndef allocate(line: model.OrderLine, repo: repository.AbstractRepository) -> str:\n    batches = repo.list()\n    if not batches:\n        raise RuntimeError(f\"Out of stock for sku {line.sku}\")\n    batch = min(batches, key=lambda item: item.eta or model.date.min)\n    batch.allocate(line)\n    return batch.reference\n"
+    },
+    {
+      "id": "file:src/allocation/adapters/repository.py",
+      "kind": "file",
+      "path": "src/allocation/adapters/repository.py",
+      "source": "import abc\n\nfrom allocation.domain import model\n\n\nclass AbstractRepository(abc.ABC):\n    @abc.abstractmethod\n    def add(self, batch: model.Batch) -> None:\n        raise NotImplementedError\n\n    @abc.abstractmethod\n    def list(self) -> list[model.Batch]:\n        raise NotImplementedError\n"
+    },
+    {
+      "id": "file:src/allocation/entrypoints/flask_app.py",
+      "kind": "file",
+      "path": "src/allocation/entrypoints/flask_app.py",
+      "source": "from flask import Flask, jsonify, request\n\nfrom allocation.domain import model\nfrom allocation.service_layer import services\n\n\napp = Flask(__name__)\n\n\n@app.post(\"/allocate\")\ndef allocate_endpoint():\n    line = model.OrderLine(request.json[\"orderid\"], request.json[\"sku\"], request.json[\"qty\"])\n    batchref = services.allocate(line, repo=get_repository())\n    return jsonify({\"batchref\": batchref}), 201\n"
+    },
+    {
+      "id": "file:tests/unit/test_batches.py",
+      "kind": "file",
+      "path": "tests/unit/test_batches.py",
+      "source": "from datetime import date\n\nfrom allocation.domain import model\n\n\ndef test_allocating_to_a_batch_reduces_available_quantity():\n    batch = model.Batch(\"batch-001\", \"SMALL-TABLE\", qty=20, eta=date.today())\n    line = model.OrderLine(\"order-ref\", \"SMALL-TABLE\", 2)\n\n    batch.allocate(line)\n\n    assert batch.available_quantity == 18\n"
+    },
     { "id": "file:tests/integration/test_repository.py", "kind": "file", "path": "tests/integration/test_repository.py" }
   ],
   "edges": [
