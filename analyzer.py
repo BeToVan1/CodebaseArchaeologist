@@ -5,8 +5,11 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+import sys
 from pathlib import Path
 from typing import Any, NamedTuple
+
+from repository_loader import RepositoryLoadError, cleanup_repository, load_repository
 
 
 IGNORED_DIR_NAMES = {
@@ -268,7 +271,14 @@ def write_graph(graph: dict[str, Any], output_path: Path) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("repo", type=Path, help="Path to the Python repository to analyze")
+    parser.add_argument(
+        "repo",
+        type=str,
+        help=(
+            "Local path or public GitHub URL "
+            "(https://github.com/<owner>/<repository>) to analyze"
+        ),
+    )
     parser.add_argument(
         "--output",
         type=Path,
@@ -278,10 +288,31 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def is_github_url(repo: str) -> bool:
+    return repo.strip().lower().startswith(("http://", "https://"))
+
+
 def main() -> None:
     args = parse_args()
-    graph = analyze_repository(args.repo)
-    write_graph(graph, args.output)
+
+    if is_github_url(args.repo):
+        try:
+            repo_path = load_repository(args.repo)
+        except RepositoryLoadError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            raise SystemExit(1) from exc
+
+        try:
+            graph = analyze_repository(repo_path)
+            graph["source_url"] = args.repo
+            write_graph(graph, args.output)
+        finally:
+            cleanup_repository(repo_path)
+    else:
+        repo_path = Path(args.repo)
+        graph = analyze_repository(repo_path)
+        write_graph(graph, args.output)
+
     print(f"Wrote {len(graph['nodes'])} nodes and {len(graph['edges'])} edges to {args.output}")
 
 
