@@ -11,6 +11,17 @@
 .react-flow__minimap { overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: #f7f8f4; }
 .empty.overlay { position: absolute; z-index: 5; inset: 0; display: grid; place-items: center; margin: 0; background: rgba(247,248,244,.86); }
 .connection-count { color: var(--muted); font-size: 10px; }
+.origin { display: flex; flex-direction: column; gap: 6px; margin: -8px 0 18px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: #fafbf9; }
+.origin span { color: #68736b; font-size: 9px; font-weight: 750; letter-spacing: .09em; text-transform: uppercase; }
+.origin a, .origin strong { color: #315b3d; font-size: 10px; font-weight: 650; overflow-wrap: anywhere; text-decoration: none; }
+.origin a:hover { text-decoration: underline; }
+.state-card { position: absolute; z-index: 4; inset: 50% auto auto 50%; width: min(360px, calc(100% - 40px)); padding: 24px; transform: translate(-50%,-50%); border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,.96); box-shadow: 0 10px 30px rgba(44,62,49,.09); text-align: center; }
+.state-card strong { display: block; font: 500 19px Georgia,serif; }
+.state-card p { margin: 8px 0 0; color: var(--muted); font-size: 11px; line-height: 1.55; overflow-wrap: anywhere; }
+.loading-state > span { display: block; width: 24px; height: 24px; margin: 0 auto 14px; border: 2px solid #d6dfd5; border-top-color: var(--moss); border-radius: 50%; animation: spin .8s linear infinite; }
+.error-state { border-color: #e0c8c3; background: #fffaf8; }
+.error-state strong { color: #7a3e34; }
+@keyframes spin { to { transform: rotate(360deg); } }
 .source-section { margin-top: 25px; }
 .section-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .section-heading h3, .connections h3 { margin: 0; font: 500 18px Georgia,serif; }
