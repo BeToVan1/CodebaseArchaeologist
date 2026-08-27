@@ -14,13 +14,20 @@ import "@xyflow/react/dist/style.css";
 import "./graph.css";
 import { useEffect, useMemo, useState } from "react";
 
-type GraphNode = { id: string; kind: "file"; path: string };
+type GraphNode = {
+  id: string;
+  kind: "file";
+  path: string;
+  source?: string;
+  source_truncated?: boolean;
+};
 type GraphEdge = { id: string; source: string; target: string; kind: "imports" };
 type Graph = { schema_version: string; nodes: GraphNode[]; edges: GraphEdge[] };
 
 const filename = (path: string) => path.split("/").at(-1) ?? path;
 const folder = (path: string) => path.split("/").slice(0, -1).join("/") || "repository root";
 const positionFor = (index: number) => ({ x: (index % 2) * 330, y: Math.floor(index / 2) * 150 });
+const MAX_SOURCE_CHARACTERS = 200_000;
 
 export default function Home() {
   const [graph, setGraph] = useState<Graph | null>(null);
@@ -69,6 +76,11 @@ export default function Home() {
   const incoming = graph?.edges.filter((edge) => edge.target === selectedId) ?? [];
   const outgoing = graph?.edges.filter((edge) => edge.source === selectedId) ?? [];
   const nodePath = (id: string) => graph?.nodes.find((node) => node.id === id)?.path ?? id;
+  const displayedSource = selected?.source?.slice(0, MAX_SOURCE_CHARACTERS);
+  const sourceLines = displayedSource?.split("\n") ?? [];
+  const sourceIsTruncated = Boolean(
+    selected?.source_truncated || (selected?.source && selected.source.length > MAX_SOURCE_CHARACTERS),
+  );
 
   return (
     <main className="shell">
@@ -124,11 +136,27 @@ export default function Home() {
             <div className="detail-icon">PY</div><h2>{filename(selected.path)}</h2><p className="full-path">{selected.path}</p>
             <div className="divider" />
             <dl><div><dt>Kind</dt><dd>Python file</dd></div><div><dt>Node ID</dt><dd><code>{selected.id}</code></dd></div><div><dt>Folder</dt><dd>{folder(selected.path)}</dd></div></dl>
+            <section className="source-section">
+              <div className="section-heading"><h3>Source</h3>{sourceIsTruncated && <span>Truncated</span>}</div>
+              {displayedSource !== undefined ? (
+                <pre className="code-viewer" aria-label={`Source code for ${selected.path}`} tabIndex={0}>
+                  <code>{sourceLines.map((line, index) => (
+                    <span className="code-line" key={index}>
+                      <span className="line-number" aria-hidden="true">{index + 1}</span>
+                      <span className="line-content">{line || " "}</span>
+                    </span>
+                  ))}</code>
+                </pre>
+              ) : (
+                <div className="source-unavailable"><strong>Source unavailable</strong><p>The analyzer has not included this file’s contents yet.</p></div>
+              )}
+              {sourceIsTruncated && <p className="truncation-note">Only the first 200 KB are shown.</p>}
+            </section>
             <section className="connections"><h3>Imports</h3>
               <div className="connection-group"><span>Outgoing</span>{outgoing.length ? outgoing.map((edge) => <button key={edge.id} onClick={() => setSelectedId(edge.target)}>→ {nodePath(edge.target)}</button>) : <p>None in current graph</p>}</div>
               <div className="connection-group"><span>Incoming</span>{incoming.length ? incoming.map((edge) => <button key={edge.id} onClick={() => setSelectedId(edge.source)}>← {nodePath(edge.source)}</button>) : <p>None in current graph</p>}</div>
             </section>
-            <div className="next-step"><span>Fixture data</span><p>These paths and edges are temporary. Person A’s analyzer can replace this JSON without frontend changes.</p></div>
+            <div className="next-step"><span>Fixture data</span><p>This source is representative fixture content. Person A’s analyzer can replace it through the optional source field.</p></div>
           </> : <p>Select a node to inspect it.</p>}
         </aside>
       </section>

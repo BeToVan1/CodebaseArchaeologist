@@ -227,8 +227,9 @@ def extract_import_edges(
                 seen_pairs.add(pair)
                 edges.append(
                     {
-                        "source_id": source_id,
-                        "target_id": target_id,
+                        "id": f"import:{source_id}->{target_id}",
+                        "source": source_id,
+                        "target": target_id,
                         "kind": "imports",
                         "confidence": 1.0,
                         "resolution_method": "ast-static",
