@@ -1,5 +1,10 @@
 {
-  "schema_version": "0.2",
+  "schema_version": "0.3",
+  "repository": {
+    "name": "cosmicpython/code",
+    "url": "https://github.com/cosmicpython/code",
+    "source": "github"
+  },
   "nodes": [
     {
       "id": "file:src/allocation/domain/model.py",
