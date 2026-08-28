@@ -31,6 +31,9 @@ IGNORED_DIR_NAMES = {
     "site-packages",
 }
 
+MAX_SOURCE_BYTES = 200 * 1024  # 200 KB per file, applied to the encoded UTF-8 text
+MAX_PYTHON_FILES = 2000  # hard cap on how many discovered files a single run will analyze
+
 
 def find_python_files(repo_root: Path) -> list[Path]:
     """Return Python files under repo_root, excluding generated/vendor folders."""
@@ -41,18 +44,59 @@ def find_python_files(repo_root: Path) -> list[Path]:
     ]
 
 
-def build_file_nodes(repo_root: Path, python_files: list[Path]) -> list[dict[str, str]]:
-    """Build stable file nodes using repository-relative paths as identifiers."""
-    nodes: list[dict[str, str]] = []
+def read_source(path: Path) -> tuple[str | None, bool, str | None]:
+    """Read a file's source as UTF-8, truncated to MAX_SOURCE_BYTES.
+
+    Returns (source, truncated, error):
+    - On success: (text, was_it_truncated, None)
+    - On failure (unreadable or not valid UTF-8): (None, False, error_message)
+
+    Truncation happens on the encoded bytes (so the 200 KB limit is exact),
+    but is applied to already-decoded text and re-cut on a UTF-8 boundary so
+    a mid-character cut can never masquerade as a genuine decoding failure.
+    """
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        return None, False, f"could not read file: {exc}"
+
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        return None, False, f"could not decode as UTF-8: {exc}"
+
+    if len(raw) <= MAX_SOURCE_BYTES:
+        return text, False, None
+
+    truncated_text = raw[:MAX_SOURCE_BYTES].decode("utf-8", errors="ignore")
+    return truncated_text, True, None
+
+
+def build_file_nodes(repo_root: Path, python_files: list[Path]) -> list[dict[str, Any]]:
+    """Build stable file nodes using repository-relative paths as identifiers.
+
+    Every node includes its source text (UTF-8, capped at MAX_SOURCE_BYTES,
+    with source_truncated indicating whether it was cut short). Files that
+    can't be read or decoded get a source_error instead of a source, rather
+    than crashing the whole analysis run.
+    """
+    nodes: list[dict[str, Any]] = []
     for path in sorted(python_files):
         relative_path = path.relative_to(repo_root).as_posix()
-        nodes.append(
-            {
-                "id": f"file:{relative_path}",
-                "kind": "file",
-                "path": relative_path,
-            }
-        )
+        node: dict[str, Any] = {
+            "id": f"file:{relative_path}",
+            "kind": "file",
+            "path": relative_path,
+        }
+
+        source, truncated, error = read_source(path)
+        if error is not None:
+            node["source_error"] = error
+        else:
+            node["source"] = source
+            node["source_truncated"] = truncated
+
+        nodes.append(node)
     return nodes
 
 
@@ -227,9 +271,8 @@ def extract_import_edges(
                 seen_pairs.add(pair)
                 edges.append(
                     {
-                        "id": f"import:{source_id}->{target_id}",
-                        "source": source_id,
-                        "target": target_id,
+                        "source_id": source_id,
+                        "target_id": target_id,
                         "kind": "imports",
                         "confidence": 1.0,
                         "resolution_method": "ast-static",
@@ -249,7 +292,14 @@ def analyze_repository(repo_root: Path) -> dict[str, Any]:
     if not repo_root.is_dir():
         raise ValueError(f"Repository path is not a directory: {repo_root}")
 
-    python_files = find_python_files(repo_root)
+    discovered_files = find_python_files(repo_root)
+    total_files_found = len(discovered_files)
+
+    python_files = sorted(discovered_files)
+    files_truncated = total_files_found > MAX_PYTHON_FILES
+    if files_truncated:
+        python_files = python_files[:MAX_PYTHON_FILES]
+
     nodes = build_file_nodes(repo_root, python_files)
 
     roots = find_module_roots(repo_root, python_files)
@@ -259,6 +309,9 @@ def analyze_repository(repo_root: Path) -> dict[str, Any]:
     return {
         "schema_version": "0.2",
         "repo_root": str(repo_root),
+        "python_files_total_found": total_files_found,
+        "python_files_analyzed": len(python_files),
+        "python_files_truncated": files_truncated,
         "nodes": nodes,
         "edges": edges,
     }
