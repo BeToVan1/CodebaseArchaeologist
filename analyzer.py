@@ -87,6 +87,7 @@ def build_file_nodes(repo_root: Path, python_files: list[Path]) -> list[dict[str
             "id": f"file:{relative_path}",
             "kind": "file",
             "path": relative_path,
+            "size_bytes": path.stat().st_size,
         }
 
         source, truncated, error = read_source(path)

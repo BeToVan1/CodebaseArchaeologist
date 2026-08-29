@@ -7,6 +7,7 @@
     "analyze": "python analyzer.py . --output public/graph.json",
     "dev": "vinext dev",
     "build": "vinext build",
+    "test": "node --test tests/*.test.mjs",
     "start": "vinext start"
   },
   "dependencies": {

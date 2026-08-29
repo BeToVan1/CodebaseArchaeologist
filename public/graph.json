@@ -1,74 +1,1027 @@
 {
-  "schema_version": "0.3",
+  "schema_version": "0.2",
   "repository": {
     "name": "cosmicpython/code",
     "url": "https://github.com/cosmicpython/code",
     "source": "github"
   },
+  "python_files_total_found": 37,
+  "python_files_analyzed": 37,
+  "python_files_truncated": false,
   "nodes": [
     {
-      "id": "file:src/allocation/domain/model.py",
+      "id": "file:src/allocation/__init__.py",
       "kind": "file",
-      "path": "src/allocation/domain/model.py",
-      "source": "from dataclasses import dataclass\nfrom datetime import date\n\n\n@dataclass(frozen=True)\nclass OrderLine:\n    orderid: str\n    sku: str\n    qty: int\n\n\nclass Batch:\n    def __init__(self, ref: str, sku: str, qty: int, eta: date | None):\n        self.reference = ref\n        self.sku = sku\n        self.eta = eta\n        self._purchased_quantity = qty\n        self._allocations: set[OrderLine] = set()\n\n    def allocate(self, line: OrderLine) -> None:\n        if self.can_allocate(line):\n            self._allocations.add(line)\n\n    def can_allocate(self, line: OrderLine) -> bool:\n        return self.sku == line.sku and self.available_quantity >= line.qty\n\n    @property\n    def available_quantity(self) -> int:\n        return self._purchased_quantity - sum(line.qty for line in self._allocations)\n"
+      "path": "src/allocation/__init__.py",
+      "size_bytes": 0,
+      "source": "",
+      "source_truncated": false
     },
     {
-      "id": "file:src/allocation/service_layer/services.py",
+      "id": "file:src/allocation/adapters/__init__.py",
       "kind": "file",
-      "path": "src/allocation/service_layer/services.py",
-      "source": "from allocation.domain import model\nfrom allocation.adapters import repository\n\n\ndef allocate(line: model.OrderLine, repo: repository.AbstractRepository) -> str:\n    batches = repo.list()\n    if not batches:\n        raise RuntimeError(f\"Out of stock for sku {line.sku}\")\n    batch = min(batches, key=lambda item: item.eta or model.date.min)\n    batch.allocate(line)\n    return batch.reference\n"
+      "path": "src/allocation/adapters/__init__.py",
+      "size_bytes": 0,
+      "source": "",
+      "source_truncated": false
+    },
+    {
+      "id": "file:src/allocation/adapters/notifications.py",
+      "kind": "file",
+      "path": "src/allocation/adapters/notifications.py",
+      "size_bytes": 811,
+      "source": "# pylint: disable=too-few-public-methods\nimport abc\nimport smtplib\nfrom allocation import config\n\n\nclass AbstractNotifications(abc.ABC):\n    @abc.abstractmethod\n    def send(self, destination, message):\n        raise NotImplementedError\n\n\nDEFAULT_HOST = config.get_email_host_and_port()[\"host\"]\nDEFAULT_PORT = config.get_email_host_and_port()[\"port\"]\n\n\nclass EmailNotifications(AbstractNotifications):\n    def __init__(self, smtp_host=DEFAULT_HOST, port=DEFAULT_PORT):\n        self.server = smtplib.SMTP(smtp_host, port=port)\n        self.server.noop()\n\n    def send(self, destination, message):\n        msg = f\"Subject: allocation service notification\\n{message}\"\n        self.server.sendmail(\n            from_addr=\"allocations@example.com\",\n            to_addrs=[destination],\n            msg=msg,\n        )\n",
+      "source_truncated": false
+    },
+    {
+      "id": "file:src/allocation/adapters/orm.py",
+      "kind": "file",
+      "path": "src/allocation/adapters/orm.py",
+      "size_bytes": 2000,
+      "source": "import logging\nfrom sqlalchemy import (\n    Table,\n    MetaData,\n    Column,\n    Integer,\n    String,\n    Date,\n    ForeignKey,\n    event,\n)\nfrom sqlalchemy.orm import mapper, relationship\n\nfrom allocation.domain import model\n\nlogger = logging.getLogger(__name__)\n\nmetadata = MetaData()\n\norder_lines = Table(\n    \"order_lines\",\n    metadata,\n    Column(\"id\", Integer, primary_key=True, autoincrement=True),\n    Column(\"sku\", String(255)),\n    Column(\"qty\", Integer, nullable=False),\n    Column(\"orderid\", String(255)),\n)\n\nproducts = Table(\n    \"products\",\n    metadata,\n    Column(\"sku\", String(255), primary_key=True),\n    Column(\"version_number\", Integer, nullable=False, server_default=\"0\"),\n)\n\nbatches = Table(\n    \"batches\",\n    metadata,\n    Column(\"id\", Integer, primary_key=True, autoincrement=True),\n    Column(\"reference\", String(255)),\n    Column(\"sku\", ForeignKey(\"products.sku\")),\n    Column(\"_purchased_quantity\", Integer, nullable=False),\n    Column(\"eta\", Date, nullable=True),\n)\n\nallocations = Table(\n    \"allocations\",\n    metadata,\n    Column(\"id\", Integer, primary_key=True, autoincrement=True),\n    Column(\"orderline_id\", ForeignKey(\"order_lines.id\")),\n    Column(\"batch_id\", ForeignKey(\"batches.id\")),\n)\n\nallocations_view = Table(\n    \"allocations_view\",\n    metadata,\n    Column(\"orderid\", String(255)),\n    Column(\"sku\", String(255)),\n    Column(\"batchref\", String(255)),\n)\n\n\ndef start_mappers():\n    logger.info(\"Starting mappers\")\n    lines_mapper = mapper(model.OrderLine, order_lines)\n    batches_mapper = mapper(\n        model.Batch,\n        batches,\n        properties={\n            \"_allocations\": relationship(\n                lines_mapper,\n                secondary=allocations,\n                collection_class=set,\n            )\n        },\n    )\n    mapper(\n        model.Product,\n        products,\n        properties={\"batches\": relationship(batches_mapper)},\n    )\n\n\n@event.listens_for(model.Product, \"load\")\ndef receive_load(product, _):\n    product.events = []\n",
+      "source_truncated": false
+    },
+    {
+      "id": "file:src/allocation/adapters/redis_eventpublisher.py",
+      "kind": "file",
+      "path": "src/allocation/adapters/redis_eventpublisher.py",
+      "size_bytes": 394,
+      "source": "import json\nimport logging\nfrom dataclasses import asdict\nimport redis\n\nfrom allocation import config\nfrom allocation.domain import events\n\nlogger = logging.getLogger(__name__)\n\nr = redis.Redis(**config.get_redis_host_and_port())\n\n\ndef publish(channel, event: events.Event):\n    logging.info(\"publishing: channel=%s, event=%s\", channel, event)\n    r.publish(channel, json.dumps(asdict(event)))\n",
+      "source_truncated": false
     },
     {
       "id": "file:src/allocation/adapters/repository.py",
       "kind": "file",
       "path": "src/allocation/adapters/repository.py",
-      "source": "import abc\n\nfrom allocation.domain import model\n\n\nclass AbstractRepository(abc.ABC):\n    @abc.abstractmethod\n    def add(self, batch: model.Batch) -> None:\n        raise NotImplementedError\n\n    @abc.abstractmethod\n    def list(self) -> list[model.Batch]:\n        raise NotImplementedError\n"
+      "size_bytes": 1548,
+      "source": "import abc\nfrom typing import Set\nfrom allocation.adapters import orm\nfrom allocation.domain import model\n\n\nclass AbstractRepository(abc.ABC):\n    def __init__(self):\n        self.seen = set()  # type: Set[model.Product]\n\n    def add(self, product: model.Product):\n        self._add(product)\n        self.seen.add(product)\n\n    def get(self, sku) -> model.Product:\n        product = self._get(sku)\n        if product:\n            self.seen.add(product)\n        return product\n\n    def get_by_batchref(self, batchref) -> model.Product:\n        product = self._get_by_batchref(batchref)\n        if product:\n            self.seen.add(product)\n        return product\n\n    @abc.abstractmethod\n    def _add(self, product: model.Product):\n        raise NotImplementedError\n\n    @abc.abstractmethod\n    def _get(self, sku) -> model.Product:\n        raise NotImplementedError\n\n    @abc.abstractmethod\n    def _get_by_batchref(self, batchref) -> model.Product:\n        raise NotImplementedError\n\n\nclass SqlAlchemyRepository(AbstractRepository):\n    def __init__(self, session):\n        super().__init__()\n        self.session = session\n\n    def _add(self, product):\n        self.session.add(product)\n\n    def _get(self, sku):\n        return self.session.query(model.Product).filter_by(sku=sku).first()\n\n    def _get_by_batchref(self, batchref):\n        return (\n            self.session.query(model.Product)\n            .join(model.Batch)\n            .filter(\n                orm.batches.c.reference == batchref,\n            )\n            .first()\n        )\n",
+      "source_truncated": false
+    },
+    {
+      "id": "file:src/allocation/bootstrap.py",
+      "kind": "file",
+      "path": "src/allocation/bootstrap.py",
+      "size_bytes": 1589,
+      "source": "import inspect\nfrom typing import Callable\nfrom allocation.adapters import orm, redis_eventpublisher\nfrom allocation.adapters.notifications import (\n    AbstractNotifications,\n    EmailNotifications,\n)\nfrom allocation.service_layer import handlers, messagebus, unit_of_work\n\n\ndef bootstrap(\n    start_orm: bool = True,\n    uow: unit_of_work.AbstractUnitOfWork = unit_of_work.SqlAlchemyUnitOfWork(),\n    notifications: AbstractNotifications = None,\n    publish: Callable = redis_eventpublisher.publish,\n) -> messagebus.MessageBus:\n\n    if notifications is None:\n        notifications = EmailNotifications()\n\n    if start_orm:\n        orm.start_mappers()\n\n    dependencies = {\"uow\": uow, \"notifications\": notifications, \"publish\": publish}\n    injected_event_handlers = {\n        event_type: [\n            inject_dependencies(handler, dependencies)\n            for handler in event_handlers\n        ]\n        for event_type, event_handlers in handlers.EVENT_HANDLERS.items()\n    }\n    injected_command_handlers = {\n        command_type: inject_dependencies(handler, dependencies)\n        for command_type, handler in handlers.COMMAND_HANDLERS.items()\n    }\n\n    return messagebus.MessageBus(\n        uow=uow,\n        event_handlers=injected_event_handlers,\n        command_handlers=injected_command_handlers,\n    )\n\n\ndef inject_dependencies(handler, dependencies):\n    params = inspect.signature(handler).parameters\n    deps = {\n        name: dependency\n        for name, dependency in dependencies.items()\n        if name in params\n    }\n    return lambda message: handler(message, **deps)\n",
+      "source_truncated": false
+    },
+    {
+      "id": "file:src/allocation/config.py",
+      "kind": "file",
+      "path": "src/allocation/config.py",
+      "size_bytes": 885,
+      "source": "import os\n\n\ndef get_postgres_uri():\n    host = os.environ.get(\"DB_HOST\", \"localhost\")\n    port = 54321 if host == \"localhost\" else 5432\n    password = os.environ.get(\"DB_PASSWORD\", \"abc123\")\n    user, db_name = \"allocation\", \"allocation\"\n    return f\"postgresql://{user}:{password}@{host}:{port}/{db_name}\"\n\n\ndef get_api_url():\n    host = os.environ.get(\"API_HOST\", \"localhost\")\n    port = 5005 if host == \"localhost\" else 80\n    return f\"http://{host}:{port}\"\n\n\ndef get_redis_host_and_port():\n    host = os.environ.get(\"REDIS_HOST\", \"localhost\")\n    port = 63791 if host == \"localhost\" else 6379\n    return dict(host=host, port=port)\n\n\ndef get_email_host_and_port():\n    host = os.environ.get(\"EMAIL_HOST\", \"localhost\")\n    port = 11025 if host == \"localhost\" else 1025\n    http_port = 18025 if host == \"localhost\" else 8025\n    return dict(host=host, port=port, http_port=http_port)\n",
+      "source_truncated": false
+    },
+    {
+      "id": "file:src/allocation/domain/__init__.py",
+      "kind": "file",
+      "path": "src/allocation/domain/__init__.py",
+      "size_bytes": 0,
+      "source": "",
+      "source_truncated": false
+    },
+    {
+      "id": "file:src/allocation/domain/commands.py",
+      "kind": "file",
+      "path": "src/allocation/domain/commands.py",
+      "size_bytes": 422,
+      "source": "# pylint: disable=too-few-public-methods\nfrom datetime import date\nfrom typing import Optional\nfrom dataclasses import dataclass\n\n\nclass Command:\n    pass\n\n\n@dataclass\nclass Allocate(Command):\n    orderid: str\n    sku: str\n    qty: int\n\n\n@dataclass\nclass CreateBatch(Command):\n    ref: str\n    sku: str\n    qty: int\n    eta: Optional[date] = None\n\n\n@dataclass\nclass ChangeBatchQuantity(Command):\n    ref: str\n    qty: int\n",
+      "source_truncated": false
+    },
+    {
+      "id": "file:src/allocation/domain/events.py",
+      "kind": "file",
+      "path": "src/allocation/domain/events.py",
+      "size_bytes": 330,
+      "source": "# pylint: disable=too-few-public-methods\nfrom dataclasses import dataclass\n\n\nclass Event:\n    pass\n\n\n@dataclass\nclass Allocated(Event):\n    orderid: str\n    sku: str\n    qty: int\n    batchref: str\n\n\n@dataclass\nclass Deallocated(Event):\n    orderid: str\n    sku: str\n    qty: int\n\n\n@dataclass\nclass OutOfStock(Event):\n    sku: str\n",
+      "source_truncated": false
+    },
+    {
+      "id": "file:src/allocation/domain/model.py",
+      "kind": "file",
+      "path": "src/allocation/domain/model.py",
+      "size_bytes": 2738,
+      "source": "from __future__ import annotations\nfrom dataclasses import dataclass\nfrom datetime import date\nfrom typing import Optional, List, Set\nfrom . import commands, events\n\n\nclass Product:\n    def __init__(self, sku: str, batches: List[Batch], version_number: int = 0):\n        self.sku = sku\n        self.batches = batches\n        self.version_number = version_number\n        self.events = []  # type: List[events.Event]\n\n    def allocate(self, line: OrderLine) -> str:\n        try:\n            batch = next(b for b in sorted(self.batches) if b.can_allocate(line))\n            batch.allocate(line)\n            self.version_number += 1\n            self.events.append(\n                events.Allocated(\n                    orderid=line.orderid,\n                    sku=line.sku,\n                    qty=line.qty,\n                    batchref=batch.reference,\n                )\n            )\n            return batch.reference\n        except StopIteration:\n            self.events.append(events.OutOfStock(line.sku))\n            return None\n\n    def change_batch_quantity(self, ref: str, qty: int):\n        batch = next(b for b in self.batches if b.reference == ref)\n        batch._purchased_quantity = qty\n        while batch.available_quantity < 0:\n            line = batch.deallocate_one()\n            self.events.append(events.Deallocated(line.orderid, line.sku, line.qty))\n\n\n@dataclass(unsafe_hash=True)\nclass OrderLine:\n    orderid: str\n    sku: str\n    qty: int\n\n\nclass Batch:\n    def __init__(self, ref: str, sku: str, qty: int, eta: Optional[date]):\n        self.reference = ref\n        self.sku = sku\n        self.eta = eta\n        self._purchased_quantity = qty\n        self._allocations = set()  # type: Set[OrderLine]\n\n    def __repr__(self):\n        return f\"<Batch {self.reference}>\"\n\n    def __eq__(self, other):\n        if not isinstance(other, Batch):\n            return False\n        return other.reference == self.reference\n\n    def __hash__(self):\n        return hash(self.reference)\n\n    def __gt__(self, other):\n        if self.eta is None:\n            return False\n        if other.eta is None:\n            return True\n        return self.eta > other.eta\n\n    def allocate(self, line: OrderLine):\n        if self.can_allocate(line):\n            self._allocations.add(line)\n\n    def deallocate_one(self) -> OrderLine:\n        return self._allocations.pop()\n\n    @property\n    def allocated_quantity(self) -> int:\n        return sum(line.qty for line in self._allocations)\n\n    @property\n    def available_quantity(self) -> int:\n        return self._purchased_quantity - self.allocated_quantity\n\n    def can_allocate(self, line: OrderLine) -> bool:\n        return self.sku == line.sku and self.available_quantity >= line.qty\n",
+      "source_truncated": false
+    },
+    {
+      "id": "file:src/allocation/entrypoints/__init__.py",
+      "kind": "file",
+      "path": "src/allocation/entrypoints/__init__.py",
+      "size_bytes": 0,
+      "source": "",
+      "source_truncated": false
     },
     {
       "id": "file:src/allocation/entrypoints/flask_app.py",
       "kind": "file",
       "path": "src/allocation/entrypoints/flask_app.py",
-      "source": "from flask import Flask, jsonify, request\n\nfrom allocation.domain import model\nfrom allocation.service_layer import services\n\n\napp = Flask(__name__)\n\n\n@app.post(\"/allocate\")\ndef allocate_endpoint():\n    line = model.OrderLine(request.json[\"orderid\"], request.json[\"sku\"], request.json[\"qty\"])\n    batchref = services.allocate(line, repo=get_repository())\n    return jsonify({\"batchref\": batchref}), 201\n"
+      "size_bytes": 1119,
+      "source": "from datetime import datetime\nfrom flask import Flask, jsonify, request\nfrom allocation.domain import commands\nfrom allocation.service_layer.handlers import InvalidSku\nfrom allocation import bootstrap, views\n\napp = Flask(__name__)\nbus = bootstrap.bootstrap()\n\n\n@app.route(\"/add_batch\", methods=[\"POST\"])\ndef add_batch():\n    eta = request.json[\"eta\"]\n    if eta is not None:\n        eta = datetime.fromisoformat(eta).date()\n    cmd = commands.CreateBatch(\n        request.json[\"ref\"], request.json[\"sku\"], request.json[\"qty\"], eta\n    )\n    bus.handle(cmd)\n    return \"OK\", 201\n\n\n@app.route(\"/allocate\", methods=[\"POST\"])\ndef allocate_endpoint():\n    try:\n        cmd = commands.Allocate(\n            request.json[\"orderid\"], request.json[\"sku\"], request.json[\"qty\"]\n        )\n        bus.handle(cmd)\n    except InvalidSku as e:\n        return {\"message\": str(e)}, 400\n\n    return \"OK\", 202\n\n\n@app.route(\"/allocations/<orderid>\", methods=[\"GET\"])\ndef allocations_view_endpoint(orderid):\n    result = views.allocations(orderid, bus.uow)\n    if not result:\n        return \"not found\", 404\n    return jsonify(result), 200\n",
+      "source_truncated": false
+    },
+    {
+      "id": "file:src/allocation/entrypoints/redis_eventconsumer.py",
+      "kind": "file",
+      "path": "src/allocation/entrypoints/redis_eventconsumer.py",
+      "size_bytes": 724,
+      "source": "import json\nimport logging\nimport redis\n\nfrom allocation import bootstrap, config\nfrom allocation.domain import commands\n\nlogger = logging.getLogger(__name__)\n\nr = redis.Redis(**config.get_redis_host_and_port())\n\n\ndef main():\n    logger.info(\"Redis pubsub starting\")\n    bus = bootstrap.bootstrap()\n    pubsub = r.pubsub(ignore_subscribe_messages=True)\n    pubsub.subscribe(\"change_batch_quantity\")\n\n    for m in pubsub.listen():\n        handle_change_batch_quantity(m, bus)\n\n\ndef handle_change_batch_quantity(m, bus):\n    logger.info(\"handling %s\", m)\n    data = json.loads(m[\"data\"])\n    cmd = commands.ChangeBatchQuantity(ref=data[\"batchref\"], qty=data[\"qty\"])\n    bus.handle(cmd)\n\n\nif __name__ == \"__main__\":\n    main()\n",
+      "source_truncated": false
+    },
+    {
+      "id": "file:src/allocation/service_layer/__init__.py",
+      "kind": "file",
+      "path": "src/allocation/service_layer/__init__.py",
+      "size_bytes": 0,
+      "source": "",
+      "source_truncated": false
+    },
+    {
+      "id": "file:src/allocation/service_layer/handlers.py",
+      "kind": "file",
+      "path": "src/allocation/service_layer/handlers.py",
+      "size_bytes": 3201,
+      "source": "# pylint: disable=unused-argument\nfrom __future__ import annotations\nfrom dataclasses import asdict\nfrom typing import List, Dict, Callable, Type, TYPE_CHECKING\nfrom allocation.domain import commands, events, model\nfrom allocation.domain.model import OrderLine\n\nif TYPE_CHECKING:\n    from allocation.adapters import notifications\n    from . import unit_of_work\n\n\nclass InvalidSku(Exception):\n    pass\n\n\ndef add_batch(\n    cmd: commands.CreateBatch,\n    uow: unit_of_work.AbstractUnitOfWork,\n):\n    with uow:\n        product = uow.products.get(sku=cmd.sku)\n        if product is None:\n            product = model.Product(cmd.sku, batches=[])\n            uow.products.add(product)\n        product.batches.append(model.Batch(cmd.ref, cmd.sku, cmd.qty, cmd.eta))\n        uow.commit()\n\n\ndef allocate(\n    cmd: commands.Allocate,\n    uow: unit_of_work.AbstractUnitOfWork,\n):\n    line = OrderLine(cmd.orderid, cmd.sku, cmd.qty)\n    with uow:\n        product = uow.products.get(sku=line.sku)\n        if product is None:\n            raise InvalidSku(f\"Invalid sku {line.sku}\")\n        product.allocate(line)\n        uow.commit()\n\n\ndef reallocate(\n    event: events.Deallocated,\n    uow: unit_of_work.AbstractUnitOfWork,\n):\n    allocate(commands.Allocate(**asdict(event)), uow=uow)\n\n\ndef change_batch_quantity(\n    cmd: commands.ChangeBatchQuantity,\n    uow: unit_of_work.AbstractUnitOfWork,\n):\n    with uow:\n        product = uow.products.get_by_batchref(batchref=cmd.ref)\n        product.change_batch_quantity(ref=cmd.ref, qty=cmd.qty)\n        uow.commit()\n\n\n# pylint: disable=unused-argument\n\n\ndef send_out_of_stock_notification(\n    event: events.OutOfStock,\n    notifications: notifications.AbstractNotifications,\n):\n    notifications.send(\n        \"stock@made.com\",\n        f\"Out of stock for {event.sku}\",\n    )\n\n\ndef publish_allocated_event(\n    event: events.Allocated,\n    publish: Callable,\n):\n    publish(\"line_allocated\", event)\n\n\ndef add_allocation_to_read_model(\n    event: events.Allocated,\n    uow: unit_of_work.SqlAlchemyUnitOfWork,\n):\n    with uow:\n        uow.session.execute(\n            \"\"\"\n            INSERT INTO allocations_view (orderid, sku, batchref)\n            VALUES (:orderid, :sku, :batchref)\n            \"\"\",\n            dict(orderid=event.orderid, sku=event.sku, batchref=event.batchref),\n        )\n        uow.commit()\n\n\ndef remove_allocation_from_read_model(\n    event: events.Deallocated,\n    uow: unit_of_work.SqlAlchemyUnitOfWork,\n):\n    with uow:\n        uow.session.execute(\n            \"\"\"\n            DELETE FROM allocations_view\n            WHERE orderid = :orderid AND sku = :sku\n            \"\"\",\n            dict(orderid=event.orderid, sku=event.sku),\n        )\n        uow.commit()\n\n\nEVENT_HANDLERS = {\n    events.Allocated: [publish_allocated_event, add_allocation_to_read_model],\n    events.Deallocated: [remove_allocation_from_read_model, reallocate],\n    events.OutOfStock: [send_out_of_stock_notification],\n}  # type: Dict[Type[events.Event], List[Callable]]\n\nCOMMAND_HANDLERS = {\n    commands.Allocate: allocate,\n    commands.CreateBatch: add_batch,\n    commands.ChangeBatchQuantity: change_batch_quantity,\n}  # type: Dict[Type[commands.Command], Callable]\n",
+      "source_truncated": false
+    },
+    {
+      "id": "file:src/allocation/service_layer/messagebus.py",
+      "kind": "file",
+      "path": "src/allocation/service_layer/messagebus.py",
+      "size_bytes": 1959,
+      "source": "# pylint: disable=broad-except, attribute-defined-outside-init\nfrom __future__ import annotations\nimport logging\nfrom typing import Callable, Dict, List, Union, Type, TYPE_CHECKING\nfrom allocation.domain import commands, events\n\nif TYPE_CHECKING:\n    from . import unit_of_work\n\nlogger = logging.getLogger(__name__)\n\nMessage = Union[commands.Command, events.Event]\n\n\nclass MessageBus:\n    def __init__(\n        self,\n        uow: unit_of_work.AbstractUnitOfWork,\n        event_handlers: Dict[Type[events.Event], List[Callable]],\n        command_handlers: Dict[Type[commands.Command], Callable],\n    ):\n        self.uow = uow\n        self.event_handlers = event_handlers\n        self.command_handlers = command_handlers\n\n    def handle(self, message: Message):\n        self.queue = [message]\n        while self.queue:\n            message = self.queue.pop(0)\n            if isinstance(message, events.Event):\n                self.handle_event(message)\n            elif isinstance(message, commands.Command):\n                self.handle_command(message)\n            else:\n                raise Exception(f\"{message} was not an Event or Command\")\n\n    def handle_event(self, event: events.Event):\n        for handler in self.event_handlers[type(event)]:\n            try:\n                logger.debug(\"handling event %s with handler %s\", event, handler)\n                handler(event)\n                self.queue.extend(self.uow.collect_new_events())\n            except Exception:\n                logger.exception(\"Exception handling event %s\", event)\n                continue\n\n    def handle_command(self, command: commands.Command):\n        logger.debug(\"handling command %s\", command)\n        try:\n            handler = self.command_handlers[type(command)]\n            handler(command)\n            self.queue.extend(self.uow.collect_new_events())\n        except Exception:\n            logger.exception(\"Exception handling command %s\", command)\n            raise\n",
+      "source_truncated": false
+    },
+    {
+      "id": "file:src/allocation/service_layer/unit_of_work.py",
+      "kind": "file",
+      "path": "src/allocation/service_layer/unit_of_work.py",
+      "size_bytes": 1574,
+      "source": "# pylint: disable=attribute-defined-outside-init\nfrom __future__ import annotations\nimport abc\nfrom sqlalchemy import create_engine\nfrom sqlalchemy.orm import sessionmaker\nfrom sqlalchemy.orm.session import Session\n\n\nfrom allocation import config\nfrom allocation.adapters import repository\n\n\nclass AbstractUnitOfWork(abc.ABC):\n    products: repository.AbstractRepository\n\n    def __enter__(self) -> AbstractUnitOfWork:\n        return self\n\n    def __exit__(self, *args):\n        self.rollback()\n\n    def commit(self):\n        self._commit()\n\n    def collect_new_events(self):\n        for product in self.products.seen:\n            while product.events:\n                yield product.events.pop(0)\n\n    @abc.abstractmethod\n    def _commit(self):\n        raise NotImplementedError\n\n    @abc.abstractmethod\n    def rollback(self):\n        raise NotImplementedError\n\n\nDEFAULT_SESSION_FACTORY = sessionmaker(\n    bind=create_engine(\n        config.get_postgres_uri(),\n        isolation_level=\"REPEATABLE READ\",\n    )\n)\n\n\nclass SqlAlchemyUnitOfWork(AbstractUnitOfWork):\n    def __init__(self, session_factory=DEFAULT_SESSION_FACTORY):\n        self.session_factory = session_factory\n\n    def __enter__(self):\n        self.session = self.session_factory()  # type: Session\n        self.products = repository.SqlAlchemyRepository(self.session)\n        return super().__enter__()\n\n    def __exit__(self, *args):\n        super().__exit__(*args)\n        self.session.close()\n\n    def _commit(self):\n        self.session.commit()\n\n    def rollback(self):\n        self.session.rollback()\n",
+      "source_truncated": false
+    },
+    {
+      "id": "file:src/allocation/views.py",
+      "kind": "file",
+      "path": "src/allocation/views.py",
+      "size_bytes": 372,
+      "source": "from allocation.service_layer import unit_of_work\n\n\ndef allocations(orderid: str, uow: unit_of_work.SqlAlchemyUnitOfWork):\n    with uow:\n        results = uow.session.execute(\n            \"\"\"\n            SELECT sku, batchref FROM allocations_view WHERE orderid = :orderid\n            \"\"\",\n            dict(orderid=orderid),\n        )\n    return [dict(r) for r in results]\n",
+      "source_truncated": false
+    },
+    {
+      "id": "file:src/setup.py",
+      "kind": "file",
+      "path": "src/setup.py",
+      "size_bytes": 110,
+      "source": "from setuptools import setup\n\nsetup(\n    name=\"allocation\",\n    version=\"0.1\",\n    packages=[\"allocation\"],\n)\n",
+      "source_truncated": false
+    },
+    {
+      "id": "file:tests/__init__.py",
+      "kind": "file",
+      "path": "tests/__init__.py",
+      "size_bytes": 0,
+      "source": "",
+      "source_truncated": false
+    },
+    {
+      "id": "file:tests/conftest.py",
+      "kind": "file",
+      "path": "tests/conftest.py",
+      "size_bytes": 2068,
+      "source": "# pylint: disable=redefined-outer-name\nimport shutil\nimport subprocess\nimport time\nfrom pathlib import Path\n\nimport pytest\nimport redis\nimport requests\nfrom sqlalchemy import create_engine\nfrom sqlalchemy.orm import sessionmaker, clear_mappers\nfrom tenacity import retry, stop_after_delay\n\nfrom allocation.adapters.orm import metadata, start_mappers\nfrom allocation import config\n\npytest.register_assert_rewrite(\"tests.e2e.api_client\")\n\n\n@pytest.fixture\ndef in_memory_sqlite_db():\n    engine = create_engine(\"sqlite:///:memory:\")\n    metadata.create_all(engine)\n    return engine\n\n\n@pytest.fixture\ndef sqlite_session_factory(in_memory_sqlite_db):\n    yield sessionmaker(bind=in_memory_sqlite_db)\n\n\n@pytest.fixture\ndef mappers():\n    start_mappers()\n    yield\n    clear_mappers()\n\n\n@retry(stop=stop_after_delay(10))\ndef wait_for_postgres_to_come_up(engine):\n    return engine.connect()\n\n\n@retry(stop=stop_after_delay(10))\ndef wait_for_webapp_to_come_up():\n    return requests.get(config.get_api_url())\n\n\n@retry(stop=stop_after_delay(10))\ndef wait_for_redis_to_come_up():\n    r = redis.Redis(**config.get_redis_host_and_port())\n    return r.ping()\n\n\n@pytest.fixture(scope=\"session\")\ndef postgres_db():\n    engine = create_engine(config.get_postgres_uri(), isolation_level=\"SERIALIZABLE\")\n    wait_for_postgres_to_come_up(engine)\n    metadata.create_all(engine)\n    return engine\n\n\n@pytest.fixture\ndef postgres_session_factory(postgres_db):\n    yield sessionmaker(bind=postgres_db)\n\n\n@pytest.fixture\ndef postgres_session(postgres_session_factory):\n    return postgres_session_factory()\n\n\n@pytest.fixture\ndef restart_api():\n    (Path(__file__).parent / \"../src/allocation/entrypoints/flask_app.py\").touch()\n    time.sleep(0.5)\n    wait_for_webapp_to_come_up()\n\n\n@pytest.fixture\ndef restart_redis_pubsub():\n    wait_for_redis_to_come_up()\n    if not shutil.which(\"docker-compose\"):\n        print(\"skipping restart, assumes running in container\")\n        return\n    subprocess.run(\n        [\"docker-compose\", \"restart\", \"-t\", \"0\", \"redis_pubsub\"],\n        check=True,\n    )\n",
+      "source_truncated": false
+    },
+    {
+      "id": "file:tests/e2e/__init__.py",
+      "kind": "file",
+      "path": "tests/e2e/__init__.py",
+      "size_bytes": 0,
+      "source": "",
+      "source_truncated": false
+    },
+    {
+      "id": "file:tests/e2e/api_client.py",
+      "kind": "file",
+      "path": "tests/e2e/api_client.py",
+      "size_bytes": 712,
+      "source": "import requests\nfrom allocation import config\n\n\ndef post_to_add_batch(ref, sku, qty, eta):\n    url = config.get_api_url()\n    r = requests.post(\n        f\"{url}/add_batch\", json={\"ref\": ref, \"sku\": sku, \"qty\": qty, \"eta\": eta}\n    )\n    assert r.status_code == 201\n\n\ndef post_to_allocate(orderid, sku, qty, expect_success=True):\n    url = config.get_api_url()\n    r = requests.post(\n        f\"{url}/allocate\",\n        json={\n            \"orderid\": orderid,\n            \"sku\": sku,\n            \"qty\": qty,\n        },\n    )\n    if expect_success:\n        assert r.status_code == 202\n    return r\n\n\ndef get_allocation(orderid):\n    url = config.get_api_url()\n    return requests.get(f\"{url}/allocations/{orderid}\")\n",
+      "source_truncated": false
+    },
+    {
+      "id": "file:tests/e2e/redis_client.py",
+      "kind": "file",
+      "path": "tests/e2e/redis_client.py",
+      "size_bytes": 391,
+      "source": "import json\nimport redis\n\nfrom allocation import config\n\nr = redis.Redis(**config.get_redis_host_and_port())\n\n\ndef subscribe_to(channel):\n    pubsub = r.pubsub()\n    pubsub.subscribe(channel)\n    confirmation = pubsub.get_message(timeout=3)\n    assert confirmation[\"type\"] == \"subscribe\"\n    return pubsub\n\n\ndef publish_message(channel, message):\n    r.publish(channel, json.dumps(message))\n",
+      "source_truncated": false
+    },
+    {
+      "id": "file:tests/e2e/test_api.py",
+      "kind": "file",
+      "path": "tests/e2e/test_api.py",
+      "size_bytes": 1341,
+      "source": "import pytest\nfrom ..random_refs import random_batchref, random_orderid, random_sku\nfrom . import api_client\n\n\n@pytest.mark.usefixtures(\"postgres_db\")\n@pytest.mark.usefixtures(\"restart_api\")\ndef test_happy_path_returns_202_and_batch_is_allocated():\n    orderid = random_orderid()\n    sku, othersku = random_sku(), random_sku(\"other\")\n    earlybatch = random_batchref(1)\n    laterbatch = random_batchref(2)\n    otherbatch = random_batchref(3)\n    api_client.post_to_add_batch(laterbatch, sku, 100, \"2011-01-02\")\n    api_client.post_to_add_batch(earlybatch, sku, 100, \"2011-01-01\")\n    api_client.post_to_add_batch(otherbatch, othersku, 100, None)\n\n    r = api_client.post_to_allocate(orderid, sku, qty=3)\n    assert r.status_code == 202\n\n    r = api_client.get_allocation(orderid)\n    assert r.ok\n    assert r.json() == [\n        {\"sku\": sku, \"batchref\": earlybatch},\n    ]\n\n\n@pytest.mark.usefixtures(\"postgres_db\")\n@pytest.mark.usefixtures(\"restart_api\")\ndef test_unhappy_path_returns_400_and_error_message():\n    unknown_sku, orderid = random_sku(), random_orderid()\n    r = api_client.post_to_allocate(\n        orderid, unknown_sku, qty=20, expect_success=False\n    )\n    assert r.status_code == 400\n    assert r.json()[\"message\"] == f\"Invalid sku {unknown_sku}\"\n\n    r = api_client.get_allocation(orderid)\n    assert r.status_code == 404\n",
+      "source_truncated": false
+    },
+    {
+      "id": "file:tests/e2e/test_external_events.py",
+      "kind": "file",
+      "path": "tests/e2e/test_external_events.py",
+      "size_bytes": 1658,
+      "source": "import json\nimport pytest\nfrom tenacity import Retrying, RetryError, stop_after_delay\nfrom . import api_client, redis_client\nfrom ..random_refs import random_batchref, random_orderid, random_sku\n\n\n@pytest.mark.usefixtures(\"postgres_db\")\n@pytest.mark.usefixtures(\"restart_api\")\n@pytest.mark.usefixtures(\"restart_redis_pubsub\")\ndef test_change_batch_quantity_leading_to_reallocation():\n    # start with two batches and an order allocated to one of them\n    orderid, sku = random_orderid(), random_sku()\n    earlier_batch, later_batch = random_batchref(\"old\"), random_batchref(\"newer\")\n    api_client.post_to_add_batch(earlier_batch, sku, qty=10, eta=\"2011-01-01\")\n    api_client.post_to_add_batch(later_batch, sku, qty=10, eta=\"2011-01-02\")\n    r = api_client.post_to_allocate(orderid, sku, 10)\n    assert r.ok\n    response = api_client.get_allocation(orderid)\n    assert response.json()[0][\"batchref\"] == earlier_batch\n\n    subscription = redis_client.subscribe_to(\"line_allocated\")\n\n    # change quantity on allocated batch so it's less than our order\n    redis_client.publish_message(\n        \"change_batch_quantity\",\n        {\"batchref\": earlier_batch, \"qty\": 5},\n    )\n\n    # wait until we see a message saying the order has been reallocated\n    messages = []\n    for attempt in Retrying(stop=stop_after_delay(3), reraise=True):\n        with attempt:\n            message = subscription.get_message(timeout=1)\n            if message:\n                messages.append(message)\n                print(messages)\n            data = json.loads(messages[-1][\"data\"])\n            assert data[\"orderid\"] == orderid\n            assert data[\"batchref\"] == later_batch\n",
+      "source_truncated": false
+    },
+    {
+      "id": "file:tests/integration/__init__.py",
+      "kind": "file",
+      "path": "tests/integration/__init__.py",
+      "size_bytes": 0,
+      "source": "",
+      "source_truncated": false
+    },
+    {
+      "id": "file:tests/integration/test_email.py",
+      "kind": "file",
+      "path": "tests/integration/test_email.py",
+      "size_bytes": 1281,
+      "source": "# pylint: disable=redefined-outer-name\nimport pytest\nimport requests\nfrom sqlalchemy.orm import clear_mappers\nfrom allocation import bootstrap, config\nfrom allocation.domain import commands\nfrom allocation.adapters import notifications\nfrom allocation.service_layer import unit_of_work\nfrom ..random_refs import random_sku\n\n\n@pytest.fixture\ndef bus(sqlite_session_factory):\n    bus = bootstrap.bootstrap(\n        start_orm=True,\n        uow=unit_of_work.SqlAlchemyUnitOfWork(sqlite_session_factory),\n        notifications=notifications.EmailNotifications(),\n        publish=lambda *args: None,\n    )\n    yield bus\n    clear_mappers()\n\n\ndef get_email_from_mailhog(sku):\n    host, port = map(config.get_email_host_and_port().get, [\"host\", \"http_port\"])\n    all_emails = requests.get(f\"http://{host}:{port}/api/v2/messages\").json()\n    return next(m for m in all_emails[\"items\"] if sku in str(m))\n\n\ndef test_out_of_stock_email(bus):\n    sku = random_sku()\n    bus.handle(commands.CreateBatch(\"batch1\", sku, 9, None))\n    bus.handle(commands.Allocate(\"order1\", sku, 10))\n    email = get_email_from_mailhog(sku)\n    assert email[\"Raw\"][\"From\"] == \"allocations@example.com\"\n    assert email[\"Raw\"][\"To\"] == [\"stock@made.com\"]\n    assert f\"Out of stock for {sku}\" in email[\"Raw\"][\"Data\"]\n",
+      "source_truncated": false
+    },
+    {
+      "id": "file:tests/integration/test_repository.py",
+      "kind": "file",
+      "path": "tests/integration/test_repository.py",
+      "size_bytes": 695,
+      "source": "import pytest\nfrom allocation.adapters import repository\nfrom allocation.domain import model\n\npytestmark = pytest.mark.usefixtures(\"mappers\")\n\n\ndef test_get_by_batchref(sqlite_session_factory):\n    session = sqlite_session_factory()\n    repo = repository.SqlAlchemyRepository(session)\n    b1 = model.Batch(ref=\"b1\", sku=\"sku1\", qty=100, eta=None)\n    b2 = model.Batch(ref=\"b2\", sku=\"sku1\", qty=100, eta=None)\n    b3 = model.Batch(ref=\"b3\", sku=\"sku2\", qty=100, eta=None)\n    p1 = model.Product(sku=\"sku1\", batches=[b1, b2])\n    p2 = model.Product(sku=\"sku2\", batches=[b3])\n    repo.add(p1)\n    repo.add(p2)\n    assert repo.get_by_batchref(\"b2\") == p1\n    assert repo.get_by_batchref(\"b3\") == p2\n",
+      "source_truncated": false
+    },
+    {
+      "id": "file:tests/integration/test_uow.py",
+      "kind": "file",
+      "path": "tests/integration/test_uow.py",
+      "size_bytes": 4571,
+      "source": "# pylint: disable=broad-except, too-many-arguments\nimport threading\nimport time\nimport traceback\nfrom typing import List\nfrom unittest.mock import Mock\nimport pytest\nfrom allocation.domain import model\nfrom allocation.service_layer import unit_of_work\nfrom ..random_refs import random_sku, random_batchref, random_orderid\n\npytestmark = pytest.mark.usefixtures(\"mappers\")\n\n\ndef insert_batch(session, ref, sku, qty, eta, product_version=1):\n    session.execute(\n        \"INSERT INTO products (sku, version_number) VALUES (:sku, :version)\",\n        dict(sku=sku, version=product_version),\n    )\n    session.execute(\n        \"INSERT INTO batches (reference, sku, _purchased_quantity, eta)\"\n        \" VALUES (:ref, :sku, :qty, :eta)\",\n        dict(ref=ref, sku=sku, qty=qty, eta=eta),\n    )\n\n\ndef get_allocated_batch_ref(session, orderid, sku):\n    [[orderlineid]] = session.execute(\n        \"SELECT id FROM order_lines WHERE orderid=:orderid AND sku=:sku\",\n        dict(orderid=orderid, sku=sku),\n    )\n    [[batchref]] = session.execute(\n        \"SELECT b.reference FROM allocations JOIN batches AS b ON batch_id = b.id\"\n        \" WHERE orderline_id=:orderlineid\",\n        dict(orderlineid=orderlineid),\n    )\n    return batchref\n\n\ndef test_uow_can_retrieve_a_batch_and_allocate_to_it(sqlite_session_factory):\n    session = sqlite_session_factory()\n    insert_batch(session, \"batch1\", \"HIPSTER-WORKBENCH\", 100, None)\n    session.commit()\n\n    uow = unit_of_work.SqlAlchemyUnitOfWork(sqlite_session_factory)\n    with uow:\n        product = uow.products.get(sku=\"HIPSTER-WORKBENCH\")\n        line = model.OrderLine(\"o1\", \"HIPSTER-WORKBENCH\", 10)\n        product.allocate(line)\n        uow.commit()\n\n    batchref = get_allocated_batch_ref(session, \"o1\", \"HIPSTER-WORKBENCH\")\n    assert batchref == \"batch1\"\n\n\ndef test_rolls_back_uncommitted_work_by_default(sqlite_session_factory):\n    uow = unit_of_work.SqlAlchemyUnitOfWork(sqlite_session_factory)\n    with uow:\n        insert_batch(uow.session, \"batch1\", \"MEDIUM-PLINTH\", 100, None)\n\n    new_session = sqlite_session_factory()\n    rows = list(new_session.execute('SELECT * FROM \"batches\"'))\n    assert rows == []\n\n\ndef test_rolls_back_on_error(sqlite_session_factory):\n    class MyException(Exception):\n        pass\n\n    uow = unit_of_work.SqlAlchemyUnitOfWork(sqlite_session_factory)\n    with pytest.raises(MyException):\n        with uow:\n            insert_batch(uow.session, \"batch1\", \"LARGE-FORK\", 100, None)\n            raise MyException()\n\n    new_session = sqlite_session_factory()\n    rows = list(new_session.execute('SELECT * FROM \"batches\"'))\n    assert rows == []\n\n\ndef try_to_allocate(orderid, sku, exceptions, session_factory):\n    line = model.OrderLine(orderid, sku, 10)\n    try:\n        with unit_of_work.SqlAlchemyUnitOfWork(session_factory) as uow:\n            product = uow.products.get(sku=sku)\n            product.allocate(line)\n            time.sleep(0.2)\n            uow.commit()\n    except Exception as e:  # pylint: disable=broad-except\n        print(traceback.format_exc())\n        exceptions.append(e)\n\n\ndef test_concurrent_updates_to_version_are_not_allowed(postgres_session_factory):\n    sku, batch = random_sku(), random_batchref()\n    session = postgres_session_factory()\n    insert_batch(session, batch, sku, 100, eta=None, product_version=1)\n    session.commit()\n\n    order1, order2 = random_orderid(1), random_orderid(2)\n    exceptions = []  # type: List[Exception]\n    try_to_allocate_order1 = lambda: try_to_allocate(\n        order1, sku, exceptions, postgres_session_factory\n    )\n    try_to_allocate_order2 = lambda: try_to_allocate(\n        order2, sku, exceptions, postgres_session_factory\n    )\n    thread1 = threading.Thread(target=try_to_allocate_order1)\n    thread2 = threading.Thread(target=try_to_allocate_order2)\n    thread1.start()\n    thread2.start()\n    thread1.join()\n    thread2.join()\n\n    [[version]] = session.execute(\n        \"SELECT version_number FROM products WHERE sku=:sku\",\n        dict(sku=sku),\n    )\n    assert version == 2\n    [exception] = exceptions\n    assert \"could not serialize access due to concurrent update\" in str(exception)\n\n    orders = session.execute(\n        \"SELECT orderid FROM allocations\"\n        \" JOIN batches ON allocations.batch_id = batches.id\"\n        \" JOIN order_lines ON allocations.orderline_id = order_lines.id\"\n        \" WHERE order_lines.sku=:sku\",\n        dict(sku=sku),\n    )\n    assert orders.rowcount == 1\n    with unit_of_work.SqlAlchemyUnitOfWork(postgres_session_factory) as uow:\n        uow.session.execute(\"select 1\")\n",
+      "source_truncated": false
+    },
+    {
+      "id": "file:tests/integration/test_views.py",
+      "kind": "file",
+      "path": "tests/integration/test_views.py",
+      "size_bytes": 1773,
+      "source": "# pylint: disable=redefined-outer-name\nfrom datetime import date\nfrom sqlalchemy.orm import clear_mappers\nfrom unittest import mock\nimport pytest\nfrom allocation import bootstrap, views\nfrom allocation.domain import commands\nfrom allocation.service_layer import unit_of_work\n\ntoday = date.today()\n\n\n@pytest.fixture\ndef sqlite_bus(sqlite_session_factory):\n    bus = bootstrap.bootstrap(\n        start_orm=True,\n        uow=unit_of_work.SqlAlchemyUnitOfWork(sqlite_session_factory),\n        notifications=mock.Mock(),\n        publish=lambda *args: None,\n    )\n    yield bus\n    clear_mappers()\n\n\ndef test_allocations_view(sqlite_bus):\n    sqlite_bus.handle(commands.CreateBatch(\"sku1batch\", \"sku1\", 50, None))\n    sqlite_bus.handle(commands.CreateBatch(\"sku2batch\", \"sku2\", 50, today))\n    sqlite_bus.handle(commands.Allocate(\"order1\", \"sku1\", 20))\n    sqlite_bus.handle(commands.Allocate(\"order1\", \"sku2\", 20))\n    # add a spurious batch and order to make sure we're getting the right ones\n    sqlite_bus.handle(commands.CreateBatch(\"sku1batch-later\", \"sku1\", 50, today))\n    sqlite_bus.handle(commands.Allocate(\"otherorder\", \"sku1\", 30))\n    sqlite_bus.handle(commands.Allocate(\"otherorder\", \"sku2\", 10))\n\n    assert views.allocations(\"order1\", sqlite_bus.uow) == [\n        {\"sku\": \"sku1\", \"batchref\": \"sku1batch\"},\n        {\"sku\": \"sku2\", \"batchref\": \"sku2batch\"},\n    ]\n\n\ndef test_deallocation(sqlite_bus):\n    sqlite_bus.handle(commands.CreateBatch(\"b1\", \"sku1\", 50, None))\n    sqlite_bus.handle(commands.CreateBatch(\"b2\", \"sku1\", 50, today))\n    sqlite_bus.handle(commands.Allocate(\"o1\", \"sku1\", 40))\n    sqlite_bus.handle(commands.ChangeBatchQuantity(\"b1\", 10))\n\n    assert views.allocations(\"o1\", sqlite_bus.uow) == [\n        {\"sku\": \"sku1\", \"batchref\": \"b2\"},\n    ]\n",
+      "source_truncated": false
+    },
+    {
+      "id": "file:tests/random_refs.py",
+      "kind": "file",
+      "path": "tests/random_refs.py",
+      "size_bytes": 290,
+      "source": "import uuid\n\n\ndef random_suffix():\n    return uuid.uuid4().hex[:6]\n\n\ndef random_sku(name=\"\"):\n    return f\"sku-{name}-{random_suffix()}\"\n\n\ndef random_batchref(name=\"\"):\n    return f\"batch-{name}-{random_suffix()}\"\n\n\ndef random_orderid(name=\"\"):\n    return f\"order-{name}-{random_suffix()}\"\n",
+      "source_truncated": false
     },
     {
       "id": "file:tests/unit/test_batches.py",
       "kind": "file",
       "path": "tests/unit/test_batches.py",
-      "source": "from datetime import date\n\nfrom allocation.domain import model\n\n\ndef test_allocating_to_a_batch_reduces_available_quantity():\n    batch = model.Batch(\"batch-001\", \"SMALL-TABLE\", qty=20, eta=date.today())\n    line = model.OrderLine(\"order-ref\", \"SMALL-TABLE\", 2)\n\n    batch.allocate(line)\n\n    assert batch.available_quantity == 18\n"
+      "size_bytes": 1496,
+      "source": "from datetime import date\nfrom allocation.domain.model import Batch, OrderLine\n\n\ndef test_allocating_to_a_batch_reduces_the_available_quantity():\n    batch = Batch(\"batch-001\", \"SMALL-TABLE\", qty=20, eta=date.today())\n    line = OrderLine(\"order-ref\", \"SMALL-TABLE\", 2)\n\n    batch.allocate(line)\n\n    assert batch.available_quantity == 18\n\n\ndef make_batch_and_line(sku, batch_qty, line_qty):\n    return (\n        Batch(\"batch-001\", sku, batch_qty, eta=date.today()),\n        OrderLine(\"order-123\", sku, line_qty),\n    )\n\n\ndef test_can_allocate_if_available_greater_than_required():\n    large_batch, small_line = make_batch_and_line(\"ELEGANT-LAMP\", 20, 2)\n    assert large_batch.can_allocate(small_line)\n\n\ndef test_cannot_allocate_if_available_smaller_than_required():\n    small_batch, large_line = make_batch_and_line(\"ELEGANT-LAMP\", 2, 20)\n    assert small_batch.can_allocate(large_line) is False\n\n\ndef test_can_allocate_if_available_equal_to_required():\n    batch, line = make_batch_and_line(\"ELEGANT-LAMP\", 2, 2)\n    assert batch.can_allocate(line)\n\n\ndef test_cannot_allocate_if_skus_do_not_match():\n    batch = Batch(\"batch-001\", \"UNCOMFORTABLE-CHAIR\", 100, eta=None)\n    different_sku_line = OrderLine(\"order-123\", \"EXPENSIVE-TOASTER\", 10)\n    assert batch.can_allocate(different_sku_line) is False\n\n\ndef test_allocation_is_idempotent():\n    batch, line = make_batch_and_line(\"ANGULAR-DESK\", 20, 2)\n    batch.allocate(line)\n    batch.allocate(line)\n    assert batch.available_quantity == 18\n",
+      "source_truncated": false
     },
-    { "id": "file:tests/integration/test_repository.py", "kind": "file", "path": "tests/integration/test_repository.py" }
+    {
+      "id": "file:tests/unit/test_handlers.py",
+      "kind": "file",
+      "path": "tests/unit/test_handlers.py",
+      "size_bytes": 4965,
+      "source": "# pylint: disable=no-self-use\nfrom __future__ import annotations\nfrom collections import defaultdict\nfrom datetime import date\nfrom typing import Dict, List\nimport pytest\nfrom allocation import bootstrap\nfrom allocation.domain import commands\nfrom allocation.service_layer import handlers\nfrom allocation.adapters import notifications, repository\nfrom allocation.service_layer import unit_of_work\n\n\nclass FakeRepository(repository.AbstractRepository):\n    def __init__(self, products):\n        super().__init__()\n        self._products = set(products)\n\n    def _add(self, product):\n        self._products.add(product)\n\n    def _get(self, sku):\n        return next((p for p in self._products if p.sku == sku), None)\n\n    def _get_by_batchref(self, batchref):\n        return next(\n            (p for p in self._products for b in p.batches if b.reference == batchref),\n            None,\n        )\n\n\nclass FakeUnitOfWork(unit_of_work.AbstractUnitOfWork):\n    def __init__(self):\n        self.products = FakeRepository([])\n        self.committed = False\n\n    def _commit(self):\n        self.committed = True\n\n    def rollback(self):\n        pass\n\n\nclass FakeNotifications(notifications.AbstractNotifications):\n    def __init__(self):\n        self.sent = defaultdict(list)  # type: Dict[str, List[str]]\n\n    def send(self, destination, message):\n        self.sent[destination].append(message)\n\n\ndef bootstrap_test_app():\n    return bootstrap.bootstrap(\n        start_orm=False,\n        uow=FakeUnitOfWork(),\n        notifications=FakeNotifications(),\n        publish=lambda *args: None,\n    )\n\n\nclass TestAddBatch:\n    def test_for_new_product(self):\n        bus = bootstrap_test_app()\n        bus.handle(commands.CreateBatch(\"b1\", \"CRUNCHY-ARMCHAIR\", 100, None))\n        assert bus.uow.products.get(\"CRUNCHY-ARMCHAIR\") is not None\n        assert bus.uow.committed\n\n    def test_for_existing_product(self):\n        bus = bootstrap_test_app()\n        bus.handle(commands.CreateBatch(\"b1\", \"GARISH-RUG\", 100, None))\n        bus.handle(commands.CreateBatch(\"b2\", \"GARISH-RUG\", 99, None))\n        assert \"b2\" in [\n            b.reference for b in bus.uow.products.get(\"GARISH-RUG\").batches\n        ]\n\n\nclass TestAllocate:\n    def test_allocates(self):\n        bus = bootstrap_test_app()\n        bus.handle(commands.CreateBatch(\"batch1\", \"COMPLICATED-LAMP\", 100, None))\n        bus.handle(commands.Allocate(\"o1\", \"COMPLICATED-LAMP\", 10))\n        [batch] = bus.uow.products.get(\"COMPLICATED-LAMP\").batches\n        assert batch.available_quantity == 90\n\n    def test_errors_for_invalid_sku(self):\n        bus = bootstrap_test_app()\n        bus.handle(commands.CreateBatch(\"b1\", \"AREALSKU\", 100, None))\n\n        with pytest.raises(handlers.InvalidSku, match=\"Invalid sku NONEXISTENTSKU\"):\n            bus.handle(commands.Allocate(\"o1\", \"NONEXISTENTSKU\", 10))\n\n    def test_commits(self):\n        bus = bootstrap_test_app()\n        bus.handle(commands.CreateBatch(\"b1\", \"OMINOUS-MIRROR\", 100, None))\n        bus.handle(commands.Allocate(\"o1\", \"OMINOUS-MIRROR\", 10))\n        assert bus.uow.committed\n\n    def test_sends_email_on_out_of_stock_error(self):\n        fake_notifs = FakeNotifications()\n        bus = bootstrap.bootstrap(\n            start_orm=False,\n            uow=FakeUnitOfWork(),\n            notifications=fake_notifs,\n            publish=lambda *args: None,\n        )\n        bus.handle(commands.CreateBatch(\"b1\", \"POPULAR-CURTAINS\", 9, None))\n        bus.handle(commands.Allocate(\"o1\", \"POPULAR-CURTAINS\", 10))\n        assert fake_notifs.sent[\"stock@made.com\"] == [\n            f\"Out of stock for POPULAR-CURTAINS\",\n        ]\n\n\nclass TestChangeBatchQuantity:\n    def test_changes_available_quantity(self):\n        bus = bootstrap_test_app()\n        bus.handle(commands.CreateBatch(\"batch1\", \"ADORABLE-SETTEE\", 100, None))\n        [batch] = bus.uow.products.get(sku=\"ADORABLE-SETTEE\").batches\n        assert batch.available_quantity == 100\n\n        bus.handle(commands.ChangeBatchQuantity(\"batch1\", 50))\n        assert batch.available_quantity == 50\n\n    def test_reallocates_if_necessary(self):\n        bus = bootstrap_test_app()\n        history = [\n            commands.CreateBatch(\"batch1\", \"INDIFFERENT-TABLE\", 50, None),\n            commands.CreateBatch(\"batch2\", \"INDIFFERENT-TABLE\", 50, date.today()),\n            commands.Allocate(\"order1\", \"INDIFFERENT-TABLE\", 20),\n            commands.Allocate(\"order2\", \"INDIFFERENT-TABLE\", 20),\n        ]\n        for msg in history:\n            bus.handle(msg)\n        [batch1, batch2] = bus.uow.products.get(sku=\"INDIFFERENT-TABLE\").batches\n        assert batch1.available_quantity == 10\n        assert batch2.available_quantity == 50\n\n        bus.handle(commands.ChangeBatchQuantity(\"batch1\", 25))\n\n        # order1 or order2 will be deallocated, so we'll have 25 - 20\n        assert batch1.available_quantity == 5\n        # and 20 will be reallocated to the next batch\n        assert batch2.available_quantity == 30\n",
+      "source_truncated": false
+    },
+    {
+      "id": "file:tests/unit/test_product.py",
+      "kind": "file",
+      "path": "tests/unit/test_product.py",
+      "size_bytes": 2798,
+      "source": "from datetime import date, timedelta\nfrom allocation.domain import events\nfrom allocation.domain.model import Product, OrderLine, Batch\n\n\ntoday = date.today()\ntomorrow = today + timedelta(days=1)\nlater = tomorrow + timedelta(days=10)\n\n\ndef test_prefers_warehouse_batches_to_shipments():\n    in_stock_batch = Batch(\"in-stock-batch\", \"RETRO-CLOCK\", 100, eta=None)\n    shipment_batch = Batch(\"shipment-batch\", \"RETRO-CLOCK\", 100, eta=tomorrow)\n    product = Product(sku=\"RETRO-CLOCK\", batches=[in_stock_batch, shipment_batch])\n    line = OrderLine(\"oref\", \"RETRO-CLOCK\", 10)\n\n    product.allocate(line)\n\n    assert in_stock_batch.available_quantity == 90\n    assert shipment_batch.available_quantity == 100\n\n\ndef test_prefers_earlier_batches():\n    earliest = Batch(\"speedy-batch\", \"MINIMALIST-SPOON\", 100, eta=today)\n    medium = Batch(\"normal-batch\", \"MINIMALIST-SPOON\", 100, eta=tomorrow)\n    latest = Batch(\"slow-batch\", \"MINIMALIST-SPOON\", 100, eta=later)\n    product = Product(sku=\"MINIMALIST-SPOON\", batches=[medium, earliest, latest])\n    line = OrderLine(\"order1\", \"MINIMALIST-SPOON\", 10)\n\n    product.allocate(line)\n\n    assert earliest.available_quantity == 90\n    assert medium.available_quantity == 100\n    assert latest.available_quantity == 100\n\n\ndef test_returns_allocated_batch_ref():\n    in_stock_batch = Batch(\"in-stock-batch-ref\", \"HIGHBROW-POSTER\", 100, eta=None)\n    shipment_batch = Batch(\"shipment-batch-ref\", \"HIGHBROW-POSTER\", 100, eta=tomorrow)\n    line = OrderLine(\"oref\", \"HIGHBROW-POSTER\", 10)\n    product = Product(sku=\"HIGHBROW-POSTER\", batches=[in_stock_batch, shipment_batch])\n    allocation = product.allocate(line)\n    assert allocation == in_stock_batch.reference\n\n\ndef test_outputs_allocated_event():\n    batch = Batch(\"batchref\", \"RETRO-LAMPSHADE\", 100, eta=None)\n    line = OrderLine(\"oref\", \"RETRO-LAMPSHADE\", 10)\n    product = Product(sku=\"RETRO-LAMPSHADE\", batches=[batch])\n    product.allocate(line)\n    expected = events.Allocated(\n        orderid=\"oref\", sku=\"RETRO-LAMPSHADE\", qty=10, batchref=batch.reference\n    )\n    assert product.events[-1] == expected\n\n\ndef test_records_out_of_stock_event_if_cannot_allocate():\n    batch = Batch(\"batch1\", \"SMALL-FORK\", 10, eta=today)\n    product = Product(sku=\"SMALL-FORK\", batches=[batch])\n    product.allocate(OrderLine(\"order1\", \"SMALL-FORK\", 10))\n\n    allocation = product.allocate(OrderLine(\"order2\", \"SMALL-FORK\", 1))\n    assert product.events[-1] == events.OutOfStock(sku=\"SMALL-FORK\")\n    assert allocation is None\n\n\ndef test_increments_version_number():\n    line = OrderLine(\"oref\", \"SCANDI-PEN\", 10)\n    product = Product(\n        sku=\"SCANDI-PEN\", batches=[Batch(\"b1\", \"SCANDI-PEN\", 100, eta=None)]\n    )\n    product.version_number = 7\n    product.allocate(line)\n    assert product.version_number == 8\n",
+      "source_truncated": false
+    }
   ],
   "edges": [
     {
-      "id": "import:flask-app-to-services",
-      "source": "file:src/allocation/entrypoints/flask_app.py",
-      "target": "file:src/allocation/service_layer/services.py",
-      "kind": "imports"
+      "id": "import:file:src/allocation/adapters/notifications.py->file:src/allocation/config.py",
+      "source": "file:src/allocation/adapters/notifications.py",
+      "target": "file:src/allocation/config.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 4
+      }
     },
     {
-      "id": "import:services-to-model",
-      "source": "file:src/allocation/service_layer/services.py",
+      "id": "import:file:src/allocation/adapters/orm.py->file:src/allocation/domain/model.py",
+      "source": "file:src/allocation/adapters/orm.py",
       "target": "file:src/allocation/domain/model.py",
-      "kind": "imports"
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 14
+      }
     },
     {
-      "id": "import:services-to-repository",
-      "source": "file:src/allocation/service_layer/services.py",
+      "id": "import:file:src/allocation/adapters/redis_eventpublisher.py->file:src/allocation/config.py",
+      "source": "file:src/allocation/adapters/redis_eventpublisher.py",
+      "target": "file:src/allocation/config.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 6
+      }
+    },
+    {
+      "id": "import:file:src/allocation/adapters/redis_eventpublisher.py->file:src/allocation/domain/events.py",
+      "source": "file:src/allocation/adapters/redis_eventpublisher.py",
+      "target": "file:src/allocation/domain/events.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 7
+      }
+    },
+    {
+      "id": "import:file:src/allocation/adapters/repository.py->file:src/allocation/adapters/orm.py",
+      "source": "file:src/allocation/adapters/repository.py",
+      "target": "file:src/allocation/adapters/orm.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 3
+      }
+    },
+    {
+      "id": "import:file:src/allocation/adapters/repository.py->file:src/allocation/domain/model.py",
+      "source": "file:src/allocation/adapters/repository.py",
+      "target": "file:src/allocation/domain/model.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 4
+      }
+    },
+    {
+      "id": "import:file:src/allocation/bootstrap.py->file:src/allocation/adapters/orm.py",
+      "source": "file:src/allocation/bootstrap.py",
+      "target": "file:src/allocation/adapters/orm.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 3
+      }
+    },
+    {
+      "id": "import:file:src/allocation/bootstrap.py->file:src/allocation/adapters/redis_eventpublisher.py",
+      "source": "file:src/allocation/bootstrap.py",
+      "target": "file:src/allocation/adapters/redis_eventpublisher.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 3
+      }
+    },
+    {
+      "id": "import:file:src/allocation/bootstrap.py->file:src/allocation/adapters/notifications.py",
+      "source": "file:src/allocation/bootstrap.py",
+      "target": "file:src/allocation/adapters/notifications.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 4
+      }
+    },
+    {
+      "id": "import:file:src/allocation/bootstrap.py->file:src/allocation/service_layer/handlers.py",
+      "source": "file:src/allocation/bootstrap.py",
+      "target": "file:src/allocation/service_layer/handlers.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 8
+      }
+    },
+    {
+      "id": "import:file:src/allocation/bootstrap.py->file:src/allocation/service_layer/messagebus.py",
+      "source": "file:src/allocation/bootstrap.py",
+      "target": "file:src/allocation/service_layer/messagebus.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 8
+      }
+    },
+    {
+      "id": "import:file:src/allocation/bootstrap.py->file:src/allocation/service_layer/unit_of_work.py",
+      "source": "file:src/allocation/bootstrap.py",
+      "target": "file:src/allocation/service_layer/unit_of_work.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 8
+      }
+    },
+    {
+      "id": "import:file:src/allocation/domain/model.py->file:src/allocation/domain/commands.py",
+      "source": "file:src/allocation/domain/model.py",
+      "target": "file:src/allocation/domain/commands.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 5
+      }
+    },
+    {
+      "id": "import:file:src/allocation/domain/model.py->file:src/allocation/domain/events.py",
+      "source": "file:src/allocation/domain/model.py",
+      "target": "file:src/allocation/domain/events.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 5
+      }
+    },
+    {
+      "id": "import:file:src/allocation/entrypoints/flask_app.py->file:src/allocation/domain/commands.py",
+      "source": "file:src/allocation/entrypoints/flask_app.py",
+      "target": "file:src/allocation/domain/commands.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 3
+      }
+    },
+    {
+      "id": "import:file:src/allocation/entrypoints/flask_app.py->file:src/allocation/service_layer/handlers.py",
+      "source": "file:src/allocation/entrypoints/flask_app.py",
+      "target": "file:src/allocation/service_layer/handlers.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 4
+      }
+    },
+    {
+      "id": "import:file:src/allocation/entrypoints/flask_app.py->file:src/allocation/bootstrap.py",
+      "source": "file:src/allocation/entrypoints/flask_app.py",
+      "target": "file:src/allocation/bootstrap.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 5
+      }
+    },
+    {
+      "id": "import:file:src/allocation/entrypoints/flask_app.py->file:src/allocation/views.py",
+      "source": "file:src/allocation/entrypoints/flask_app.py",
+      "target": "file:src/allocation/views.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 5
+      }
+    },
+    {
+      "id": "import:file:src/allocation/entrypoints/redis_eventconsumer.py->file:src/allocation/bootstrap.py",
+      "source": "file:src/allocation/entrypoints/redis_eventconsumer.py",
+      "target": "file:src/allocation/bootstrap.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 5
+      }
+    },
+    {
+      "id": "import:file:src/allocation/entrypoints/redis_eventconsumer.py->file:src/allocation/config.py",
+      "source": "file:src/allocation/entrypoints/redis_eventconsumer.py",
+      "target": "file:src/allocation/config.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 5
+      }
+    },
+    {
+      "id": "import:file:src/allocation/entrypoints/redis_eventconsumer.py->file:src/allocation/domain/commands.py",
+      "source": "file:src/allocation/entrypoints/redis_eventconsumer.py",
+      "target": "file:src/allocation/domain/commands.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 6
+      }
+    },
+    {
+      "id": "import:file:src/allocation/service_layer/handlers.py->file:src/allocation/domain/commands.py",
+      "source": "file:src/allocation/service_layer/handlers.py",
+      "target": "file:src/allocation/domain/commands.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 5
+      }
+    },
+    {
+      "id": "import:file:src/allocation/service_layer/handlers.py->file:src/allocation/domain/events.py",
+      "source": "file:src/allocation/service_layer/handlers.py",
+      "target": "file:src/allocation/domain/events.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 5
+      }
+    },
+    {
+      "id": "import:file:src/allocation/service_layer/handlers.py->file:src/allocation/domain/model.py",
+      "source": "file:src/allocation/service_layer/handlers.py",
+      "target": "file:src/allocation/domain/model.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 5
+      }
+    },
+    {
+      "id": "import:file:src/allocation/service_layer/handlers.py->file:src/allocation/adapters/notifications.py",
+      "source": "file:src/allocation/service_layer/handlers.py",
+      "target": "file:src/allocation/adapters/notifications.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 9
+      }
+    },
+    {
+      "id": "import:file:src/allocation/service_layer/handlers.py->file:src/allocation/service_layer/unit_of_work.py",
+      "source": "file:src/allocation/service_layer/handlers.py",
+      "target": "file:src/allocation/service_layer/unit_of_work.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 10
+      }
+    },
+    {
+      "id": "import:file:src/allocation/service_layer/messagebus.py->file:src/allocation/domain/commands.py",
+      "source": "file:src/allocation/service_layer/messagebus.py",
+      "target": "file:src/allocation/domain/commands.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 5
+      }
+    },
+    {
+      "id": "import:file:src/allocation/service_layer/messagebus.py->file:src/allocation/domain/events.py",
+      "source": "file:src/allocation/service_layer/messagebus.py",
+      "target": "file:src/allocation/domain/events.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 5
+      }
+    },
+    {
+      "id": "import:file:src/allocation/service_layer/messagebus.py->file:src/allocation/service_layer/unit_of_work.py",
+      "source": "file:src/allocation/service_layer/messagebus.py",
+      "target": "file:src/allocation/service_layer/unit_of_work.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 8
+      }
+    },
+    {
+      "id": "import:file:src/allocation/service_layer/unit_of_work.py->file:src/allocation/config.py",
+      "source": "file:src/allocation/service_layer/unit_of_work.py",
+      "target": "file:src/allocation/config.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 9
+      }
+    },
+    {
+      "id": "import:file:src/allocation/service_layer/unit_of_work.py->file:src/allocation/adapters/repository.py",
+      "source": "file:src/allocation/service_layer/unit_of_work.py",
       "target": "file:src/allocation/adapters/repository.py",
-      "kind": "imports"
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 10
+      }
     },
     {
-      "id": "import:test-repository-to-repository",
+      "id": "import:file:src/allocation/views.py->file:src/allocation/service_layer/unit_of_work.py",
+      "source": "file:src/allocation/views.py",
+      "target": "file:src/allocation/service_layer/unit_of_work.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 1
+      }
+    },
+    {
+      "id": "import:file:tests/conftest.py->file:src/allocation/adapters/orm.py",
+      "source": "file:tests/conftest.py",
+      "target": "file:src/allocation/adapters/orm.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 14
+      }
+    },
+    {
+      "id": "import:file:tests/conftest.py->file:src/allocation/config.py",
+      "source": "file:tests/conftest.py",
+      "target": "file:src/allocation/config.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 15
+      }
+    },
+    {
+      "id": "import:file:tests/e2e/api_client.py->file:src/allocation/config.py",
+      "source": "file:tests/e2e/api_client.py",
+      "target": "file:src/allocation/config.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 2
+      }
+    },
+    {
+      "id": "import:file:tests/e2e/redis_client.py->file:src/allocation/config.py",
+      "source": "file:tests/e2e/redis_client.py",
+      "target": "file:src/allocation/config.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 4
+      }
+    },
+    {
+      "id": "import:file:tests/e2e/test_api.py->file:tests/random_refs.py",
+      "source": "file:tests/e2e/test_api.py",
+      "target": "file:tests/random_refs.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 2
+      }
+    },
+    {
+      "id": "import:file:tests/e2e/test_api.py->file:tests/e2e/api_client.py",
+      "source": "file:tests/e2e/test_api.py",
+      "target": "file:tests/e2e/api_client.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 3
+      }
+    },
+    {
+      "id": "import:file:tests/e2e/test_external_events.py->file:tests/e2e/api_client.py",
+      "source": "file:tests/e2e/test_external_events.py",
+      "target": "file:tests/e2e/api_client.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 4
+      }
+    },
+    {
+      "id": "import:file:tests/e2e/test_external_events.py->file:tests/e2e/redis_client.py",
+      "source": "file:tests/e2e/test_external_events.py",
+      "target": "file:tests/e2e/redis_client.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 4
+      }
+    },
+    {
+      "id": "import:file:tests/e2e/test_external_events.py->file:tests/random_refs.py",
+      "source": "file:tests/e2e/test_external_events.py",
+      "target": "file:tests/random_refs.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 5
+      }
+    },
+    {
+      "id": "import:file:tests/integration/test_email.py->file:src/allocation/bootstrap.py",
+      "source": "file:tests/integration/test_email.py",
+      "target": "file:src/allocation/bootstrap.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 5
+      }
+    },
+    {
+      "id": "import:file:tests/integration/test_email.py->file:src/allocation/config.py",
+      "source": "file:tests/integration/test_email.py",
+      "target": "file:src/allocation/config.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 5
+      }
+    },
+    {
+      "id": "import:file:tests/integration/test_email.py->file:src/allocation/domain/commands.py",
+      "source": "file:tests/integration/test_email.py",
+      "target": "file:src/allocation/domain/commands.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 6
+      }
+    },
+    {
+      "id": "import:file:tests/integration/test_email.py->file:src/allocation/adapters/notifications.py",
+      "source": "file:tests/integration/test_email.py",
+      "target": "file:src/allocation/adapters/notifications.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 7
+      }
+    },
+    {
+      "id": "import:file:tests/integration/test_email.py->file:src/allocation/service_layer/unit_of_work.py",
+      "source": "file:tests/integration/test_email.py",
+      "target": "file:src/allocation/service_layer/unit_of_work.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 8
+      }
+    },
+    {
+      "id": "import:file:tests/integration/test_email.py->file:tests/random_refs.py",
+      "source": "file:tests/integration/test_email.py",
+      "target": "file:tests/random_refs.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 9
+      }
+    },
+    {
+      "id": "import:file:tests/integration/test_repository.py->file:src/allocation/adapters/repository.py",
       "source": "file:tests/integration/test_repository.py",
       "target": "file:src/allocation/adapters/repository.py",
-      "kind": "imports"
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 2
+      }
     },
     {
-      "id": "import:test-batches-to-model",
+      "id": "import:file:tests/integration/test_repository.py->file:src/allocation/domain/model.py",
+      "source": "file:tests/integration/test_repository.py",
+      "target": "file:src/allocation/domain/model.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 3
+      }
+    },
+    {
+      "id": "import:file:tests/integration/test_uow.py->file:src/allocation/domain/model.py",
+      "source": "file:tests/integration/test_uow.py",
+      "target": "file:src/allocation/domain/model.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 8
+      }
+    },
+    {
+      "id": "import:file:tests/integration/test_uow.py->file:src/allocation/service_layer/unit_of_work.py",
+      "source": "file:tests/integration/test_uow.py",
+      "target": "file:src/allocation/service_layer/unit_of_work.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 9
+      }
+    },
+    {
+      "id": "import:file:tests/integration/test_uow.py->file:tests/random_refs.py",
+      "source": "file:tests/integration/test_uow.py",
+      "target": "file:tests/random_refs.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 10
+      }
+    },
+    {
+      "id": "import:file:tests/integration/test_views.py->file:src/allocation/bootstrap.py",
+      "source": "file:tests/integration/test_views.py",
+      "target": "file:src/allocation/bootstrap.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 6
+      }
+    },
+    {
+      "id": "import:file:tests/integration/test_views.py->file:src/allocation/views.py",
+      "source": "file:tests/integration/test_views.py",
+      "target": "file:src/allocation/views.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 6
+      }
+    },
+    {
+      "id": "import:file:tests/integration/test_views.py->file:src/allocation/domain/commands.py",
+      "source": "file:tests/integration/test_views.py",
+      "target": "file:src/allocation/domain/commands.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 7
+      }
+    },
+    {
+      "id": "import:file:tests/integration/test_views.py->file:src/allocation/service_layer/unit_of_work.py",
+      "source": "file:tests/integration/test_views.py",
+      "target": "file:src/allocation/service_layer/unit_of_work.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 8
+      }
+    },
+    {
+      "id": "import:file:tests/unit/test_batches.py->file:src/allocation/domain/model.py",
       "source": "file:tests/unit/test_batches.py",
       "target": "file:src/allocation/domain/model.py",
-      "kind": "imports"
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 2
+      }
+    },
+    {
+      "id": "import:file:tests/unit/test_handlers.py->file:src/allocation/bootstrap.py",
+      "source": "file:tests/unit/test_handlers.py",
+      "target": "file:src/allocation/bootstrap.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 7
+      }
+    },
+    {
+      "id": "import:file:tests/unit/test_handlers.py->file:src/allocation/domain/commands.py",
+      "source": "file:tests/unit/test_handlers.py",
+      "target": "file:src/allocation/domain/commands.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 8
+      }
+    },
+    {
+      "id": "import:file:tests/unit/test_handlers.py->file:src/allocation/service_layer/handlers.py",
+      "source": "file:tests/unit/test_handlers.py",
+      "target": "file:src/allocation/service_layer/handlers.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 9
+      }
+    },
+    {
+      "id": "import:file:tests/unit/test_handlers.py->file:src/allocation/adapters/notifications.py",
+      "source": "file:tests/unit/test_handlers.py",
+      "target": "file:src/allocation/adapters/notifications.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 10
+      }
+    },
+    {
+      "id": "import:file:tests/unit/test_handlers.py->file:src/allocation/adapters/repository.py",
+      "source": "file:tests/unit/test_handlers.py",
+      "target": "file:src/allocation/adapters/repository.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 10
+      }
+    },
+    {
+      "id": "import:file:tests/unit/test_handlers.py->file:src/allocation/service_layer/unit_of_work.py",
+      "source": "file:tests/unit/test_handlers.py",
+      "target": "file:src/allocation/service_layer/unit_of_work.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 11
+      }
+    },
+    {
+      "id": "import:file:tests/unit/test_product.py->file:src/allocation/domain/events.py",
+      "source": "file:tests/unit/test_product.py",
+      "target": "file:src/allocation/domain/events.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 2
+      }
+    },
+    {
+      "id": "import:file:tests/unit/test_product.py->file:src/allocation/domain/model.py",
+      "source": "file:tests/unit/test_product.py",
+      "target": "file:src/allocation/domain/model.py",
+      "kind": "imports",
+      "confidence": 1.0,
+      "resolution_method": "ast-static",
+      "evidence": {
+        "line": 3
+      }
     }
-  ]
+  ],
+  "source_url": "https://github.com/cosmicpython/code"
 }
-

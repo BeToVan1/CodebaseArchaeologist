@@ -90,6 +90,7 @@ def test_build_file_nodes_includes_source_fields(tmp_path: Path) -> None:
     assert node["id"] == "file:model.py"
     assert node["kind"] == "file"
     assert node["path"] == "model.py"
+    assert node["size_bytes"] == len(b"class Batch:\n    ...\n")
     assert node["source"] == "class Batch:\n    ...\n"
     assert node["source_truncated"] is False
 
