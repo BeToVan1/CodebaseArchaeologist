@@ -16,7 +16,7 @@ import analyzer
 
 def test_read_source_returns_full_text_for_small_file(tmp_path: Path) -> None:
     file_path = tmp_path / "small.py"
-    file_path.write_text("class Batch:\n    pass\n", encoding="utf-8")
+    file_path.write_bytes(b"class Batch:\n    pass\n")
 
     source, truncated, error = analyzer.read_source(file_path)
 
@@ -81,7 +81,7 @@ def test_read_source_handles_unreadable_file_without_crashing(tmp_path: Path) ->
 
 def test_build_file_nodes_includes_source_fields(tmp_path: Path) -> None:
     file_path = tmp_path / "model.py"
-    file_path.write_text("class Batch:\n    ...\n", encoding="utf-8")
+    file_path.write_bytes(b"class Batch:\n    ...\n")
 
     nodes = analyzer.build_file_nodes(tmp_path, [file_path])
 
