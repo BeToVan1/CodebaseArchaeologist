@@ -16,7 +16,7 @@ import analyzer
 
 def test_read_source_returns_full_text_for_small_file(tmp_path: Path) -> None:
     file_path = tmp_path / "small.py"
-    file_path.write_text("class Batch:\n    pass\n", encoding="utf-8")
+    file_path.write_bytes(b"class Batch:\n    pass\n")
 
     source, truncated, error = analyzer.read_source(file_path)
 
@@ -81,7 +81,7 @@ def test_read_source_handles_unreadable_file_without_crashing(tmp_path: Path) ->
 
 def test_build_file_nodes_includes_source_fields(tmp_path: Path) -> None:
     file_path = tmp_path / "model.py"
-    file_path.write_text("class Batch:\n    ...\n", encoding="utf-8")
+    file_path.write_bytes(b"class Batch:\n    ...\n")
 
     nodes = analyzer.build_file_nodes(tmp_path, [file_path])
 
@@ -152,3 +152,32 @@ def test_analyze_repository_file_selection_is_deterministic(tmp_path: Path) -> N
     paths_b = sorted(node["path"] for node in graph_b["nodes"])
     assert paths_a == paths_b
     assert paths_a == ["module_0.py", "module_1.py", "module_2.py"]
+
+# --------------------------------------------------------------------------
+# Full graph contract and error tolerance
+# --------------------------------------------------------------------------
+
+def test_analyze_repository_uses_frontend_edge_contract(tmp_path: Path) -> None:
+    (tmp_path / "source.py").write_text("import target\n", encoding="utf-8")
+    (tmp_path / "target.py").write_text("VALUE = 1\n", encoding="utf-8")
+
+    graph = analyzer.analyze_repository(tmp_path)
+
+    assert len(graph["edges"]) == 1
+    edge = graph["edges"][0]
+    assert edge["id"] == "import:file:source.py->file:target.py"
+    assert edge["source"] == "file:source.py"
+    assert edge["target"] == "file:target.py"
+    assert "source_id" not in edge
+    assert "target_id" not in edge
+
+
+def test_analyze_repository_skips_imports_for_undecodable_file(tmp_path: Path) -> None:
+    file_path = tmp_path / "binary_like.py"
+    file_path.write_bytes(b"\xff\xfe\x00\x01invalid utf-8 \xc0\xc1")
+
+    graph = analyzer.analyze_repository(tmp_path)
+
+    assert len(graph["nodes"]) == 1
+    assert "source_error" in graph["nodes"][0]
+    assert graph["edges"] == []
