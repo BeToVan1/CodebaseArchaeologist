@@ -152,3 +152,32 @@ def test_analyze_repository_file_selection_is_deterministic(tmp_path: Path) -> N
     paths_b = sorted(node["path"] for node in graph_b["nodes"])
     assert paths_a == paths_b
     assert paths_a == ["module_0.py", "module_1.py", "module_2.py"]
+
+# --------------------------------------------------------------------------
+# Full graph contract and error tolerance
+# --------------------------------------------------------------------------
+
+def test_analyze_repository_uses_frontend_edge_contract(tmp_path: Path) -> None:
+    (tmp_path / "source.py").write_text("import target\n", encoding="utf-8")
+    (tmp_path / "target.py").write_text("VALUE = 1\n", encoding="utf-8")
+
+    graph = analyzer.analyze_repository(tmp_path)
+
+    assert len(graph["edges"]) == 1
+    edge = graph["edges"][0]
+    assert edge["id"] == "import:file:source.py->file:target.py"
+    assert edge["source"] == "file:source.py"
+    assert edge["target"] == "file:target.py"
+    assert "source_id" not in edge
+    assert "target_id" not in edge
+
+
+def test_analyze_repository_skips_imports_for_undecodable_file(tmp_path: Path) -> None:
+    file_path = tmp_path / "binary_like.py"
+    file_path.write_bytes(b"\xff\xfe\x00\x01invalid utf-8 \xc0\xc1")
+
+    graph = analyzer.analyze_repository(tmp_path)
+
+    assert len(graph["nodes"]) == 1
+    assert "source_error" in graph["nodes"][0]
+    assert graph["edges"] == []
