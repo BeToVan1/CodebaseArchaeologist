@@ -256,8 +256,8 @@ def extract_import_edges(
 
         try:
             statements = extract_import_statements(path)
-        except SyntaxError as exc:
-            print(f"Warning: skipping unparsable file {relative_path.as_posix()} ({exc})")
+        except (SyntaxError, UnicodeDecodeError, OSError) as exc:
+            print(f"Warning: skipping unreadable or unparsable file {relative_path.as_posix()} ({exc})")
             continue
 
         for stmt in statements:
@@ -271,8 +271,9 @@ def extract_import_edges(
                 seen_pairs.add(pair)
                 edges.append(
                     {
-                        "source_id": source_id,
-                        "target_id": target_id,
+                        "id": f"import:{source_id}->{target_id}",
+                        "source": source_id,
+                        "target": target_id,
                         "kind": "imports",
                         "confidence": 1.0,
                         "resolution_method": "ast-static",
