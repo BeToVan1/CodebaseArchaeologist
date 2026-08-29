@@ -6,6 +6,8 @@
 
 # testing
 /coverage
+__pycache__/
+.pytest_cache/
 
 # build output
 /.next/

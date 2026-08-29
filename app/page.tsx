@@ -5,7 +5,7 @@ import {
   BackgroundVariant,
   Controls,
   MarkerType,
-  MiniMap,
+  Position,
   ReactFlow,
   type Edge,
   type Node,
@@ -18,8 +18,10 @@ type GraphNode = {
   id: string;
   kind: "file";
   path: string;
+  size_bytes?: number;
   source?: string;
   source_truncated?: boolean;
+  source_error?: string;
 };
 type GraphEdge = { id: string; source: string; target: string; kind: "imports" };
 type RepositoryMetadata = {
@@ -35,11 +37,96 @@ type Graph = {
   nodes: GraphNode[];
   edges: GraphEdge[];
 };
+type Claim = {
+  classification: "fact" | "heuristic" | "interpretation";
+  text: string;
+  confidence: number;
+  provenance: string;
+};
 
 const filename = (path: string) => path.split("/").at(-1) ?? path;
 const folder = (path: string) => path.split("/").slice(0, -1).join("/") || "repository root";
-const positionFor = (index: number) => ({ x: (index % 2) * 330, y: Math.floor(index / 2) * 150 });
 const MAX_SOURCE_CHARACTERS = 200_000;
+
+const layerFor = (path: string) => {
+  if (path.startsWith("tests/")) return { key: "tests", label: "Tests", order: 0 };
+  if (path.includes("/entrypoints/") || path.endsWith("bootstrap.py") || path.endsWith("views.py")) return { key: "entrypoints", label: "Entry points", order: 1 };
+  if (path.includes("/service_layer/")) return { key: "services", label: "Application", order: 2 };
+  if (path.includes("/domain/")) return { key: "domain", label: "Domain", order: 3 };
+  if (path.includes("/adapters/")) return { key: "adapters", label: "Infrastructure", order: 4 };
+  return { key: "support", label: "Support", order: 5 };
+};
+
+function layeredPositions(nodes: GraphNode[]) {
+  const rows = new Map<string, number>();
+  return new Map(nodes.map((node) => {
+    const layer = layerFor(node.path);
+    const row = rows.get(layer.key) ?? 0;
+    rows.set(layer.key, row + 1);
+    return [node.id, { x: layer.order * 310, y: row * 118 }];
+  }));
+}
+
+function formatBytes(bytes: number | undefined) {
+  if (bytes === undefined) return "Unknown";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+}
+
+function symbolsIn(source: string | undefined) {
+  if (!source) return [];
+  return [...source.matchAll(/^(?:async\s+)?(?:class|def)\s+([A-Za-z_]\w*)/gm)].map((match) => match[1]).slice(0, 5);
+}
+
+function explainNode(node: GraphNode, incoming: GraphEdge[], outgoing: GraphEdge[]): { summary: string; role: string; rationale: string; claims: Claim[] } {
+  const layer = layerFor(node.path);
+  const symbols = symbolsIn(node.source);
+  const roles: Record<string, string> = {
+    entrypoints: "Boundary code that starts or receives an execution flow and delegates work inward.",
+    services: "Application orchestration that coordinates use cases across domain and infrastructure code.",
+    domain: "Core business behavior and vocabulary, kept separate from delivery and persistence concerns.",
+    adapters: "Infrastructure integration that translates between the application and external systems.",
+    tests: "Verification code that exercises production behavior and documents expected outcomes.",
+    support: "Supporting configuration or package setup used by multiple architectural layers.",
+  };
+  const rationales: Record<string, string> = {
+    entrypoints: "Keeping boundary concerns here prevents HTTP, messaging, or startup details from leaking into business rules.",
+    services: "A service layer provides one place to coordinate a use case without coupling domain objects to infrastructure.",
+    domain: "This placement suggests the project is protecting business logic from framework and database dependencies.",
+    adapters: "The adapter boundary makes external technology replaceable behind application-facing interfaces.",
+    tests: "The test hierarchy mirrors the type of confidence each test provides: unit, integration, or end-to-end.",
+    support: "Cross-cutting setup is separated so feature modules can remain focused on their primary responsibility.",
+  };
+  const summary = symbols.length
+    ? `Defines ${symbols.join(", ")}${symbols.length === 5 ? ", and other symbols" : ""}.`
+    : node.source_error ? "The file could not be read, so behavior could not be determined." : "Contains package setup or module-level behavior with no top-level class or function definitions.";
+  return {
+    summary,
+    role: roles[layer.key],
+    rationale: rationales[layer.key],
+    claims: [
+      {
+        classification: "fact",
+        text: `${outgoing.length} internal import${outgoing.length === 1 ? "" : "s"} out; ${incoming.length} internal importer${incoming.length === 1 ? "" : "s"} in.`,
+        confidence: 1,
+        provenance: "Python AST import statements and resolved repository paths",
+      },
+      {
+        classification: "heuristic",
+        text: `Likely belongs to the ${layer.label.toLowerCase()} layer.`,
+        confidence: 0.9,
+        provenance: `Path convention: ${node.path}`,
+      },
+      {
+        classification: "interpretation",
+        text: rationales[layer.key],
+        confidence: 0.72,
+        provenance: "Layered Python architecture pattern inferred from path and dependency direction",
+      },
+    ],
+  };
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -63,6 +150,12 @@ function validateGraph(value: unknown): Graph {
     if (nodeIds.has(node.id)) throw new Error(`Invalid graph: duplicate node id "${node.id}".`);
     if (node.source !== undefined && typeof node.source !== "string") {
       throw new Error(`Invalid graph: source for "${node.id}" must be a string.`);
+    }
+    if (node.size_bytes !== undefined && (typeof node.size_bytes !== "number" || node.size_bytes < 0)) {
+      throw new Error(`Invalid graph: size_bytes for "${node.id}" must be a non-negative number.`);
+    }
+    if (node.source_error !== undefined && typeof node.source_error !== "string") {
+      throw new Error(`Invalid graph: source_error for "${node.id}" must be a string.`);
     }
     nodeIds.add(node.id);
   }
@@ -88,10 +181,24 @@ function githubName(url: string) {
   return match ? `${match[1]}/${match[2]}` : "GitHub repository";
 }
 
+function primaryNodeId(graph: Graph) {
+  const degree = new Map<string, number>();
+  graph.edges.forEach((edge) => {
+    degree.set(edge.source, (degree.get(edge.source) ?? 0) + 1);
+    degree.set(edge.target, (degree.get(edge.target) ?? 0) + 1);
+  });
+  return graph.nodes
+    .filter((node) => !node.path.startsWith("tests/"))
+    .sort((a, b) => (degree.get(b.id) ?? 0) - (degree.get(a.id) ?? 0))[0]?.id
+    ?? graph.nodes[0]?.id
+    ?? null;
+}
+
 export default function Home() {
   const [graph, setGraph] = useState<Graph | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [scope, setScope] = useState<"production" | "all">("production");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -103,38 +210,53 @@ export default function Home() {
       .then((data: unknown) => {
         const validated = validateGraph(data);
         setGraph(validated);
-        setSelectedId(validated.nodes[0]?.id ?? null);
+        setSelectedId(primaryNodeId(validated));
       })
       .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Could not load graph data"));
   }, []);
 
   const visibleGraphNodes = useMemo(
-    () => graph?.nodes.filter((node) => node.path.toLowerCase().includes(query.toLowerCase())) ?? [],
-    [graph, query],
+    () => graph?.nodes.filter((node) =>
+      (scope === "all" || !node.path.startsWith("tests/"))
+      && node.path.toLowerCase().includes(query.toLowerCase()),
+    ) ?? [],
+    [graph, query, scope],
   );
   const visibleIds = useMemo(() => new Set(visibleGraphNodes.map((node) => node.id)), [visibleGraphNodes]);
+  const positions = useMemo(() => layeredPositions(visibleGraphNodes), [visibleGraphNodes]);
+
+  useEffect(() => {
+    if (selectedId && !visibleIds.has(selectedId)) setSelectedId(visibleGraphNodes[0]?.id ?? null);
+  }, [selectedId, visibleGraphNodes, visibleIds]);
   const flowNodes = useMemo<Node[]>(
     () => visibleGraphNodes.map((node, index) => ({
       id: node.id,
-      position: positionFor(index),
-      data: { label: filename(node.path), path: node.path },
+      position: positions.get(node.id) ?? { x: 0, y: index * 118 },
+      sourcePosition: Position.Right,
+      targetPosition: Position.Left,
+      data: { label: <div className="node-label"><strong>{filename(node.path)}</strong><small>{folder(node.path)}</small></div>, path: node.path },
       className: selectedId === node.id ? "flow-node selected" : "flow-node",
+      ariaLabel: `Open ${node.path}`,
     })),
-    [selectedId, visibleGraphNodes],
+    [positions, selectedId, visibleGraphNodes],
   );
   const flowEdges = useMemo<Edge[]>(
     () => (graph?.edges ?? []).filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target)).map((edge) => ({
       ...edge,
       type: "smoothstep",
-      animated: true,
+      animated: false,
       markerEnd: { type: MarkerType.ArrowClosed },
-      style: { stroke: "#315b3d", strokeWidth: 1.6 },
+      className: selectedId && (edge.source === selectedId || edge.target === selectedId) ? "relationship active" : "relationship",
+      style: selectedId && (edge.source === selectedId || edge.target === selectedId)
+        ? { stroke: "#315b3d", strokeWidth: 2.4, opacity: 1 }
+        : { stroke: "#8e9b91", strokeWidth: 1.2, opacity: selectedId ? 0.16 : 0.48 },
     })),
-    [graph, visibleIds],
+    [graph, selectedId, visibleIds],
   );
   const selected = graph?.nodes.find((node) => node.id === selectedId) ?? null;
   const incoming = graph?.edges.filter((edge) => edge.target === selectedId) ?? [];
   const outgoing = graph?.edges.filter((edge) => edge.source === selectedId) ?? [];
+  const explanation = selected ? explainNode(selected, incoming, outgoing) : null;
   const nodePath = (id: string) => graph?.nodes.find((node) => node.id === id)?.path ?? id;
   const displayedSource = selected?.source?.slice(0, MAX_SOURCE_CHARACTERS);
   const sourceLines = displayedSource?.split("\n") ?? [];
@@ -146,6 +268,7 @@ export default function Home() {
     ?? "Analyzed repository";
   const repositorySource = graph?.repository?.source ?? (graph?.source_url ? "github" : "local");
   const repositoryUrl = graph?.repository?.url ?? graph?.source_url;
+  const riskCount = graph?.nodes.filter((node) => node.source_error).length ?? 0;
 
   return (
     <main className="shell">
@@ -163,16 +286,23 @@ export default function Home() {
           <p className="rail-copy">Explore files, source, and internal imports from the analyzed repository.</p>
           {graph && <div className="origin"><span>{repositorySource === "github" ? "GitHub" : "Local directory"}</span>{repositoryUrl ? <a href={repositoryUrl} target="_blank" rel="noreferrer">Open repository ↗</a> : <strong>{repositoryName}</strong>}</div>}
           <label className="search"><span aria-hidden="true">⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter files" aria-label="Filter files" /></label>
+          <div className="scope-switch" aria-label="Graph scope">
+            <button className={scope === "production" ? "active" : ""} onClick={() => setScope("production")}>Production</button>
+            <button className={scope === "all" ? "active" : ""} onClick={() => setScope("all")}>All files</button>
+          </div>
           <nav aria-label="Graph summary">
             <div className="nav-item active"><span>Files</span><strong>{graph?.nodes.length ?? 0}</strong></div>
             <div className="nav-item"><span>Dependencies</span><strong>{graph?.edges.length ?? 0}</strong></div>
-            <div className="nav-item muted"><span>Risks</span><strong>—</strong></div>
+            <div className={riskCount ? "nav-item warning" : "nav-item muted"}><span>Read warnings</span><strong>{riskCount}</strong></div>
           </nav>
           <div className="contract"><span>Graph contract</span><code>schema v{graph?.schema_version ?? "0.1"}</code></div>
         </aside>
 
         <section className="canvas" aria-label="Repository dependency graph">
-          <div className="canvas-head"><div><div className="eyebrow">Architecture map</div><h2>Python imports</h2></div><div className="legend"><span /> File <i /> Import</div></div>
+          <div className="canvas-head"><div><div className="eyebrow">Architecture map</div><h2>Python imports</h2><p className="relationship-help">A → B means file A imports file B.</p></div><div className="legend"><span /> Selected <i /> Imports →</div></div>
+          <div className="layer-guide" aria-hidden="true">
+            {(scope === "all" ? ["Tests"] : []).concat(["Entry points", "Application", "Domain", "Infrastructure", "Support"]).map((layer) => <span key={layer}>{layer}</span>)}
+          </div>
           <div className="graph-surface">
             {error ? <div className="state-card error-state"><strong>Graph could not be loaded</strong><p>{error}</p></div> : !graph ? (
               <div className="state-card loading-state"><span aria-hidden="true" /><strong>Loading repository graph</strong><p>Validating nodes and dependencies…</p></div>
@@ -180,7 +310,7 @@ export default function Home() {
               <div className="state-card"><strong>No Python files found</strong><p>This repository does not contain any analyzable .py files.</p></div>
             ) : (
               <ReactFlow
-                key={`${flowNodes.length}:${query}`}
+                key={`${scope}:${flowNodes.length}:${query}`}
                 nodes={flowNodes}
                 edges={flowEdges}
                 onNodeClick={(_, node) => setSelectedId(node.id)}
@@ -190,9 +320,9 @@ export default function Home() {
                 maxZoom={1.8}
                 nodesDraggable
                 nodesConnectable={false}
+                selectionOnDrag={false}
               >
                 <Background variant={BackgroundVariant.Dots} gap={18} size={1} color="#cbd3c9" />
-                <MiniMap pannable zoomable nodeColor="#315b3d" maskColor="rgba(244,246,241,.76)" />
                 <Controls showInteractive={false} />
               </ReactFlow>
             )}
@@ -205,7 +335,17 @@ export default function Home() {
           {selected ? <>
             <div className="detail-icon">PY</div><h2>{filename(selected.path)}</h2><p className="full-path">{selected.path}</p>
             <div className="divider" />
-            <dl><div><dt>Kind</dt><dd>Python file</dd></div><div><dt>Node ID</dt><dd><code>{selected.id}</code></dd></div><div><dt>Folder</dt><dd>{folder(selected.path)}</dd></div></dl>
+            <dl><div><dt>Kind</dt><dd>Python file</dd></div><div><dt>Size</dt><dd>{formatBytes(selected.size_bytes)}</dd></div><div><dt>Node ID</dt><dd><code>{selected.id}</code></dd></div><div><dt>Folder</dt><dd>{folder(selected.path)}</dd></div></dl>
+            {explanation && <section className="explanation-section">
+              <div className="section-heading"><h3>Understanding</h3><span className="analysis-label">Static analysis</span></div>
+              <div className="explanation-block"><h4>What it does</h4><p>{explanation.summary}</p></div>
+              <div className="explanation-block"><h4>Execution role</h4><p>{explanation.role}</p></div>
+              <div className="explanation-block"><h4>Why it is structured here</h4><p>{explanation.rationale}</p></div>
+              <div className="claims"><h4>Claims and evidence</h4>{explanation.claims.map((claim) => <article className={`claim ${claim.classification}`} key={claim.classification}>
+                <div><span>{claim.classification}</span><strong>{Math.round(claim.confidence * 100)}% confidence</strong></div>
+                <p>{claim.text}</p><small>Provenance: {claim.provenance}</small>
+              </article>)}</div>
+            </section>}
             <section className="source-section">
               <div className="section-heading"><h3>Source</h3>{sourceIsTruncated && <span>Truncated</span>}</div>
               {displayedSource !== undefined ? (
@@ -217,8 +357,10 @@ export default function Home() {
                     </span>
                   ))}</code>
                 </pre>
+              ) : selected.source_error ? (
+                <div className="source-unavailable source-warning" role="alert"><strong>Analyzer warning</strong><p>{selected.source_error}</p></div>
               ) : (
-                <div className="source-unavailable"><strong>Source unavailable</strong><p>The analyzer has not included this file’s contents yet.</p></div>
+                <div className="source-unavailable"><strong>Source unavailable</strong><p>The analyzer did not include this file’s contents.</p></div>
               )}
               {sourceIsTruncated && <p className="truncation-note">Only the first 200 KB are shown.</p>}
             </section>
