@@ -15,6 +15,7 @@ from repository_loader import (
     RepositoryLoadError,
     cleanup_repository,
     load_repository,
+    resolve_commit_sha,
     validate_github_url,
 )
 
@@ -53,14 +54,17 @@ async def analyze(request: AnalyzeRequest) -> dict[str, Any]:
     async with analysis_slots:
         try:
             repository_path = await asyncio.to_thread(load_repository, repository_url)
+            commit_sha = await asyncio.to_thread(resolve_commit_sha, repository_path)
             graph = await asyncio.to_thread(analyze_repository, repository_path)
             # Never expose the server's temporary checkout path to the browser.
             graph.pop("repo_root", None)
             graph["repository"] = {
                 "name": f"{owner}/{repository}",
                 "url": repository_url,
+                "pinned_url": f"https://github.com/{owner}/{repository}/tree/{commit_sha}",
                 "source": "github",
             }
+            graph["snapshot"] = {"commit_sha": commit_sha}
             graph["source_url"] = repository_url
             return graph
         except RepositoryLoadError as exc:
@@ -73,3 +77,4 @@ async def analyze(request: AnalyzeRequest) -> dict[str, Any]:
         finally:
             if repository_path is not None:
                 await asyncio.to_thread(cleanup_repository, repository_path)
+

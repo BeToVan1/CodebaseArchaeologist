@@ -25,4 +25,9 @@ pnpm run dev
 
 Open `http://localhost:3000`, enter a public GitHub URL, and select **Analyze repository**.
 
+Each completed analysis records the repository's full commit SHA. Repository and file links in
+the explorer are pinned to that immutable snapshot, so the displayed evidence cannot silently
+move when the repository's default branch changes.
+
 The API is intentionally local-only for this milestone. The hosted site continues to use the committed Cosmic Python fixture until repository analysis runs in an isolated worker service.
+

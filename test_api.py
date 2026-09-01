@@ -33,6 +33,7 @@ def test_analyze_returns_graph_and_cleans_up() -> None:
 
     with (
         patch.object(api, "load_repository", return_value=checkout),
+        patch.object(api, "resolve_commit_sha", return_value="a" * 40),
         patch.object(api, "analyze_repository", return_value=graph),
         patch.object(api, "cleanup_repository") as cleanup,
     ):
@@ -47,6 +48,9 @@ def test_analyze_returns_graph_and_cleans_up() -> None:
     assert payload["repository"] == {
         "name": "cosmicpython/code",
         "url": "https://github.com/cosmicpython/code",
+        "pinned_url": f"https://github.com/cosmicpython/code/tree/{'a' * 40}",
         "source": "github",
     }
+    assert payload["snapshot"] == {"commit_sha": "a" * 40}
     cleanup.assert_called_once_with(checkout)
+

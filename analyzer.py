@@ -9,7 +9,13 @@ import sys
 from pathlib import Path
 from typing import Any, NamedTuple
 
-from repository_loader import RepositoryLoadError, cleanup_repository, load_repository
+from repository_loader import (
+    RepositoryLoadError,
+    cleanup_repository,
+    load_repository,
+    resolve_commit_sha,
+    validate_github_url,
+)
 
 
 IGNORED_DIR_NAMES = {
@@ -354,12 +360,21 @@ def main() -> None:
     if is_github_url(args.repo):
         try:
             repo_path = load_repository(args.repo)
+            commit_sha = resolve_commit_sha(repo_path)
         except RepositoryLoadError as exc:
             print(f"Error: {exc}", file=sys.stderr)
             raise SystemExit(1) from exc
 
         try:
             graph = analyze_repository(repo_path)
+            owner, repository = validate_github_url(args.repo)
+            graph["repository"] = {
+                "name": f"{owner}/{repository}",
+                "url": args.repo,
+                "pinned_url": f"https://github.com/{owner}/{repository}/tree/{commit_sha}",
+                "source": "github",
+            }
+            graph["snapshot"] = {"commit_sha": commit_sha}
             graph["source_url"] = args.repo
             write_graph(graph, args.output)
         finally:
@@ -374,3 +389,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

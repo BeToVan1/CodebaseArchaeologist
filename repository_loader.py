@@ -19,6 +19,7 @@ GITHUB_URL_PATTERN = re.compile(
 
 DEFAULT_CLONE_TIMEOUT_SECONDS = 60
 DEFAULT_MAX_REPO_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB
+FULL_COMMIT_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 
 
 class RepositoryLoadError(ValueError):
@@ -102,3 +103,23 @@ def load_repository(
 def cleanup_repository(path: Path) -> None:
     """Remove a temporary directory created by load_repository."""
     shutil.rmtree(path, ignore_errors=True)
+
+
+def resolve_commit_sha(path: Path) -> str:
+    """Return the immutable HEAD commit for a cloned repository."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(path), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=dict(os.environ, GIT_TERMINAL_PROMPT="0"),
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise RepositoryLoadError("Could not resolve the repository commit SHA.") from exc
+
+    commit_sha = result.stdout.strip().lower()
+    if result.returncode != 0 or not FULL_COMMIT_SHA_PATTERN.fullmatch(commit_sha):
+        raise RepositoryLoadError("Could not resolve the repository commit SHA.")
+    return commit_sha
+

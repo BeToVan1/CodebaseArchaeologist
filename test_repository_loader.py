@@ -12,6 +12,7 @@ from repository_loader import (
     RepositoryLoadError,
     cleanup_repository,
     load_repository,
+    resolve_commit_sha,
     validate_github_url,
 )
 
@@ -137,3 +138,24 @@ def test_load_repository_enforces_size_limit() -> None:
         with patch("repository_loader._directory_size_bytes", return_value=10_000_000_000):
             with pytest.raises(RepositoryLoadError, match="exceeds the"):
                 load_repository("https://github.com/cosmicpython/code", max_size_bytes=1_000)
+
+
+def test_resolve_commit_sha_returns_full_normalized_sha(tmp_path: Path) -> None:
+    result = MagicMock(returncode=0, stdout=("A" * 40) + "\n")
+
+    with patch("repository_loader.subprocess.run", return_value=result) as mock_run:
+        assert resolve_commit_sha(tmp_path) == "a" * 40
+
+    assert mock_run.call_args.args[0] == ["git", "-C", str(tmp_path), "rev-parse", "HEAD"]
+
+
+@pytest.mark.parametrize("returncode,stdout", [(1, ""), (0, "abc123\n")])
+def test_resolve_commit_sha_rejects_failed_or_short_results(
+    tmp_path: Path, returncode: int, stdout: str
+) -> None:
+    result = MagicMock(returncode=returncode, stdout=stdout)
+
+    with patch("repository_loader.subprocess.run", return_value=result):
+        with pytest.raises(RepositoryLoadError, match="commit SHA"):
+            resolve_commit_sha(tmp_path)
+
