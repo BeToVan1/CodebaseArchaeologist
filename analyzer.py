@@ -584,6 +584,392 @@ def fastapi_dependency_calls(
     return dependencies
 
 
+def assignment_value(
+    statement: ast.Assign | ast.AnnAssign,
+) -> ast.expr | None:
+    return statement.value
+
+
+def class_sqlalchemy_metadata(
+    node: ast.ClassDef,
+    bindings: dict[str, str],
+) -> dict[str, Any]:
+    """Extract table, mapped-column, and relationship evidence from one class."""
+    table_expression: str | None = None
+    table_name: str | None = None
+    is_abstract = False
+    columns: list[dict[str, Any]] = []
+    relationships: list[dict[str, Any]] = []
+
+    for statement in node.body:
+        if isinstance(statement, (ast.Assign, ast.AnnAssign)):
+            targets = statement.targets if isinstance(statement, ast.Assign) else [statement.target]
+            value = assignment_value(statement)
+            for target in targets:
+                if not isinstance(target, ast.Name):
+                    continue
+                if target.id == "__tablename__" and value is not None:
+                    table_expression = ast.unparse(value)
+                    if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                        table_name = value.value
+                if (
+                    target.id == "__abstract__"
+                    and isinstance(value, ast.Constant)
+                    and value.value is True
+                ):
+                    is_abstract = True
+
+            if not isinstance(statement, ast.AnnAssign) or not isinstance(statement.target, ast.Name):
+                continue
+            target_name = statement.target.id
+            annotation = dotted_expression(statement.annotation)
+            annotation_root = None
+            if isinstance(statement.annotation, ast.Subscript):
+                annotation_root = dotted_expression(statement.annotation.value)
+            mapped_annotation = annotation_root or annotation
+            if not mapped_annotation or expand_bound_name(mapped_annotation, bindings) != "sqlalchemy.orm.Mapped":
+                continue
+            value = statement.value
+            call_name = dotted_expression(value.func) if isinstance(value, ast.Call) else None
+            expanded_call = expand_bound_name(call_name, bindings) if call_name else None
+            evidence = {
+                "name": target_name,
+                "line": statement.lineno,
+                "annotation": ast.unparse(statement.annotation),
+            }
+            if expanded_call == "sqlalchemy.orm.relationship":
+                relationships.append(evidence)
+            else:
+                columns.append(evidence)
+
+    return {
+        "table_name": table_name,
+        "table_expression": table_expression,
+        "is_abstract": is_abstract,
+        "columns": columns,
+        "relationships": relationships,
+    }
+
+
+def enrich_sqlalchemy_models(
+    repo_root: Path,
+    python_files: list[Path],
+    symbol_nodes: list[dict[str, Any]],
+    relationship_edges: list[dict[str, Any]],
+) -> dict[str, int]:
+    """Classify proven SQLAlchemy declarative roots, abstract bases, and models."""
+    location_index = {
+        (node["path"], node["definition_line"]): node
+        for node in symbol_nodes
+        if node["kind"] == "class"
+    }
+    metadata_by_id: dict[str, dict[str, Any]] = {}
+    sqlalchemy_ids: set[str] = set()
+    declarative_roots: set[str] = set()
+
+    for path in sorted(python_files):
+        relative_posix = path.relative_to(repo_root).as_posix()
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except (SyntaxError, UnicodeDecodeError, OSError):
+            continue
+        file_symbols = [node for node in symbol_nodes if node["path"] == relative_posix]
+        module_name = file_symbols[0]["module"] if file_symbols else module_qualified_name(path.relative_to(repo_root))
+        bindings = import_bindings(tree, module_name, path.name == "__init__.py")
+        legacy_bases: set[str] = set()
+        for statement in tree.body:
+            if not isinstance(statement, (ast.Assign, ast.AnnAssign)):
+                continue
+            value = assignment_value(statement)
+            if not isinstance(value, ast.Call):
+                continue
+            constructor = dotted_expression(value.func)
+            if not constructor:
+                continue
+            expanded = expand_bound_name(constructor, bindings)
+            if expanded not in {
+                "sqlalchemy.orm.declarative_base",
+                "sqlalchemy.ext.declarative.declarative_base",
+            }:
+                continue
+            targets = statement.targets if isinstance(statement, ast.Assign) else [statement.target]
+            legacy_bases.update(target.id for target in targets if isinstance(target, ast.Name))
+
+        for class_node in (node for node in ast.walk(tree) if isinstance(node, ast.ClassDef)):
+            symbol = location_index.get((relative_posix, class_node.lineno))
+            if symbol is None:
+                continue
+            metadata = class_sqlalchemy_metadata(class_node, bindings)
+            metadata_by_id[symbol["id"]] = metadata
+            for base in class_node.bases:
+                expression = dotted_expression(base)
+                if not expression:
+                    continue
+                expanded = expand_bound_name(expression, bindings)
+                if expanded == "sqlalchemy.orm.DeclarativeBase" or expression in legacy_bases:
+                    sqlalchemy_ids.add(symbol["id"])
+                    declarative_roots.add(symbol["id"])
+
+    extends_edges = [
+        edge for edge in relationship_edges
+        if edge["kind"] == "extends" and float(edge.get("confidence", 0.0)) >= 0.9
+    ]
+    changed = True
+    while changed:
+        changed = False
+        for edge in extends_edges:
+            if edge["target"] in sqlalchemy_ids and edge["source"] not in sqlalchemy_ids:
+                sqlalchemy_ids.add(edge["source"])
+                changed = True
+
+    metrics = {
+        "sqlalchemy_models": 0,
+        "sqlalchemy_abstract_models": 0,
+        "sqlalchemy_columns": 0,
+        "sqlalchemy_relationships": 0,
+    }
+    for symbol in symbol_nodes:
+        if symbol["id"] not in sqlalchemy_ids:
+            continue
+        metadata = metadata_by_id.get(symbol["id"], {
+            "table_name": None,
+            "table_expression": None,
+            "is_abstract": False,
+            "columns": [],
+            "relationships": [],
+        })
+        if symbol["id"] in declarative_roots:
+            model_kind = "declarative-base"
+        elif metadata["is_abstract"]:
+            model_kind = "abstract-model"
+            metrics["sqlalchemy_abstract_models"] += 1
+        else:
+            model_kind = "model"
+            metrics["sqlalchemy_models"] += 1
+        symbol["framework"] = "sqlalchemy"
+        symbol["architectural_role"] = "model" if model_kind == "model" else "model-base"
+        symbol["sqlalchemy"] = {"kind": model_kind, **metadata}
+        metrics["sqlalchemy_columns"] += len(metadata["columns"])
+        metrics["sqlalchemy_relationships"] += len(metadata["relationships"])
+    return metrics
+
+
+class DirectAssignmentVisitor(ast.NodeVisitor):
+    """Collect assignments owned by one function without entering nested scopes."""
+
+    def __init__(self) -> None:
+        self.assignments: list[ast.Assign | ast.AnnAssign | ast.AugAssign] = []
+
+    def visit_Assign(self, node: ast.Assign) -> None:
+        self.assignments.append(node)
+        self.generic_visit(node)
+
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+        self.assignments.append(node)
+        self.generic_visit(node)
+
+    def visit_AugAssign(self, node: ast.AugAssign) -> None:
+        self.assignments.append(node)
+        self.generic_visit(node)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        return
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        return
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        return
+
+
+def direct_assignments(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> list[ast.Assign | ast.AnnAssign | ast.AugAssign]:
+    visitor = DirectAssignmentVisitor()
+    for statement in node.body:
+        visitor.visit(statement)
+    return visitor.assignments
+
+
+def unwrap_expression(node: ast.expr | None) -> ast.expr | None:
+    while isinstance(node, (ast.Await, ast.Starred)):
+        node = node.value
+    return node
+
+
+def sqlalchemy_model_target(
+    expression: ast.expr | None,
+    source_symbol: dict[str, Any],
+    bindings: dict[str, str],
+    qualified_index: dict[str, dict[str, Any]],
+    model_ids: set[str],
+) -> dict[str, Any] | None:
+    """Resolve a class or class attribute expression to a proven model node."""
+    expression = unwrap_expression(expression)
+    dotted = dotted_expression(expression) if expression is not None else None
+    while dotted:
+        target, _, _ = exact_symbol_target(dotted, source_symbol, bindings, qualified_index)
+        if target is not None and target["id"] in model_ids:
+            return target
+        dotted = dotted.rpartition(".")[0]
+    return None
+
+
+def extract_sqlalchemy_access_edges(
+    repo_root: Path,
+    python_files: list[Path],
+    symbol_nodes: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """Extract conservative model reads and writes from common SQLAlchemy operations."""
+    edges: list[dict[str, Any]] = []
+    qualified_index = {node["qualified_name"]: node for node in symbol_nodes}
+    model_ids = {
+        node["id"] for node in symbol_nodes
+        if node.get("sqlalchemy", {}).get("kind") == "model"
+    }
+    location_index = {
+        (node["path"], node["definition_line"]): node for node in symbol_nodes
+    }
+    seen: set[tuple[str, str, str, int, int]] = set()
+    metrics = {"sqlalchemy_reads": 0, "sqlalchemy_writes": 0}
+
+    def add_edge(
+        source: dict[str, Any],
+        target: dict[str, Any] | None,
+        kind: str,
+        evidence_node: ast.AST,
+        expression: str,
+        path: str,
+        method: str,
+        confidence: float,
+    ) -> None:
+        if target is None:
+            return
+        key = (source["id"], target["id"], kind, evidence_node.lineno, evidence_node.col_offset)
+        if key in seen:
+            return
+        seen.add(key)
+        edges.append(
+            {
+                "id": f"{kind}:{source['id']}->{target['id']}:{evidence_node.lineno}:{evidence_node.col_offset}",
+                "source": source["id"],
+                "target": target["id"],
+                "kind": kind,
+                "confidence": confidence,
+                "resolution_method": method,
+                "evidence": {
+                    "path": path,
+                    "line": evidence_node.lineno,
+                    "column": evidence_node.col_offset,
+                    "expression": expression,
+                },
+            }
+        )
+        metrics["sqlalchemy_reads" if kind == "reads" else "sqlalchemy_writes"] += 1
+
+    for path in sorted(python_files):
+        relative_path = path.relative_to(repo_root)
+        relative_posix = relative_path.as_posix()
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except (SyntaxError, UnicodeDecodeError, OSError):
+            continue
+        file_symbols = [node for node in symbol_nodes if node["path"] == relative_posix]
+        module_name = file_symbols[0]["module"] if file_symbols else module_qualified_name(relative_path)
+        bindings = import_bindings(tree, module_name, path.name == "__init__.py")
+
+        for function_node in (
+            node for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        ):
+            source = location_index.get((relative_posix, function_node.lineno))
+            if source is None:
+                continue
+            variable_models: dict[str, dict[str, Any]] = {}
+            assignments = direct_assignments(function_node)
+            for statement in assignments:
+                if isinstance(statement, ast.AnnAssign) and isinstance(statement.target, ast.Name):
+                    target = sqlalchemy_model_target(
+                        statement.annotation, source, bindings, qualified_index, model_ids
+                    )
+                    if target is not None:
+                        variable_models[statement.target.id] = target
+                value = statement.value if isinstance(statement, (ast.Assign, ast.AnnAssign)) else None
+                value = unwrap_expression(value)
+                if isinstance(value, ast.Call):
+                    target = sqlalchemy_model_target(
+                        value.func, source, bindings, qualified_index, model_ids
+                    )
+                    call_name = dotted_expression(value.func)
+                    receiver = call_name.rpartition(".")[0].rsplit(".", 1)[-1].lstrip("_") if call_name else ""
+                    is_session_get = (
+                        call_name is not None
+                        and call_name.endswith(".get")
+                        and (receiver in {"session", "db", "database"} or receiver.endswith("session"))
+                    )
+                    if target is None and is_session_get and value.args:
+                        target = sqlalchemy_model_target(
+                            value.args[0], source, bindings, qualified_index, model_ids
+                        )
+                    targets = statement.targets if isinstance(statement, ast.Assign) else [statement.target]
+                    if target is not None:
+                        for assigned in targets:
+                            if isinstance(assigned, ast.Name):
+                                variable_models[assigned.id] = target
+
+            for call in direct_calls(function_node):
+                call_name = dotted_expression(call.func)
+                if not call_name:
+                    continue
+                expanded_call = expand_bound_name(call_name, bindings)
+                operation = expanded_call.rsplit(".", 1)[-1]
+                receiver = call_name.rpartition(".")[0].rsplit(".", 1)[-1].lstrip("_")
+                is_session_operation = receiver in {"session", "db", "database"} or receiver.endswith("session")
+                if expanded_call in {"sqlalchemy.select", "sqlalchemy.exists"}:
+                    for argument in call.args:
+                        add_edge(
+                            source,
+                            sqlalchemy_model_target(argument, source, bindings, qualified_index, model_ids),
+                            "reads", call, ast.unparse(call), relative_posix,
+                            f"sqlalchemy-{operation}", 0.98,
+                        )
+                elif expanded_call in {"sqlalchemy.delete", "sqlalchemy.update", "sqlalchemy.insert"}:
+                    for argument in call.args[:1]:
+                        add_edge(
+                            source,
+                            sqlalchemy_model_target(argument, source, bindings, qualified_index, model_ids),
+                            "writes", call, ast.unparse(call), relative_posix,
+                            f"sqlalchemy-{operation}", 0.98,
+                        )
+                elif is_session_operation and operation == "get" and call.args:
+                    add_edge(
+                        source,
+                        sqlalchemy_model_target(call.args[0], source, bindings, qualified_index, model_ids),
+                        "reads", call, ast.unparse(call), relative_posix,
+                        "sqlalchemy-session-get", 0.98,
+                    )
+                elif is_session_operation and operation in {"add", "merge", "delete"} and call.args:
+                    argument = unwrap_expression(call.args[0])
+                    target = variable_models.get(argument.id) if isinstance(argument, ast.Name) else None
+                    add_edge(
+                        source, target, "writes", call, ast.unparse(call), relative_posix,
+                        f"sqlalchemy-session-{operation}", 0.9,
+                    )
+
+            for statement in assignments:
+                targets = statement.targets if isinstance(statement, ast.Assign) else [statement.target]
+                for assigned in targets:
+                    if not isinstance(assigned, ast.Attribute) or not isinstance(assigned.value, ast.Name):
+                        continue
+                    add_edge(
+                        source,
+                        variable_models.get(assigned.value.id),
+                        "writes", statement, ast.unparse(statement), relative_posix,
+                        "sqlalchemy-model-mutation", 0.9,
+                    )
+    return edges, metrics
+
+
 def extract_symbol_relationship_edges(
     repo_root: Path,
     python_files: list[Path],
@@ -823,7 +1209,7 @@ def discover_representative_flows(
     unresolved_sites: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """Trace bounded, reproducible paths from recognized framework entrypoints."""
-    traversable_kinds = {"calls", "depends-on", "may-dispatch-to"}
+    traversable_kinds = {"calls", "depends-on", "may-dispatch-to", "reads", "writes"}
     adjacency: dict[str, list[dict[str, Any]]] = {}
     for edge in relationship_edges:
         if edge["kind"] in traversable_kinds:
@@ -911,6 +1297,10 @@ def discover_representative_flows(
 
     candidates.sort(
         key=lambda flow: (
+            -int(any(
+                symbol_index[node_id].get("sqlalchemy", {}).get("kind") == "model"
+                for node_id in flow["ordered_node_ids"]
+            )),
             -len(flow["ordered_edge_ids"]),
             -flow["confidence"],
             flow["label"],
@@ -1014,12 +1404,19 @@ def analyze_repository(repo_root: Path) -> dict[str, Any]:
     relationship_edges, relationship_coverage, unresolved_sites = extract_symbol_relationship_edges(
         repo_root, python_files, symbol_nodes
     )
+    sqlalchemy_coverage = enrich_sqlalchemy_models(
+        repo_root, python_files, symbol_nodes, relationship_edges
+    )
+    sqlalchemy_edges, sqlalchemy_access_coverage = extract_sqlalchemy_access_edges(
+        repo_root, python_files, symbol_nodes
+    )
+    relationship_edges.extend(sqlalchemy_edges)
     flows = discover_representative_flows(
         symbol_nodes, relationship_edges, unresolved_sites
     )
 
     return {
-        "schema_version": "0.5",
+        "schema_version": "0.6",
         "repo_root": str(repo_root),
         "python_files_total_found": total_files_found,
         "python_files_analyzed": len(python_files),
@@ -1033,6 +1430,8 @@ def analyze_repository(repo_root: Path) -> dict[str, Any]:
             "symbol_parse_failures": symbol_parse_failures,
             "representative_flows": len(flows),
             **relationship_coverage,
+            **sqlalchemy_coverage,
+            **sqlalchemy_access_coverage,
         },
     }
 
@@ -1101,5 +1500,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 

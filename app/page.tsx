@@ -41,12 +41,20 @@ type GraphNode = {
     label: string;
   };
   entrypoint_evidence?: { path?: string; line?: number; column?: number; expression?: string };
+  sqlalchemy?: {
+    kind: "declarative-base" | "abstract-model" | "model";
+    table_name?: string | null;
+    table_expression?: string | null;
+    is_abstract: boolean;
+    columns: { name: string; line: number; annotation: string }[];
+    relationships: { name: string; line: number; annotation: string }[];
+  };
 };
 type GraphEdge = {
   id: string;
   source: string;
   target: string;
-  kind: "imports" | "contains" | "calls" | "extends" | "may-dispatch-to" | "depends-on";
+  kind: "imports" | "contains" | "calls" | "extends" | "may-dispatch-to" | "depends-on" | "reads" | "writes";
   confidence?: number;
   resolution_method?: string;
   evidence?: { path?: string; line?: number; column?: number; expression?: string };
@@ -187,10 +195,23 @@ function explainSymbol(symbol: GraphNode, incoming: GraphEdge[], outgoing: Graph
     function: "Implements a callable unit of module or nested behavior.",
     file: "Contains Python source.",
   };
+  const model = symbol.sqlalchemy?.kind === "model" ? symbol.sqlalchemy : null;
+  const role = model
+    ? `Maps application state to${model.table_name ? ` the ${model.table_name} table` : " a SQLAlchemy persistence model"}.`
+    : roles[symbol.kind];
+  const rationale = model
+    ? "The model keeps database mapping concerns explicit while repository and service code can refer to a stable application type."
+    : "Its nesting and decorators are reported directly from the Python syntax tree; architectural intent requires additional evidence.";
+  const modelClaims: Claim[] = model ? [{
+    classification: "fact",
+    text: `${model.columns.length} mapped column${model.columns.length === 1 ? "" : "s"} and ${model.relationships.length} ORM relationship${model.relationships.length === 1 ? "" : "s"} were declared on this class.`,
+    confidence: 1,
+    provenance: `SQLAlchemy Mapped annotations in ${symbol.path}`,
+  }] : [];
   return {
     summary: `Defines the ${asyncPrefix}${symbol.kind} ${symbol.qualified_name} at ${range}.${decorators}`,
-    role: roles[symbol.kind],
-    rationale: "Its nesting and decorators are reported directly from the Python syntax tree; architectural intent requires additional evidence.",
+    role,
+    rationale,
     claims: [
       {
         classification: "fact",
@@ -202,11 +223,12 @@ function explainSymbol(symbol: GraphNode, incoming: GraphEdge[], outgoing: Graph
         classification: "fact",
         text: `${outgoing.length} outgoing and ${incoming.length} incoming symbol relationship${incoming.length + outgoing.length === 1 ? "" : "s"} were resolved.`,
         confidence: 1,
-        provenance: "Python AST call and inheritance resolution",
+        provenance: "Python AST call, inheritance, dependency, and persistence resolution",
       },
+      ...modelClaims,
       {
         classification: "interpretation",
-        text: roles[symbol.kind],
+        text: role,
         confidence: 0.7,
         provenance: `Python symbol kind: ${symbol.kind}`,
       },
@@ -256,7 +278,7 @@ function validateGraph(value: unknown): Graph {
     nodeIds.add(node.id);
   }
   for (const [index, edge] of edges.entries()) {
-    if (!isRecord(edge) || typeof edge.id !== "string" || typeof edge.source !== "string" || typeof edge.target !== "string" || !["imports", "contains", "calls", "extends", "may-dispatch-to", "depends-on"].includes(String(edge.kind))) {
+    if (!isRecord(edge) || typeof edge.id !== "string" || typeof edge.source !== "string" || typeof edge.target !== "string" || !["imports", "contains", "calls", "extends", "may-dispatch-to", "depends-on", "reads", "writes"].includes(String(edge.kind))) {
       throw new Error(`Invalid graph: edge ${index + 1} has invalid id, endpoints, or kind.`);
     }
     if (edge.confidence !== undefined && (typeof edge.confidence !== "number" || edge.confidence < 0 || edge.confidence > 1)) {
@@ -444,8 +466,8 @@ export default function Home() {
   const incoming = graph?.edges.filter((edge) => edge.kind === "imports" && edge.target === selectedId) ?? [];
   const outgoing = graph?.edges.filter((edge) => edge.kind === "imports" && edge.source === selectedId) ?? [];
   const selectedSymbol = graph?.nodes.find((node) => node.id === selectedSymbolId && node.kind !== "file") ?? null;
-  const symbolIncoming = graph?.edges.filter((edge) => ["calls", "extends", "may-dispatch-to", "depends-on"].includes(edge.kind) && edge.target === selectedSymbolId) ?? [];
-  const symbolOutgoing = graph?.edges.filter((edge) => ["calls", "extends", "may-dispatch-to", "depends-on"].includes(edge.kind) && edge.source === selectedSymbolId) ?? [];
+  const symbolIncoming = graph?.edges.filter((edge) => ["calls", "extends", "may-dispatch-to", "depends-on", "reads", "writes"].includes(edge.kind) && edge.target === selectedSymbolId) ?? [];
+  const symbolOutgoing = graph?.edges.filter((edge) => ["calls", "extends", "may-dispatch-to", "depends-on", "reads", "writes"].includes(edge.kind) && edge.source === selectedSymbolId) ?? [];
   const symbolsForSelected = graph?.nodes
     .filter((node) => node.kind !== "file" && node.path === selected?.path)
     .sort((a, b) => Number(a.start_line) - Number(b.start_line)) ?? [];
@@ -486,7 +508,7 @@ export default function Home() {
     : undefined;
   const fileCount = graph?.nodes.filter((node) => node.kind === "file").length ?? 0;
   const symbolCount = graph?.nodes.filter((node) => node.kind !== "file").length ?? 0;
-  const relationshipCount = graph?.edges.filter((edge) => ["calls", "extends", "may-dispatch-to", "depends-on"].includes(edge.kind)).length ?? 0;
+  const relationshipCount = graph?.edges.filter((edge) => ["calls", "extends", "may-dispatch-to", "depends-on", "reads", "writes"].includes(edge.kind)).length ?? 0;
   const riskCount = graph?.nodes.filter((node) => node.source_error).length ?? 0;
 
   return (
@@ -553,7 +575,7 @@ export default function Home() {
                     {selectedFlow.ordered_node_ids.map((nodeId, index) => {
                       const edge = index ? flowEdge(index - 1) : undefined;
                       return <li key={`${selectedFlow.id}:${nodeId}:${index}`}>
-                        {edge && <span className={`flow-edge-kind ${edge.kind === "may-dispatch-to" ? "candidate" : ""}`}>{edge.kind.replaceAll("-", " ")} · {Math.round((edge.confidence ?? 1) * 100)}%</span>}
+                        {edge && <span className={`flow-edge-kind ${edge.kind === "may-dispatch-to" ? "candidate" : ["reads", "writes"].includes(edge.kind) ? "persistence" : ""}`}>{edge.kind.replaceAll("-", " ")} · {Math.round((edge.confidence ?? 1) * 100)}%</span>}
                         <button onClick={() => selectSymbolNode(nodeId)}>
                           <strong>{nodeName(nodeId)}</strong><small>{nodePath(nodeId)}{edge?.evidence?.line ? ` · evidence line ${edge.evidence.line}` : ""}</small>
                         </button>
@@ -615,6 +637,12 @@ export default function Home() {
                 <p>{claim.text}</p><small>Provenance: {claim.provenance}</small>
               </article>)}</div>
             </section>}
+            {selectedSymbol?.sqlalchemy && <section className="model-metadata">
+              <div className="section-heading"><h3>SQLAlchemy mapping</h3><span>{selectedSymbol.sqlalchemy.kind.replaceAll("-", " ")}</span></div>
+              {(selectedSymbol.sqlalchemy.table_name || selectedSymbol.sqlalchemy.table_expression) && <p className="model-table"><strong>Table</strong><code>{selectedSymbol.sqlalchemy.table_name ?? selectedSymbol.sqlalchemy.table_expression}</code></p>}
+              <div className="model-members"><div><strong>Mapped columns</strong>{selectedSymbol.sqlalchemy.columns.length ? <ul>{selectedSymbol.sqlalchemy.columns.map((column) => <li key={`${column.name}:${column.line}`}><code>{column.name}</code><span>{column.annotation} · line {column.line}</span></li>)}</ul> : <p>None declared directly</p>}</div>
+              <div><strong>Relationships</strong>{selectedSymbol.sqlalchemy.relationships.length ? <ul>{selectedSymbol.sqlalchemy.relationships.map((relationship) => <li key={`${relationship.name}:${relationship.line}`}><code>{relationship.name}</code><span>{relationship.annotation} · line {relationship.line}</span></li>)}</ul> : <p>None declared directly</p>}</div></div>
+            </section>}
             {selectedSymbol && <section className="connections symbol-relationships"><h3>Symbol relationships</h3>
               <div className="connection-group"><span>Outgoing</span>{symbolOutgoing.length ? symbolOutgoing.map((edge) => <button key={edge.id} onClick={() => selectSymbolNode(edge.target)}><strong>→ {nodeName(edge.target)}</strong><small>{relationshipLabel(edge)}{edge.evidence?.line ? ` · line ${edge.evidence.line}` : ""}</small></button>) : <p>None resolved</p>}</div>
               <div className="connection-group"><span>Incoming</span>{symbolIncoming.length ? symbolIncoming.map((edge) => <button key={edge.id} onClick={() => selectSymbolNode(edge.source)}><strong>← {nodeName(edge.source)}</strong><small>{relationshipLabel(edge)}{edge.evidence?.line ? ` · line ${edge.evidence.line}` : ""}</small></button>) : <p>None resolved</p>}</div>
@@ -650,6 +678,7 @@ export default function Home() {
     </main>
   );
 }
+
 
 
 
