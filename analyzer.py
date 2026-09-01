@@ -153,6 +153,7 @@ class SymbolVisitor(ast.NodeVisitor):
             "kind": kind,
             "name": node.name,
             "qualified_name": qualified_name,
+            "module": self.module_name,
             "path": self.path,
             "start_line": start_line,
             "definition_line": node.lineno,
@@ -160,6 +161,8 @@ class SymbolVisitor(ast.NodeVisitor):
             "parent_id": parent_id,
             "decorators": decorators,
         }
+        if isinstance(node, ast.ClassDef):
+            symbol["bases"] = [ast.unparse(base) for base in node.bases]
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             symbol["is_async"] = isinstance(node, ast.AsyncFunctionDef)
         self.nodes.append(symbol)
@@ -365,6 +368,244 @@ def resolve_first(candidates: list[str], module_map: dict[str, str]) -> str | No
 
 
 # --------------------------------------------------------------------------
+# Symbol relationship resolution
+# --------------------------------------------------------------------------
+
+def dotted_expression(node: ast.AST) -> str | None:
+    """Return a dotted name for Name/Attribute expressions, or None when dynamic."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        parent = dotted_expression(node.value)
+        return f"{parent}.{node.attr}" if parent else None
+    return None
+
+
+def import_bindings(tree: ast.Module, module_name: str, is_package: bool) -> dict[str, str]:
+    """Map names introduced by module-level imports to their absolute dotted targets."""
+    bindings: dict[str, str] = {}
+    package = module_name if is_package else module_name.rpartition(".")[0]
+
+    for statement in tree.body:
+        if isinstance(statement, ast.Import):
+            for alias in statement.names:
+                local_name = alias.asname or alias.name.split(".")[0]
+                bindings[local_name] = alias.name if alias.asname else local_name
+        elif isinstance(statement, ast.ImportFrom):
+            package_parts = package.split(".") if package else []
+            if statement.level:
+                climb = statement.level - 1
+                if climb:
+                    package_parts = package_parts[:-climb]
+                base = ".".join(package_parts)
+            else:
+                base = ""
+            module_parts = [part for part in (base, statement.module or "") if part]
+            imported_from = ".".join(module_parts)
+            for alias in statement.names:
+                if alias.name == "*":
+                    continue
+                local_name = alias.asname or alias.name
+                bindings[local_name] = ".".join(
+                    part for part in (imported_from, alias.name) if part
+                )
+    return bindings
+
+
+def expand_bound_name(name: str, bindings: dict[str, str]) -> str:
+    first, separator, remainder = name.partition(".")
+    bound = bindings.get(first)
+    if not bound:
+        return name
+    return f"{bound}.{remainder}" if separator else bound
+
+
+def exact_symbol_target(
+    expression: str,
+    source_symbol: dict[str, Any],
+    bindings: dict[str, str],
+    qualified_index: dict[str, dict[str, Any]],
+) -> tuple[dict[str, Any] | None, str | None, float]:
+    """Resolve lexical, imported, qualified, and self/cls symbol references."""
+    candidates: list[tuple[str, str, float]] = []
+    module_name = source_symbol["module"]
+
+    if expression.startswith(("self.", "cls.")) and source_symbol["kind"] == "method":
+        owner = source_symbol["qualified_name"].rsplit(".", 1)[0]
+        candidates.append(
+            (f"{owner}.{expression.split('.', 1)[1]}", "ast-self-method", 0.98)
+        )
+
+    expanded = expand_bound_name(expression, bindings)
+    if expanded != expression:
+        candidates.append((expanded, "ast-import-binding", 0.96))
+    candidates.append((expression, "ast-qualified-name", 1.0))
+
+    if "." not in expression:
+        parent_scope = source_symbol["qualified_name"].rsplit(".", 1)[0]
+        candidates.extend(
+            [
+                (f"{source_symbol['qualified_name']}.{expression}", "ast-nested-scope", 1.0),
+                (f"{parent_scope}.{expression}", "ast-lexical-scope", 1.0),
+                (f"{module_name}.{expression}", "ast-module-scope", 1.0),
+            ]
+        )
+
+    for candidate, method, confidence in candidates:
+        target = qualified_index.get(candidate)
+        if target is not None:
+            return target, method, confidence
+    return None, None, 0.0
+
+
+class DirectCallVisitor(ast.NodeVisitor):
+    """Collect calls belonging to one function without entering nested definitions."""
+
+    def __init__(self) -> None:
+        self.calls: list[ast.Call] = []
+
+    def visit_Call(self, node: ast.Call) -> None:
+        self.calls.append(node)
+        self.generic_visit(node)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        return
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        return
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        return
+
+
+def direct_calls(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[ast.Call]:
+    visitor = DirectCallVisitor()
+    for statement in node.body:
+        visitor.visit(statement)
+    return visitor.calls
+
+
+def extract_symbol_relationship_edges(
+    repo_root: Path,
+    python_files: list[Path],
+    symbol_nodes: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """Resolve deterministic inheritance/call edges and bounded dispatch candidates."""
+    edges: list[dict[str, Any]] = []
+    qualified_index = {node["qualified_name"]: node for node in symbol_nodes}
+    location_index = {
+        (node["path"], node["definition_line"]): node for node in symbol_nodes
+    }
+    simple_index: dict[str, list[dict[str, Any]]] = {}
+    for symbol in symbol_nodes:
+        simple_index.setdefault(symbol["name"], []).append(symbol)
+
+    metrics = {
+        "call_sites": 0,
+        "resolved_calls": 0,
+        "candidate_calls": 0,
+        "unresolved_calls": 0,
+        "inheritance_edges": 0,
+    }
+
+    for path in sorted(python_files):
+        relative_path = path.relative_to(repo_root)
+        relative_posix = relative_path.as_posix()
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except (SyntaxError, UnicodeDecodeError, OSError):
+            continue
+
+        file_symbols = [node for node in symbol_nodes if node["path"] == relative_posix]
+        module_name = file_symbols[0]["module"] if file_symbols else module_qualified_name(relative_path)
+        bindings = import_bindings(tree, module_name, path.name == "__init__.py")
+
+        for ast_node in ast.walk(tree):
+            if not isinstance(ast_node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            source_symbol = location_index.get((relative_posix, ast_node.lineno))
+            if source_symbol is None:
+                continue
+
+            if isinstance(ast_node, ast.ClassDef):
+                for base in ast_node.bases:
+                    expression = dotted_expression(base)
+                    if not expression:
+                        continue
+                    target, method, confidence = exact_symbol_target(
+                        expression, source_symbol, bindings, qualified_index
+                    )
+                    if target is None:
+                        matches = [
+                            item for item in simple_index.get(expression.rsplit(".", 1)[-1], [])
+                            if item["kind"] == "class"
+                        ]
+                        if len(matches) == 1:
+                            target, method, confidence = matches[0], "repo-unique-class-name", 0.7
+                    if target is None or target["id"] == source_symbol["id"]:
+                        continue
+                    edges.append(
+                        {
+                            "id": f"extends:{source_symbol['id']}->{target['id']}:{base.lineno}",
+                            "source": source_symbol["id"],
+                            "target": target["id"],
+                            "kind": "extends",
+                            "confidence": confidence,
+                            "resolution_method": method,
+                            "evidence": {
+                                "path": relative_posix,
+                                "line": base.lineno,
+                                "column": base.col_offset,
+                                "expression": ast.unparse(base),
+                            },
+                        }
+                    )
+                    metrics["inheritance_edges"] += 1
+                continue
+
+            for call in direct_calls(ast_node):
+                metrics["call_sites"] += 1
+                expression = dotted_expression(call.func)
+                if not expression:
+                    metrics["unresolved_calls"] += 1
+                    continue
+                target, method, confidence = exact_symbol_target(
+                    expression, source_symbol, bindings, qualified_index
+                )
+                edge_kind = "calls"
+                if target is None and "." in expression:
+                    matches = [
+                        item for item in simple_index.get(expression.rsplit(".", 1)[-1], [])
+                        if item["kind"] == "method"
+                    ]
+                    if len(matches) == 1:
+                        target, method, confidence = matches[0], "repo-unique-member-name", 0.55
+                        edge_kind = "may-dispatch-to"
+                if target is None:
+                    metrics["unresolved_calls"] += 1
+                    continue
+                metrics["resolved_calls" if edge_kind == "calls" else "candidate_calls"] += 1
+                edges.append(
+                    {
+                        "id": f"{edge_kind}:{source_symbol['id']}->{target['id']}:{call.lineno}:{call.col_offset}",
+                        "source": source_symbol["id"],
+                        "target": target["id"],
+                        "kind": edge_kind,
+                        "confidence": confidence,
+                        "resolution_method": method,
+                        "evidence": {
+                            "path": relative_posix,
+                            "line": call.lineno,
+                            "column": call.col_offset,
+                            "expression": ast.unparse(call.func),
+                        },
+                    }
+                )
+
+    return edges, metrics
+
+
+# --------------------------------------------------------------------------
 # Edge extraction
 # --------------------------------------------------------------------------
 
@@ -436,19 +677,23 @@ def analyze_repository(repo_root: Path) -> dict[str, Any]:
     roots = find_module_roots(repo_root, python_files)
     module_map = build_module_map(repo_root, python_files, roots)
     import_edges = extract_import_edges(repo_root, python_files, module_map)
+    relationship_edges, relationship_coverage = extract_symbol_relationship_edges(
+        repo_root, python_files, symbol_nodes
+    )
 
     return {
-        "schema_version": "0.3",
+        "schema_version": "0.4",
         "repo_root": str(repo_root),
         "python_files_total_found": total_files_found,
         "python_files_analyzed": len(python_files),
         "python_files_truncated": files_truncated,
         "nodes": [*file_nodes, *symbol_nodes],
-        "edges": [*import_edges, *containment_edges],
+        "edges": [*import_edges, *containment_edges, *relationship_edges],
         "coverage": {
             "python_files": len(python_files),
             "symbol_nodes": len(symbol_nodes),
             "symbol_parse_failures": symbol_parse_failures,
+            **relationship_coverage,
         },
     }
 

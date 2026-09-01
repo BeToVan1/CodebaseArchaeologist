@@ -34,6 +34,10 @@ symbol records its qualified name, decorators, parent, and exact source range. S
 the map, then choose one of its symbols to inspect only that range or open the same lines at the
 pinned GitHub commit.
 
+Graph schema v0.4 adds symbol-level `extends`, `calls`, and `may-dispatch-to` relationships.
+Every relationship records its confidence, resolution method, and exact call or base-class
+evidence. Ambiguous dynamic calls remain unresolved unless one bounded internal candidate exists.
+
 The API is intentionally local-only for this milestone. The hosted site continues to use the committed Cosmic Python fixture until repository analysis runs in an isolated worker service.
 
 
