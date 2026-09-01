@@ -1,0 +1,75 @@
+"""Local HTTP API for analyzing public Python repositories."""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+from typing import Any
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+
+from analyzer import analyze_repository
+from repository_loader import (
+    RepositoryLoadError,
+    cleanup_repository,
+    load_repository,
+    validate_github_url,
+)
+
+logger = logging.getLogger(__name__)
+analysis_slots = asyncio.Semaphore(2)
+
+
+class AnalyzeRequest(BaseModel):
+    repository_url: str = Field(alias="repositoryUrl", min_length=1, max_length=300)
+
+
+app = FastAPI(title="Codebase Archaeologist API", version="0.1.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_methods=["POST", "GET"],
+    allow_headers=["Content-Type"],
+)
+
+
+@app.get("/health")
+async def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.post("/api/analyze")
+async def analyze(request: AnalyzeRequest) -> dict[str, Any]:
+    """Clone and analyze one public GitHub repository, then remove the checkout."""
+    repository_url = request.repository_url.strip()
+    try:
+        owner, repository = validate_github_url(repository_url)
+    except RepositoryLoadError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    repository_path = None
+    async with analysis_slots:
+        try:
+            repository_path = await asyncio.to_thread(load_repository, repository_url)
+            graph = await asyncio.to_thread(analyze_repository, repository_path)
+            # Never expose the server's temporary checkout path to the browser.
+            graph.pop("repo_root", None)
+            graph["repository"] = {
+                "name": f"{owner}/{repository}",
+                "url": repository_url,
+                "source": "github",
+            }
+            graph["source_url"] = repository_url
+            return graph
+        except RepositoryLoadError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except Exception as exc:
+            logger.exception("Repository analysis failed")
+            raise HTTPException(status_code=500, detail="Repository analysis failed.") from exc
+        finally:
+            if repository_path is not None:
+                await asyncio.to_thread(cleanup_repository, repository_path)

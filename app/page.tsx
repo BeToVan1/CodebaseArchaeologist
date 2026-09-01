@@ -47,6 +47,8 @@ type Claim = {
 const filename = (path: string) => path.split("/").at(-1) ?? path;
 const folder = (path: string) => path.split("/").slice(0, -1).join("/") || "repository root";
 const MAX_SOURCE_CHARACTERS = 200_000;
+const ANALYZER_API_URL = process.env.NEXT_PUBLIC_ANALYZER_API_URL ?? "http://127.0.0.1:8000";
+const LOCAL_ANALYZER_ENABLED = process.env.NODE_ENV === "development" || Boolean(process.env.NEXT_PUBLIC_ANALYZER_API_URL);
 
 const layerFor = (path: string) => {
   if (path.startsWith("tests/")) return { key: "tests", label: "Tests", order: 0 };
@@ -200,6 +202,9 @@ export default function Home() {
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<"production" | "all">("production");
   const [error, setError] = useState<string | null>(null);
+  const [submittedUrl, setSubmittedUrl] = useState("https://github.com/cosmicpython/code");
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/graph.json")
@@ -214,6 +219,33 @@ export default function Home() {
       })
       .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Could not load graph data"));
   }, []);
+
+  async function analyzeSubmittedRepository(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsAnalyzing(true);
+    setAnalysisError(null);
+    try {
+      const response = await fetch(`${ANALYZER_API_URL}/api/analyze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repositoryUrl: submittedUrl }),
+      });
+      const data: unknown = await response.json();
+      if (!response.ok) {
+        const detail = isRecord(data) && typeof data.detail === "string" ? data.detail : `Analysis failed (${response.status})`;
+        throw new Error(detail);
+      }
+      const validated = validateGraph(data);
+      setGraph(validated);
+      setSelectedId(primaryNodeId(validated));
+      setQuery("");
+      setScope("production");
+    } catch (cause: unknown) {
+      setAnalysisError(cause instanceof Error ? cause.message : "Repository analysis failed");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }
 
   const visibleGraphNodes = useMemo(
     () => graph?.nodes.filter((node) =>
@@ -277,13 +309,20 @@ export default function Home() {
           <div className="mark" aria-hidden="true">A</div>
           <div><div className="product-name">Archaeologist</div><div className="repo-name">{repositoryName}</div></div>
         </div>
-        <div className="snapshot"><span className="status-dot" />{graph ? "Graph ready" : error ? "Graph unavailable" : "Loading graph"}<code>{graph ? `${graph.nodes.length} files · ${graph.edges.length} imports` : "Please wait"}</code></div>
+        <div className="snapshot"><span className={`status-dot${isAnalyzing ? " busy" : ""}`} />{isAnalyzing ? "Analyzing repository" : graph ? "Graph ready" : error ? "Graph unavailable" : "Loading graph"}<code>{graph ? `${graph.nodes.length} files · ${graph.edges.length} imports` : "Please wait"}</code></div>
       </header>
 
       <section className="workspace">
         <aside className="rail">
           <div className="eyebrow">Repository</div><h1>Dependency map</h1>
           <p className="rail-copy">Explore files, source, and internal imports from the analyzed repository.</p>
+          {LOCAL_ANALYZER_ENABLED && <form className="repository-form" onSubmit={analyzeSubmittedRepository}>
+            <label htmlFor="repository-url">Public GitHub URL</label>
+            <input id="repository-url" type="url" value={submittedUrl} onChange={(event) => setSubmittedUrl(event.target.value)} required pattern="https://github\.com/.+/.+" disabled={isAnalyzing} />
+            <button type="submit" disabled={isAnalyzing}>{isAnalyzing ? "Analyzing…" : "Analyze repository"}</button>
+            <small>Local analyzer · public Python repositories only</small>
+            {analysisError && <p className="analysis-error" role="alert">{analysisError}</p>}
+          </form>}
           {graph && <div className="origin"><span>{repositorySource === "github" ? "GitHub" : "Local directory"}</span>{repositoryUrl ? <a href={repositoryUrl} target="_blank" rel="noreferrer">Open repository ↗</a> : <strong>{repositoryName}</strong>}</div>}
           <label className="search"><span aria-hidden="true">⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter files" aria-label="Filter files" /></label>
           <div className="scope-switch" aria-label="Graph scope">
