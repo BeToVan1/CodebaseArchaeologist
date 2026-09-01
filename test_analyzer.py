@@ -227,6 +227,11 @@ def bootstrap() -> Service:
         "python_files": 1,
         "symbol_nodes": 4,
         "symbol_parse_failures": 0,
+        "call_sites": 2,
+        "resolved_calls": 2,
+        "candidate_calls": 0,
+        "unresolved_calls": 0,
+        "inheritance_edges": 0,
     }
 
 
@@ -250,4 +255,86 @@ def test_symbol_qualified_name_uses_import_root_for_src_layout(tmp_path: Path) -
     symbol = next(node for node in graph["nodes"] if node["kind"] == "function")
 
     assert symbol["qualified_name"] == "allocation.service.allocate"
+
+
+def test_analyze_repository_resolves_inheritance_calls_and_dispatch_candidates(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "base.py").write_text(
+        """class Base:
+    def save(self):
+        pass
+
+    def unique_method(self):
+        pass
+""",
+        encoding="utf-8",
+    )
+    (tmp_path / "service.py").write_text(
+        """from base import Base
+
+class Child(Base):
+    def run(self):
+        self.helper()
+        external.unknown()
+
+    def helper(self):
+        return create()
+
+def create():
+    return Child()
+
+def dispatch(target):
+    return target.unique_method()
+""",
+        encoding="utf-8",
+    )
+
+    graph = analyzer.analyze_repository(tmp_path)
+    symbols = {node["qualified_name"]: node for node in graph["nodes"] if node["kind"] != "file"}
+    relationships = [
+        edge for edge in graph["edges"]
+        if edge["kind"] in {"extends", "calls", "may-dispatch-to"}
+    ]
+
+    assert any(
+        edge["kind"] == "extends"
+        and edge["source"] == symbols["service.Child"]["id"]
+        and edge["target"] == symbols["base.Base"]["id"]
+        and edge["resolution_method"] == "ast-import-binding"
+        for edge in relationships
+    )
+    assert any(
+        edge["kind"] == "calls"
+        and edge["source"] == symbols["service.Child.run"]["id"]
+        and edge["target"] == symbols["service.Child.helper"]["id"]
+        and edge["evidence"]["line"] == 5
+        for edge in relationships
+    )
+    assert any(
+        edge["kind"] == "calls"
+        and edge["source"] == symbols["service.Child.helper"]["id"]
+        and edge["target"] == symbols["service.create"]["id"]
+        for edge in relationships
+    )
+    assert any(
+        edge["kind"] == "calls"
+        and edge["source"] == symbols["service.create"]["id"]
+        and edge["target"] == symbols["service.Child"]["id"]
+        for edge in relationships
+    )
+    assert any(
+        edge["kind"] == "may-dispatch-to"
+        and edge["source"] == symbols["service.dispatch"]["id"]
+        and edge["target"] == symbols["base.Base.unique_method"]["id"]
+        and edge["confidence"] == 0.55
+        for edge in relationships
+    )
+    assert graph["coverage"]["python_files"] == 2
+    assert graph["coverage"]["symbol_nodes"] == 8
+    assert graph["coverage"]["call_sites"] == 5
+    assert graph["coverage"]["resolved_calls"] == 3
+    assert graph["coverage"]["candidate_calls"] == 1
+    assert graph["coverage"]["unresolved_calls"] == 1
+    assert graph["coverage"]["inheritance_edges"] == 1
 

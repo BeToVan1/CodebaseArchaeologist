@@ -25,13 +25,22 @@ type GraphNode = {
   end_line?: number;
   parent_id?: string;
   decorators?: string[];
+  bases?: string[];
   is_async?: boolean;
   size_bytes?: number;
   source?: string;
   source_truncated?: boolean;
   source_error?: string;
 };
-type GraphEdge = { id: string; source: string; target: string; kind: "imports" | "contains" };
+type GraphEdge = {
+  id: string;
+  source: string;
+  target: string;
+  kind: "imports" | "contains" | "calls" | "extends" | "may-dispatch-to";
+  confidence?: number;
+  resolution_method?: string;
+  evidence?: { path?: string; line?: number; column?: number; expression?: string };
+};
 type RepositoryMetadata = {
   name: string;
   url?: string;
@@ -141,7 +150,7 @@ function explainNode(node: GraphNode, incoming: GraphEdge[], outgoing: GraphEdge
   };
 }
 
-function explainSymbol(symbol: GraphNode): { summary: string; role: string; rationale: string; claims: Claim[] } {
+function explainSymbol(symbol: GraphNode, incoming: GraphEdge[], outgoing: GraphEdge[]): { summary: string; role: string; rationale: string; claims: Claim[] } {
   const range = `lines ${symbol.start_line}–${symbol.end_line}`;
   const asyncPrefix = symbol.is_async ? "async " : "";
   const decorators = symbol.decorators?.length ? ` It is decorated by ${symbol.decorators.join(", ")}.` : "";
@@ -161,6 +170,12 @@ function explainSymbol(symbol: GraphNode): { summary: string; role: string; rati
         text: `${symbol.qualified_name} occupies ${range}.`,
         confidence: 1,
         provenance: `Python AST source range in ${symbol.path}`,
+      },
+      {
+        classification: "fact",
+        text: `${outgoing.length} outgoing and ${incoming.length} incoming symbol relationship${incoming.length + outgoing.length === 1 ? "" : "s"} were resolved.`,
+        confidence: 1,
+        provenance: "Python AST call and inheritance resolution",
       },
       {
         classification: "interpretation",
@@ -214,8 +229,11 @@ function validateGraph(value: unknown): Graph {
     nodeIds.add(node.id);
   }
   for (const [index, edge] of edges.entries()) {
-    if (!isRecord(edge) || typeof edge.id !== "string" || typeof edge.source !== "string" || typeof edge.target !== "string" || !["imports", "contains"].includes(String(edge.kind))) {
+    if (!isRecord(edge) || typeof edge.id !== "string" || typeof edge.source !== "string" || typeof edge.target !== "string" || !["imports", "contains", "calls", "extends", "may-dispatch-to"].includes(String(edge.kind))) {
       throw new Error(`Invalid graph: edge ${index + 1} has invalid id, endpoints, or kind.`);
+    }
+    if (edge.confidence !== undefined && (typeof edge.confidence !== "number" || edge.confidence < 0 || edge.confidence > 1)) {
+      throw new Error(`Invalid graph: edge "${edge.id}" has invalid confidence.`);
     }
     if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target)) {
       throw new Error(`Invalid graph: edge "${edge.id}" references a missing node.`);
@@ -322,7 +340,6 @@ export default function Home() {
   useEffect(() => {
     if (selectedId && !visibleIds.has(selectedId)) setSelectedId(visibleGraphNodes[0]?.id ?? null);
   }, [selectedId, visibleGraphNodes, visibleIds]);
-  useEffect(() => setSelectedSymbolId(null), [selectedId]);
   const flowNodes = useMemo<Node[]>(
     () => visibleGraphNodes.map((node, index) => ({
       id: node.id,
@@ -352,11 +369,22 @@ export default function Home() {
   const incoming = graph?.edges.filter((edge) => edge.kind === "imports" && edge.target === selectedId) ?? [];
   const outgoing = graph?.edges.filter((edge) => edge.kind === "imports" && edge.source === selectedId) ?? [];
   const selectedSymbol = graph?.nodes.find((node) => node.id === selectedSymbolId && node.kind !== "file") ?? null;
+  const symbolIncoming = graph?.edges.filter((edge) => ["calls", "extends", "may-dispatch-to"].includes(edge.kind) && edge.target === selectedSymbolId) ?? [];
+  const symbolOutgoing = graph?.edges.filter((edge) => ["calls", "extends", "may-dispatch-to"].includes(edge.kind) && edge.source === selectedSymbolId) ?? [];
   const symbolsForSelected = graph?.nodes
     .filter((node) => node.kind !== "file" && node.path === selected?.path)
     .sort((a, b) => Number(a.start_line) - Number(b.start_line)) ?? [];
-  const explanation = selectedSymbol ? explainSymbol(selectedSymbol) : selected ? explainNode(selected, incoming, outgoing) : null;
+  const explanation = selectedSymbol ? explainSymbol(selectedSymbol, symbolIncoming, symbolOutgoing) : selected ? explainNode(selected, incoming, outgoing) : null;
   const nodePath = (id: string) => graph?.nodes.find((node) => node.id === id)?.path ?? id;
+  const nodeName = (id: string) => graph?.nodes.find((node) => node.id === id)?.qualified_name ?? nodePath(id);
+  const selectFileNode = (id: string) => { setSelectedId(id); setSelectedSymbolId(null); };
+  const selectSymbolNode = (id: string) => {
+    const symbol = graph?.nodes.find((node) => node.id === id && node.kind !== "file");
+    if (!symbol) return;
+    setSelectedId(`file:${symbol.path}`);
+    setSelectedSymbolId(id);
+  };
+  const relationshipLabel = (edge: GraphEdge) => `${edge.kind.replaceAll("-", " ")} · ${Math.round((edge.confidence ?? 1) * 100)}%`;
   const displayedSource = selected?.source?.slice(0, MAX_SOURCE_CHARACTERS);
   const fileSourceLines = displayedSource?.split("\n") ?? [];
   const sourceStartLine = selectedSymbol?.start_line ?? 1;
@@ -380,6 +408,7 @@ export default function Home() {
     : undefined;
   const fileCount = graph?.nodes.filter((node) => node.kind === "file").length ?? 0;
   const symbolCount = graph?.nodes.filter((node) => node.kind !== "file").length ?? 0;
+  const relationshipCount = graph?.edges.filter((edge) => ["calls", "extends", "may-dispatch-to"].includes(edge.kind)).length ?? 0;
   const riskCount = graph?.nodes.filter((node) => node.source_error).length ?? 0;
 
   return (
@@ -413,6 +442,7 @@ export default function Home() {
             <div className="nav-item active"><span>Files</span><strong>{fileCount}</strong></div>
             <div className="nav-item"><span>Symbols</span><strong>{symbolCount}</strong></div>
             <div className="nav-item"><span>Dependencies</span><strong>{graph?.edges.filter((edge) => edge.kind === "imports").length ?? 0}</strong></div>
+            <div className="nav-item"><span>Symbol relationships</span><strong>{relationshipCount}</strong></div>
             <div className={riskCount ? "nav-item warning" : "nav-item muted"}><span>Read warnings</span><strong>{riskCount}</strong></div>
           </nav>
           <div className="contract"><span>Graph contract</span><code>schema v{graph?.schema_version ?? "0.1"}</code></div>
@@ -433,7 +463,7 @@ export default function Home() {
                 key={`${scope}:${flowNodes.length}:${query}`}
                 nodes={flowNodes}
                 edges={flowEdges}
-                onNodeClick={(_, node) => setSelectedId(node.id)}
+                onNodeClick={(_, node) => { setSelectedId(node.id); setSelectedSymbolId(null); }}
                 fitView
                 fitViewOptions={{ padding: 0.24 }}
                 minZoom={0.35}
@@ -451,7 +481,7 @@ export default function Home() {
         </section>
 
         <aside className="detail" aria-live="polite">
-          <div className="detail-top"><span className="pill">FILE</span><span className="connection-count">{incoming.length + outgoing.length} connections</span></div>
+          <div className="detail-top"><span className="pill">{selectedSymbol ? selectedSymbol.kind : "FILE"}</span><span className="connection-count">{selectedSymbol ? symbolIncoming.length + symbolOutgoing.length : incoming.length + outgoing.length} connections</span></div>
           {selected ? <>
             <div className="detail-icon">PY</div><h2>{filename(selected.path)}</h2><p className="full-path">{selected.path}</p>
             <div className="divider" />
@@ -470,10 +500,14 @@ export default function Home() {
               <div className="explanation-block"><h4>What it does</h4><p>{explanation.summary}</p></div>
               <div className="explanation-block"><h4>Execution role</h4><p>{explanation.role}</p></div>
               <div className="explanation-block"><h4>Why it is structured here</h4><p>{explanation.rationale}</p></div>
-              <div className="claims"><h4>Claims and evidence</h4>{explanation.claims.map((claim) => <article className={`claim ${claim.classification}`} key={claim.classification}>
+              <div className="claims"><h4>Claims and evidence</h4>{explanation.claims.map((claim, index) => <article className={`claim ${claim.classification}`} key={`${claim.classification}:${index}`}>
                 <div><span>{claim.classification}</span><strong>{Math.round(claim.confidence * 100)}% confidence</strong></div>
                 <p>{claim.text}</p><small>Provenance: {claim.provenance}</small>
               </article>)}</div>
+            </section>}
+            {selectedSymbol && <section className="connections symbol-relationships"><h3>Symbol relationships</h3>
+              <div className="connection-group"><span>Outgoing</span>{symbolOutgoing.length ? symbolOutgoing.map((edge) => <button key={edge.id} onClick={() => selectSymbolNode(edge.target)}><strong>→ {nodeName(edge.target)}</strong><small>{relationshipLabel(edge)}{edge.evidence?.line ? ` · line ${edge.evidence.line}` : ""}</small></button>) : <p>None resolved</p>}</div>
+              <div className="connection-group"><span>Incoming</span>{symbolIncoming.length ? symbolIncoming.map((edge) => <button key={edge.id} onClick={() => selectSymbolNode(edge.source)}><strong>← {nodeName(edge.source)}</strong><small>{relationshipLabel(edge)}{edge.evidence?.line ? ` · line ${edge.evidence.line}` : ""}</small></button>) : <p>None resolved</p>}</div>
             </section>}
             <section className="source-section">
               <div className="section-heading"><h3>{selectedSymbol ? selectedSymbol.qualified_name : "Source"}</h3>{selectedSymbol ? <span>L{selectedSymbol.start_line}–{selectedSymbol.end_line}</span> : sourceIsTruncated && <span>Truncated</span>}</div>
@@ -497,8 +531,8 @@ export default function Home() {
               {sourceIsTruncated && <p className="truncation-note">Only the first 200 KB are shown.</p>}
             </section>
             <section className="connections"><h3>Imports</h3>
-              <div className="connection-group"><span>Outgoing</span>{outgoing.length ? outgoing.map((edge) => <button key={edge.id} onClick={() => setSelectedId(edge.target)}>→ {nodePath(edge.target)}</button>) : <p>None in current graph</p>}</div>
-              <div className="connection-group"><span>Incoming</span>{incoming.length ? incoming.map((edge) => <button key={edge.id} onClick={() => setSelectedId(edge.source)}>← {nodePath(edge.source)}</button>) : <p>None in current graph</p>}</div>
+              <div className="connection-group"><span>Outgoing</span>{outgoing.length ? outgoing.map((edge) => <button key={edge.id} onClick={() => selectFileNode(edge.target)}>→ {nodePath(edge.target)}</button>) : <p>None in current graph</p>}</div>
+              <div className="connection-group"><span>Incoming</span>{incoming.length ? incoming.map((edge) => <button key={edge.id} onClick={() => selectFileNode(edge.source)}>← {nodePath(edge.source)}</button>) : <p>None in current graph</p>}</div>
             </section>
           </> : <p>Select a node to inspect it.</p>}
         </aside>

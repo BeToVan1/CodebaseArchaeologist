@@ -88,6 +88,8 @@
 .connection-group > span { display: block; margin-bottom: 7px; color: #828b84; font-size: 9px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
 .connection-group button { display: block; width: 100%; margin: 0 0 6px; padding: 7px 8px; border: 0; border-radius: 6px; background: #f3f6f1; color: #315b3d; font: 10px/1.4 ui-monospace,monospace; text-align: left; overflow-wrap: anywhere; cursor: pointer; }
 .connection-group button:hover { background: var(--moss-soft); }
+.symbol-relationships .connection-group button strong { display: block; color: #315b3d; font: 700 9px/1.4 ui-monospace,monospace; overflow-wrap: anywhere; }
+.symbol-relationships .connection-group button small { display: block; margin-top: 3px; color: #778279; font-size: 8px; text-transform: capitalize; }
 .connection-group p { margin: 0; color: #929a94; font-size: 10px; }
 .detail { overflow-y: auto; max-height: calc(100vh - 72px); }
 @media (max-width: 940px) { .graph-surface { height: 620px; } .detail { max-height: none; } }
