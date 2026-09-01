@@ -44,6 +44,8 @@
 .error-state strong { color: #7a3e34; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .source-section { margin-top: 25px; }
+.source-link { display: inline-block; margin: -2px 0 10px; color: #315b3d; font-size: 10px; font-weight: 700; text-decoration: none; }
+.source-link:hover { text-decoration: underline; }
 .explanation-section { margin-top: 26px; }
 .analysis-label { background: #e7eef7 !important; color: #31557b !important; }
 .explanation-block { margin: 0 0 14px; }
@@ -82,4 +84,5 @@
 .detail { overflow-y: auto; max-height: calc(100vh - 72px); }
 @media (max-width: 940px) { .graph-surface { height: 620px; } .detail { max-height: none; } }
 @media (max-width: 650px) { .graph-surface { height: 560px; } }
+
 

@@ -27,11 +27,14 @@ type GraphEdge = { id: string; source: string; target: string; kind: "imports" }
 type RepositoryMetadata = {
   name: string;
   url?: string;
+  pinned_url?: string;
   source: "github" | "local";
 };
+type SnapshotMetadata = { commit_sha: string };
 type Graph = {
   schema_version: string;
   repository?: RepositoryMetadata;
+  snapshot?: SnapshotMetadata;
   source_url?: string;
   repo_root?: string;
   nodes: GraphNode[];
@@ -175,6 +178,12 @@ function validateGraph(value: unknown): Graph {
       throw new Error("Invalid graph: repository metadata must include name and source.");
     }
   }
+  if (value.snapshot !== undefined) {
+    const snapshot = value.snapshot;
+    if (!isRecord(snapshot) || typeof snapshot.commit_sha !== "string" || !/^[0-9a-f]{40}$/i.test(snapshot.commit_sha)) {
+      throw new Error("Invalid graph: snapshot metadata must include a full commit SHA.");
+    }
+  }
   return value as Graph;
 }
 
@@ -300,6 +309,11 @@ export default function Home() {
     ?? "Analyzed repository";
   const repositorySource = graph?.repository?.source ?? (graph?.source_url ? "github" : "local");
   const repositoryUrl = graph?.repository?.url ?? graph?.source_url;
+  const pinnedRepositoryUrl = graph?.repository?.pinned_url ?? repositoryUrl;
+  const commitSha = graph?.snapshot?.commit_sha;
+  const selectedSourceUrl = repositorySource === "github" && repositoryUrl && commitSha && selected
+    ? `${repositoryUrl.replace(/\.git\/?$/, "")}/blob/${commitSha}/${selected.path}`
+    : undefined;
   const riskCount = graph?.nodes.filter((node) => node.source_error).length ?? 0;
 
   return (
@@ -323,7 +337,7 @@ export default function Home() {
             <small>Local analyzer · public Python repositories only</small>
             {analysisError && <p className="analysis-error" role="alert">{analysisError}</p>}
           </form>}
-          {graph && <div className="origin"><span>{repositorySource === "github" ? "GitHub" : "Local directory"}</span>{repositoryUrl ? <a href={repositoryUrl} target="_blank" rel="noreferrer">Open repository ↗</a> : <strong>{repositoryName}</strong>}</div>}
+          {graph && <div className="origin"><span>{repositorySource === "github" ? "Pinned GitHub snapshot" : "Local directory"}</span>{pinnedRepositoryUrl ? <a href={pinnedRepositoryUrl} target="_blank" rel="noreferrer">{commitSha ? `${commitSha.slice(0, 12)} ↗` : "Open repository ↗"}</a> : <strong>{repositoryName}</strong>}</div>}
           <label className="search"><span aria-hidden="true">⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter files" aria-label="Filter files" /></label>
           <div className="scope-switch" aria-label="Graph scope">
             <button className={scope === "production" ? "active" : ""} onClick={() => setScope("production")}>Production</button>
@@ -387,6 +401,7 @@ export default function Home() {
             </section>}
             <section className="source-section">
               <div className="section-heading"><h3>Source</h3>{sourceIsTruncated && <span>Truncated</span>}</div>
+              {selectedSourceUrl && <a className="source-link" href={selectedSourceUrl} target="_blank" rel="noreferrer">Open this file at the analyzed commit ↗</a>}
               {displayedSource !== undefined ? (
                 <pre className="code-viewer" aria-label={`Source code for ${selected.path}`} tabIndex={0}>
                   <code>{sourceLines.map((line, index) => (
@@ -413,4 +428,5 @@ export default function Home() {
     </main>
   );
 }
+
 
