@@ -227,11 +227,15 @@ def bootstrap() -> Service:
         "python_files": 1,
         "symbol_nodes": 4,
         "symbol_parse_failures": 0,
+        "representative_flows": 0,
         "call_sites": 2,
         "resolved_calls": 2,
         "candidate_calls": 0,
         "unresolved_calls": 0,
         "inheritance_edges": 0,
+        "fastapi_routes": 0,
+        "dependency_edges": 0,
+        "unresolved_dependencies": 0,
     }
 
 
@@ -337,4 +341,129 @@ def dispatch(target):
     assert graph["coverage"]["candidate_calls"] == 1
     assert graph["coverage"]["unresolved_calls"] == 1
     assert graph["coverage"]["inheritance_edges"] == 1
+
+
+def test_analyze_repository_discovers_fastapi_dependency_and_call_flows(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "dependencies.py").write_text(
+        """def get_repository():
+    return Repository()
+
+class Repository:
+    def save(self):
+        return None
+""",
+        encoding="utf-8",
+    )
+    (tmp_path / "service.py").write_text(
+        """def create_item(repository):
+    repository.save()
+    external.audit()
+""",
+        encoding="utf-8",
+    )
+    (tmp_path / "api.py").write_text(
+        """from typing import Annotated
+from fastapi import APIRouter, Depends
+from dependencies import get_repository
+from service import create_item
+
+router = APIRouter()
+
+@router.post('/items')
+def create_item_route(
+    repository: Annotated[object, Depends(get_repository)],
+    query: Annotated[object, Depends()] = None,
+):
+    return create_item(repository)
+""",
+        encoding="utf-8",
+    )
+
+    graph = analyzer.analyze_repository(tmp_path)
+    symbols = {
+        node["qualified_name"]: node
+        for node in graph["nodes"]
+        if node["kind"] != "file"
+    }
+    route = symbols["api.create_item_route"]
+
+    assert graph["schema_version"] == "0.5"
+    assert route["entrypoint"] == {
+        "framework": "fastapi",
+        "kind": "route",
+        "method": "POST",
+        "route_path": "/items",
+        "label": "POST /items",
+    }
+    assert route["architectural_role"] == "route"
+    assert route["entrypoint_evidence"]["line"] == 8
+
+    dependency_edge = next(
+        edge for edge in graph["edges"] if edge["kind"] == "depends-on"
+    )
+    assert dependency_edge["source"] == route["id"]
+    assert dependency_edge["target"] == symbols["dependencies.get_repository"]["id"]
+    assert dependency_edge["evidence"]["expression"] == "Depends(get_repository)"
+
+    assert graph["coverage"]["fastapi_routes"] == 1
+    assert graph["coverage"]["dependency_edges"] == 1
+    assert graph["coverage"]["unresolved_dependencies"] == 1
+    assert graph["coverage"]["representative_flows"] == 2
+    assert len(graph["flows"]) == 2
+
+    service_flow = next(
+        flow for flow in graph["flows"]
+        if symbols["service.create_item"]["id"] in flow["ordered_node_ids"]
+    )
+    assert service_flow["label"] == "POST /items"
+    assert service_flow["framework"] == "fastapi"
+    assert service_flow["ordered_node_ids"] == [
+        route["id"],
+        symbols["service.create_item"]["id"],
+        symbols["dependencies.Repository.save"]["id"],
+    ]
+    assert service_flow["confidence"] == 0.55
+    assert service_flow["completeness"] == "partial"
+    assert any(
+        step["evidence"]["expression"] == "external.audit"
+        for step in service_flow["unresolved_steps"]
+    )
+    assert any(
+        step["reason"] == "implicit-fastapi-dependency"
+        for step in service_flow["unresolved_steps"]
+    )
+
+
+def test_flow_discovery_marks_the_bounded_depth_as_an_explicit_gap() -> None:
+    symbols = [
+        {
+            "id": f"symbol:{index}",
+            "path": "chain.py",
+            "definition_line": index + 1,
+            "qualified_name": f"chain.step_{index}",
+            **(
+                {"entrypoint": {"label": "GET /chain", "framework": "fastapi"}}
+                if index == 0 else {}
+            ),
+        }
+        for index in range(11)
+    ]
+    edges = [
+        {
+            "id": f"call:{index}",
+            "source": f"symbol:{index}",
+            "target": f"symbol:{index + 1}",
+            "kind": "calls",
+            "confidence": 1.0,
+        }
+        for index in range(10)
+    ]
+
+    [flow] = analyzer.discover_representative_flows(symbols, edges, [])
+
+    assert len(flow["ordered_edge_ids"]) == analyzer.MAX_FLOW_DEPTH
+    assert flow["completeness"] == "partial"
+    assert flow["unresolved_steps"][-1]["reason"] == "maximum-flow-depth-reached"
 

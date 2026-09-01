@@ -38,6 +38,12 @@ Graph schema v0.4 adds symbol-level `extends`, `calls`, and `may-dispatch-to` re
 Every relationship records its confidence, resolution method, and exact call or base-class
 evidence. Ambiguous dynamic calls remain unresolved unless one bounded internal candidate exists.
 
+Graph schema v0.5 recognizes routes registered on proven FastAPI and `APIRouter` instances,
+resolves `Depends(...)` providers, and traces up to three bounded representative execution paths.
+Each flow records its ordered nodes and edges, combined confidence, completeness, and every
+unresolved call site encountered along the path. The explorer's Execution flows view keeps those
+gaps visible and lets each path step open its exact source range.
+
 The API is intentionally local-only for this milestone. The hosted site continues to use the committed Cosmic Python fixture until repository analysis runs in an isolated worker service.
 
 

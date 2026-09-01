@@ -31,12 +31,22 @@ type GraphNode = {
   source?: string;
   source_truncated?: boolean;
   source_error?: string;
+  framework?: string;
+  architectural_role?: string;
+  entrypoint?: {
+    framework: string;
+    kind: string;
+    method?: string;
+    route_path?: string | null;
+    label: string;
+  };
+  entrypoint_evidence?: { path?: string; line?: number; column?: number; expression?: string };
 };
 type GraphEdge = {
   id: string;
   source: string;
   target: string;
-  kind: "imports" | "contains" | "calls" | "extends" | "may-dispatch-to";
+  kind: "imports" | "contains" | "calls" | "extends" | "may-dispatch-to" | "depends-on";
   confidence?: number;
   resolution_method?: string;
   evidence?: { path?: string; line?: number; column?: number; expression?: string };
@@ -48,6 +58,22 @@ type RepositoryMetadata = {
   source: "github" | "local";
 };
 type SnapshotMetadata = { commit_sha: string };
+type UnresolvedStep = {
+  source_id: string;
+  reason: string;
+  evidence: { path?: string; line?: number; column?: number; expression?: string };
+};
+type ExecutionFlow = {
+  id: string;
+  entrypoint_id: string;
+  label: string;
+  framework: string;
+  ordered_node_ids: string[];
+  ordered_edge_ids: string[];
+  confidence: number;
+  completeness: "complete" | "partial";
+  unresolved_steps: UnresolvedStep[];
+};
 type Graph = {
   schema_version: string;
   repository?: RepositoryMetadata;
@@ -56,6 +82,7 @@ type Graph = {
   repo_root?: string;
   nodes: GraphNode[];
   edges: GraphEdge[];
+  flows?: ExecutionFlow[];
 };
 type Claim = {
   classification: "fact" | "heuristic" | "interpretation";
@@ -229,7 +256,7 @@ function validateGraph(value: unknown): Graph {
     nodeIds.add(node.id);
   }
   for (const [index, edge] of edges.entries()) {
-    if (!isRecord(edge) || typeof edge.id !== "string" || typeof edge.source !== "string" || typeof edge.target !== "string" || !["imports", "contains", "calls", "extends", "may-dispatch-to"].includes(String(edge.kind))) {
+    if (!isRecord(edge) || typeof edge.id !== "string" || typeof edge.source !== "string" || typeof edge.target !== "string" || !["imports", "contains", "calls", "extends", "may-dispatch-to", "depends-on"].includes(String(edge.kind))) {
       throw new Error(`Invalid graph: edge ${index + 1} has invalid id, endpoints, or kind.`);
     }
     if (edge.confidence !== undefined && (typeof edge.confidence !== "number" || edge.confidence < 0 || edge.confidence > 1)) {
@@ -249,6 +276,49 @@ function validateGraph(value: unknown): Graph {
     const snapshot = value.snapshot;
     if (!isRecord(snapshot) || typeof snapshot.commit_sha !== "string" || !/^[0-9a-f]{40}$/i.test(snapshot.commit_sha)) {
       throw new Error("Invalid graph: snapshot metadata must include a full commit SHA.");
+    }
+  }
+  if (value.flows !== undefined) {
+    if (!Array.isArray(value.flows)) throw new Error("Invalid graph: flows must be an array.");
+    const edgeIds = new Set((edges as GraphEdge[]).map((edge) => edge.id));
+    const edgeById = new Map((edges as GraphEdge[]).map((edge) => [edge.id, edge]));
+    for (const [index, flow] of value.flows.entries()) {
+      if (
+        !isRecord(flow)
+        || typeof flow.id !== "string"
+        || typeof flow.entrypoint_id !== "string"
+        || !nodeIds.has(flow.entrypoint_id)
+        || typeof flow.label !== "string"
+        || typeof flow.framework !== "string"
+        || !Array.isArray(flow.ordered_node_ids)
+        || !Array.isArray(flow.ordered_edge_ids)
+        || !flow.ordered_node_ids.length
+        || !flow.ordered_node_ids.every((id) => typeof id === "string" && nodeIds.has(id))
+        || !flow.ordered_edge_ids.every((id) => typeof id === "string" && edgeIds.has(id))
+        || flow.ordered_edge_ids.length !== flow.ordered_node_ids.length - 1
+        || typeof flow.confidence !== "number"
+        || flow.confidence < 0
+        || flow.confidence > 1
+        || !["complete", "partial"].includes(String(flow.completeness))
+        || !Array.isArray(flow.unresolved_steps)
+        || !flow.unresolved_steps.every((step) =>
+          isRecord(step)
+          && typeof step.source_id === "string"
+          && nodeIds.has(step.source_id)
+          && typeof step.reason === "string"
+          && isRecord(step.evidence),
+        )
+      ) {
+        throw new Error(`Invalid graph: flow ${index + 1} has an invalid path or metadata.`);
+      }
+      const typedFlow = flow as unknown as ExecutionFlow;
+      if (!typedFlow.ordered_edge_ids.every((edgeId, edgeIndex) => {
+        const edge = edgeById.get(edgeId);
+        return edge?.source === typedFlow.ordered_node_ids[edgeIndex]
+          && edge.target === typedFlow.ordered_node_ids[edgeIndex + 1];
+      })) {
+        throw new Error(`Invalid graph: flow ${index + 1} contains a disconnected edge.`);
+      }
     }
   }
   return value as Graph;
@@ -278,6 +348,8 @@ export default function Home() {
   const [selectedSymbolId, setSelectedSymbolId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<"production" | "all">("production");
+  const [mapMode, setMapMode] = useState<"architecture" | "flows">("architecture");
+  const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submittedUrl, setSubmittedUrl] = useState("https://github.com/cosmicpython/code");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -294,6 +366,7 @@ export default function Home() {
         setGraph(validated);
         setSelectedId(primaryNodeId(validated));
         setSelectedSymbolId(null);
+        setSelectedFlowId(validated.flows?.[0]?.id ?? null);
       })
       .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Could not load graph data"));
   }, []);
@@ -317,6 +390,8 @@ export default function Home() {
       setGraph(validated);
       setSelectedId(primaryNodeId(validated));
       setSelectedSymbolId(null);
+      setSelectedFlowId(validated.flows?.[0]?.id ?? null);
+      setMapMode("architecture");
       setQuery("");
       setScope("production");
     } catch (cause: unknown) {
@@ -369,8 +444,8 @@ export default function Home() {
   const incoming = graph?.edges.filter((edge) => edge.kind === "imports" && edge.target === selectedId) ?? [];
   const outgoing = graph?.edges.filter((edge) => edge.kind === "imports" && edge.source === selectedId) ?? [];
   const selectedSymbol = graph?.nodes.find((node) => node.id === selectedSymbolId && node.kind !== "file") ?? null;
-  const symbolIncoming = graph?.edges.filter((edge) => ["calls", "extends", "may-dispatch-to"].includes(edge.kind) && edge.target === selectedSymbolId) ?? [];
-  const symbolOutgoing = graph?.edges.filter((edge) => ["calls", "extends", "may-dispatch-to"].includes(edge.kind) && edge.source === selectedSymbolId) ?? [];
+  const symbolIncoming = graph?.edges.filter((edge) => ["calls", "extends", "may-dispatch-to", "depends-on"].includes(edge.kind) && edge.target === selectedSymbolId) ?? [];
+  const symbolOutgoing = graph?.edges.filter((edge) => ["calls", "extends", "may-dispatch-to", "depends-on"].includes(edge.kind) && edge.source === selectedSymbolId) ?? [];
   const symbolsForSelected = graph?.nodes
     .filter((node) => node.kind !== "file" && node.path === selected?.path)
     .sort((a, b) => Number(a.start_line) - Number(b.start_line)) ?? [];
@@ -385,6 +460,9 @@ export default function Home() {
     setSelectedSymbolId(id);
   };
   const relationshipLabel = (edge: GraphEdge) => `${edge.kind.replaceAll("-", " ")} · ${Math.round((edge.confidence ?? 1) * 100)}%`;
+  const flows = graph?.flows ?? [];
+  const selectedFlow = flows.find((flow) => flow.id === selectedFlowId) ?? flows[0] ?? null;
+  const flowEdge = (index: number) => graph?.edges.find((edge) => edge.id === selectedFlow?.ordered_edge_ids[index]);
   const displayedSource = selected?.source?.slice(0, MAX_SOURCE_CHARACTERS);
   const fileSourceLines = displayedSource?.split("\n") ?? [];
   const sourceStartLine = selectedSymbol?.start_line ?? 1;
@@ -408,7 +486,7 @@ export default function Home() {
     : undefined;
   const fileCount = graph?.nodes.filter((node) => node.kind === "file").length ?? 0;
   const symbolCount = graph?.nodes.filter((node) => node.kind !== "file").length ?? 0;
-  const relationshipCount = graph?.edges.filter((edge) => ["calls", "extends", "may-dispatch-to"].includes(edge.kind)).length ?? 0;
+  const relationshipCount = graph?.edges.filter((edge) => ["calls", "extends", "may-dispatch-to", "depends-on"].includes(edge.kind)).length ?? 0;
   const riskCount = graph?.nodes.filter((node) => node.source_error).length ?? 0;
 
   return (
@@ -439,7 +517,8 @@ export default function Home() {
             <button className={scope === "all" ? "active" : ""} onClick={() => setScope("all")}>All files</button>
           </div>
           <nav aria-label="Graph summary">
-            <div className="nav-item active"><span>Files</span><strong>{fileCount}</strong></div>
+            <button className={`nav-item${mapMode === "architecture" ? " active" : ""}`} onClick={() => setMapMode("architecture")}><span>Architecture map</span><strong>{fileCount}</strong></button>
+            <button className={`nav-item${mapMode === "flows" ? " active" : ""}`} onClick={() => setMapMode("flows")}><span>Execution flows</span><strong>{flows.length}</strong></button>
             <div className="nav-item"><span>Symbols</span><strong>{symbolCount}</strong></div>
             <div className="nav-item"><span>Dependencies</span><strong>{graph?.edges.filter((edge) => edge.kind === "imports").length ?? 0}</strong></div>
             <div className="nav-item"><span>Symbol relationships</span><strong>{relationshipCount}</strong></div>
@@ -449,15 +528,46 @@ export default function Home() {
         </aside>
 
         <section className="canvas" aria-label="Repository dependency graph">
-          <div className="canvas-head"><div><div className="eyebrow">Architecture map</div><h2>Python imports</h2><p className="relationship-help">A → B means file A imports file B.</p></div><div className="legend"><span /> Selected <i /> Imports →</div></div>
-          <div className="layer-guide" aria-hidden="true">
+          <div className="canvas-head"><div><div className="eyebrow">{mapMode === "architecture" ? "Architecture map" : "Flow discovery"}</div><h2>{mapMode === "architecture" ? "Python imports" : "Representative execution paths"}</h2><p className="relationship-help">{mapMode === "architecture" ? "A → B means file A imports file B." : "Paths begin at proven framework entrypoints and preserve uncertain or unresolved steps."}</p></div>{mapMode === "architecture" ? <div className="legend"><span /> Selected <i /> Imports →</div> : <div className="legend flow-legend"><span /> Proven <i /> Candidate</div>}</div>
+          {mapMode === "architecture" && <div className="layer-guide" aria-hidden="true">
             {(scope === "all" ? ["Tests"] : []).concat(["Entry points", "Application", "Domain", "Infrastructure", "Support"]).map((layer) => <span key={layer}>{layer}</span>)}
-          </div>
-          <div className="graph-surface">
+          </div>}
+          <div className={`graph-surface${mapMode === "flows" ? " flow-surface" : ""}`}>
             {error ? <div className="state-card error-state"><strong>Graph could not be loaded</strong><p>{error}</p></div> : !graph ? (
               <div className="state-card loading-state"><span aria-hidden="true" /><strong>Loading repository graph</strong><p>Validating nodes and dependencies…</p></div>
             ) : graph.nodes.length === 0 ? (
               <div className="state-card"><strong>No Python files found</strong><p>This repository does not contain any analyzable .py files.</p></div>
+            ) : mapMode === "flows" ? flows.length && selectedFlow ? (
+              <div className="flow-browser">
+                <div className="flow-catalog" aria-label="Representative execution flows">
+                  <div className="flow-catalog-heading"><strong>Entrypoint paths</strong><span>{flows.length}</span></div>
+                  {flows.map((flow) => <button className={flow.id === selectedFlow.id ? "active" : ""} key={flow.id} onClick={() => { setSelectedFlowId(flow.id); selectSymbolNode(flow.entrypoint_id); }}>
+                    <strong>{flow.label}</strong>
+                    <small>{nodePath(flow.entrypoint_id)} · {flow.ordered_node_ids.length} steps</small>
+                    <span className={`flow-status ${flow.completeness}`}>{flow.completeness}</span>
+                  </button>)}
+                </div>
+                <article className="flow-inspector">
+                  <header><div><span>{selectedFlow.framework} entrypoint</span><h3>{selectedFlow.label}</h3></div><strong>{Math.round(selectedFlow.confidence * 100)}% confidence</strong></header>
+                  <ol className="flow-path">
+                    {selectedFlow.ordered_node_ids.map((nodeId, index) => {
+                      const edge = index ? flowEdge(index - 1) : undefined;
+                      return <li key={`${selectedFlow.id}:${nodeId}:${index}`}>
+                        {edge && <span className={`flow-edge-kind ${edge.kind === "may-dispatch-to" ? "candidate" : ""}`}>{edge.kind.replaceAll("-", " ")} · {Math.round((edge.confidence ?? 1) * 100)}%</span>}
+                        <button onClick={() => selectSymbolNode(nodeId)}>
+                          <strong>{nodeName(nodeId)}</strong><small>{nodePath(nodeId)}{edge?.evidence?.line ? ` · evidence line ${edge.evidence.line}` : ""}</small>
+                        </button>
+                      </li>;
+                    })}
+                  </ol>
+                  <section className="flow-gaps">
+                    <div className="section-heading"><h3>Unresolved steps</h3><span>{selectedFlow.unresolved_steps.length}</span></div>
+                    {selectedFlow.unresolved_steps.length ? <><ul>{selectedFlow.unresolved_steps.slice(0, 12).map((step, index) => <li key={`${step.source_id}:${step.evidence.line}:${index}`}><strong>{step.evidence.expression ?? "Dynamic expression"}</strong><span>{step.reason.replaceAll("-", " ")}{step.evidence.line ? ` · ${step.evidence.path}:${step.evidence.line}` : ""}</span></li>)}</ul>{selectedFlow.unresolved_steps.length > 12 && <p className="flow-more-gaps">Showing 12 of {selectedFlow.unresolved_steps.length} unresolved calls on this path.</p>}</> : <p>No unresolved calls occur on this path.</p>}
+                  </section>
+                </article>
+              </div>
+            ) : (
+              <div className="state-card"><strong>No execution flows recognized</strong><p>The analyzer has not found a supported framework entrypoint. This slice currently recognizes routes registered on FastAPI and APIRouter instances.</p></div>
             ) : (
               <ReactFlow
                 key={`${scope}:${flowNodes.length}:${query}`}
@@ -476,7 +586,7 @@ export default function Home() {
                 <Controls showInteractive={false} />
               </ReactFlow>
             )}
-            {!error && graph && graph.nodes.length > 0 && !visibleGraphNodes.length && <div className="empty overlay">No files match “{query}”.</div>}
+            {mapMode === "architecture" && !error && graph && graph.nodes.length > 0 && !visibleGraphNodes.length && <div className="empty overlay">No files match “{query}”.</div>}
           </div>
         </section>
 
