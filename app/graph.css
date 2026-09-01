@@ -1,5 +1,15 @@
 .nav-item.muted { color: #9ba39d; }
 .nav-item.warning { background: #fbf0df; color: #79551f; font-weight: 700; }
+.repository-form { display: flex; flex-direction: column; gap: 7px; margin: 0 0 18px; }
+.repository-form label { color: #68736b; font-size: 9px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+.repository-form input { width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 7px; background: #fff; color: var(--ink); font: 10px/1.4 ui-monospace,monospace; }
+.repository-form input:focus { outline: 3px solid rgba(49,91,61,.14); border-color: var(--moss); }
+.repository-form button { padding: 9px 10px; border: 0; border-radius: 7px; background: var(--moss); color: #fff; font-size: 10px; font-weight: 750; cursor: pointer; }
+.repository-form button:disabled { cursor: wait; opacity: .62; }
+.repository-form small { color: #828b84; font-size: 8px; line-height: 1.4; }
+.analysis-error { margin: 2px 0 0; padding: 8px; border-radius: 6px; background: #fff0ec; color: #7a3e34; font-size: 9px; line-height: 1.45; overflow-wrap: anywhere; }
+.status-dot.busy { background: var(--amber); box-shadow: 0 0 0 3px #f5e7cf; animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .45; } }
 .scope-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; margin: -10px 0 18px; padding: 3px; border: 1px solid var(--line); border-radius: 8px; background: #f3f5f1; }
 .scope-switch button { padding: 7px 4px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); font-size: 10px; cursor: pointer; }
 .scope-switch button.active { background: #fff; color: #274832; font-weight: 750; box-shadow: 0 1px 4px rgba(44,62,49,.1); }

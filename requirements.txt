@@ -1,2 +1,2 @@
-# The Python analyzer currently uses only the Python standard library.
-# Add pinned third-party Python packages here when the analyzer adopts them.
+fastapi>=0.116,<1.0
+uvicorn[standard]>=0.35,<1.0
