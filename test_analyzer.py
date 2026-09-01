@@ -236,6 +236,12 @@ def bootstrap() -> Service:
         "fastapi_routes": 0,
         "dependency_edges": 0,
         "unresolved_dependencies": 0,
+        "sqlalchemy_models": 0,
+        "sqlalchemy_abstract_models": 0,
+        "sqlalchemy_columns": 0,
+        "sqlalchemy_relationships": 0,
+        "sqlalchemy_reads": 0,
+        "sqlalchemy_writes": 0,
     }
 
 
@@ -389,7 +395,7 @@ def create_item_route(
     }
     route = symbols["api.create_item_route"]
 
-    assert graph["schema_version"] == "0.5"
+    assert graph["schema_version"] == "0.6"
     assert route["entrypoint"] == {
         "framework": "fastapi",
         "kind": "route",
@@ -436,6 +442,147 @@ def create_item_route(
     )
 
 
+def test_analyze_repository_extracts_sqlalchemy_models_and_accesses(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "models.py").write_text(
+        '''from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+class Base(DeclarativeBase):
+    pass
+
+class AbstractModel(Base):
+    __abstract__ = True
+
+class UserModel(AbstractModel):
+    __tablename__ = "users"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    manager: Mapped["UserModel"] = relationship()
+''',
+        encoding="utf-8",
+    )
+    (tmp_path / "repository.py").write_text(
+        '''from sqlalchemy import select
+from models import UserModel
+
+async def load(session):
+    return await session.get(UserModel, 1)
+
+async def list_users(session):
+    return await session.execute(select(UserModel))
+
+def create(session):
+    user: UserModel = UserModel()
+    session.add(user)
+
+async def rename(session):
+    user = await session.get(UserModel, 1)
+    user.name = "updated"
+''',
+        encoding="utf-8",
+    )
+
+    graph = analyzer.analyze_repository(tmp_path)
+    symbols = {
+        node["qualified_name"]: node
+        for node in graph["nodes"]
+        if node["kind"] != "file"
+    }
+    user_model = symbols["models.UserModel"]
+
+    assert symbols["models.Base"]["sqlalchemy"]["kind"] == "declarative-base"
+    assert symbols["models.AbstractModel"]["sqlalchemy"]["kind"] == "abstract-model"
+    assert user_model["architectural_role"] == "model"
+    assert user_model["sqlalchemy"] == {
+        "kind": "model",
+        "table_name": "users",
+        "table_expression": "'users'",
+        "is_abstract": False,
+        "columns": [{"name": "id", "line": 11, "annotation": "Mapped[int]"}],
+        "relationships": [
+            {"name": "manager", "line": 12, "annotation": "Mapped['UserModel']"}
+        ],
+    }
+
+    accesses = [edge for edge in graph["edges"] if edge["kind"] in {"reads", "writes"}]
+    assert all(edge["target"] == user_model["id"] for edge in accesses)
+    assert {
+        (edge["source"], edge["kind"], edge["resolution_method"])
+        for edge in accesses
+    } == {
+        (symbols["repository.load"]["id"], "reads", "sqlalchemy-session-get"),
+        (symbols["repository.list_users"]["id"], "reads", "sqlalchemy-select"),
+        (symbols["repository.create"]["id"], "writes", "sqlalchemy-session-add"),
+        (symbols["repository.rename"]["id"], "reads", "sqlalchemy-session-get"),
+        (symbols["repository.rename"]["id"], "writes", "sqlalchemy-model-mutation"),
+    }
+    assert graph["coverage"]["sqlalchemy_models"] == 1
+    assert graph["coverage"]["sqlalchemy_abstract_models"] == 1
+    assert graph["coverage"]["sqlalchemy_columns"] == 1
+    assert graph["coverage"]["sqlalchemy_relationships"] == 1
+    assert graph["coverage"]["sqlalchemy_reads"] == 3
+    assert graph["coverage"]["sqlalchemy_writes"] == 2
+
+
+def test_fastapi_flow_reaches_a_sqlalchemy_model(tmp_path: Path) -> None:
+    (tmp_path / "models.py").write_text(
+        '''from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+class Base(DeclarativeBase):
+    pass
+
+class ItemModel(Base):
+    __tablename__ = "items"
+    id: Mapped[int] = mapped_column(primary_key=True)
+''',
+        encoding="utf-8",
+    )
+    (tmp_path / "repository.py").write_text(
+        '''from sqlalchemy import select
+from models import ItemModel
+
+def list_items():
+    return select(ItemModel)
+''',
+        encoding="utf-8",
+    )
+    (tmp_path / "api.py").write_text(
+        '''from fastapi import APIRouter
+from repository import list_items
+
+router = APIRouter()
+
+@router.get("/items")
+def list_items_route():
+    return list_items()
+''',
+        encoding="utf-8",
+    )
+
+    graph = analyzer.analyze_repository(tmp_path)
+    symbols = {
+        node["qualified_name"]: node
+        for node in graph["nodes"]
+        if node["kind"] != "file"
+    }
+    persistence_flow = next(
+        flow for flow in graph["flows"]
+        if symbols["models.ItemModel"]["id"] in flow["ordered_node_ids"]
+    )
+
+    assert persistence_flow["ordered_node_ids"] == [
+        symbols["api.list_items_route"]["id"],
+        symbols["repository.list_items"]["id"],
+        symbols["models.ItemModel"]["id"],
+    ]
+    persistence_edge = next(
+        edge for edge in graph["edges"]
+        if edge["id"] == persistence_flow["ordered_edge_ids"][-1]
+    )
+    assert persistence_edge["kind"] == "reads"
+    assert persistence_edge["confidence"] == 0.98
+
+
 def test_flow_discovery_marks_the_bounded_depth_as_an_explicit_gap() -> None:
     symbols = [
         {
@@ -466,4 +613,5 @@ def test_flow_discovery_marks_the_bounded_depth_as_an_explicit_gap() -> None:
     assert len(flow["ordered_edge_ids"]) == analyzer.MAX_FLOW_DEPTH
     assert flow["completeness"] == "partial"
     assert flow["unresolved_steps"][-1]["reason"] == "maximum-flow-depth-reached"
+
 

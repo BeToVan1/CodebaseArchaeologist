@@ -122,6 +122,16 @@
 .flow-path button small { margin-top: 4px; color: var(--muted); font-size: 8px; }
 .flow-edge-kind { display: inline-block; margin: 0 0 6px 3px; padding: 3px 6px; border-radius: 4px; background: #e5eee6; color: #315b3d; font-size: 7px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
 .flow-edge-kind.candidate { background: #fbf0df; color: #79551f; }
+.flow-edge-kind.persistence { background: #ece8f8; color: #55448a; }
+.model-metadata { margin-top: 26px; padding-top: 22px; border-top: 1px solid var(--line); }
+.model-table { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 16px; color: var(--muted); font-size: 10px; text-transform: uppercase; }
+.model-table code { padding: 4px 7px; border-radius: 5px; background: #ece8f8; color: #55448a; font-size: 10px; text-transform: none; }
+.model-members { display: grid; gap: 14px; }
+.model-members > div > strong { color: #6e7971; font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
+.model-members ul { margin: 8px 0 0; padding: 0; list-style: none; }
+.model-members li { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-top: 1px solid #edf0ec; font-size: 10px; }
+.model-members li span, .model-members p { color: var(--muted); font-size: 9px; }
+.model-members p { margin: 7px 0 0; }
 .flow-gaps { margin-top: 8px; padding: 16px; border: 1px solid #ead7b8; border-radius: 9px; background: #fffaf1; }
 .flow-gaps ul { margin: 0; padding: 0; list-style: none; }
 .flow-gaps li { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-top: 1px solid #efe1ca; font-size: 9px; }
@@ -134,6 +144,7 @@
 @media (max-width: 1100px) { .flow-browser { grid-template-columns: 190px minmax(360px,1fr); } .flow-inspector { padding: 24px; } }
 @media (max-width: 940px) { .graph-surface { height: 620px; } .detail { max-height: none; } }
 @media (max-width: 650px) { .graph-surface { height: 560px; } .flow-browser { display: block; } .flow-catalog { border-right: 0; border-bottom: 1px solid var(--line); } .flow-inspector { padding: 20px; } }
+
 
 
 
