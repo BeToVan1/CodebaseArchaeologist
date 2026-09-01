@@ -182,3 +182,72 @@ def test_analyze_repository_skips_imports_for_undecodable_file(tmp_path: Path) -
     assert len(graph["nodes"]) == 1
     assert "source_error" in graph["nodes"][0]
     assert graph["edges"] == []
+
+
+# --------------------------------------------------------------------------
+# Symbol extraction and exact source ranges
+# --------------------------------------------------------------------------
+
+def test_analyze_repository_extracts_nested_symbols_and_containment(tmp_path: Path) -> None:
+    source = """@registry.register
+class Service:
+    @classmethod
+    async def execute(cls, value: int) -> int:
+        def normalize(item: int) -> int:
+            return item + 1
+        return normalize(value)
+
+def bootstrap() -> Service:
+    return Service()
+"""
+    (tmp_path / "service.py").write_text(source, encoding="utf-8")
+
+    graph = analyzer.analyze_repository(tmp_path)
+    symbols = [node for node in graph["nodes"] if node["kind"] != "file"]
+
+    assert [(node["kind"], node["qualified_name"]) for node in symbols] == [
+        ("class", "service.Service"),
+        ("method", "service.Service.execute"),
+        ("function", "service.Service.execute.normalize"),
+        ("function", "service.bootstrap"),
+    ]
+    service, execute, normalize, bootstrap = symbols
+    assert (service["start_line"], service["definition_line"], service["end_line"]) == (1, 2, 7)
+    assert service["decorators"] == ["registry.register"]
+    assert (execute["start_line"], execute["definition_line"], execute["end_line"]) == (3, 4, 7)
+    assert execute["decorators"] == ["classmethod"]
+    assert execute["is_async"] is True
+    assert normalize["parent_id"] == execute["id"]
+    assert bootstrap["parent_id"] == "file:service.py"
+
+    contains = [edge for edge in graph["edges"] if edge["kind"] == "contains"]
+    assert len(contains) == 4
+    assert {edge["target"] for edge in contains} == {node["id"] for node in symbols}
+    assert graph["coverage"] == {
+        "python_files": 1,
+        "symbol_nodes": 4,
+        "symbol_parse_failures": 0,
+    }
+
+
+def test_symbol_extraction_reports_parse_failures_without_dropping_file_node(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "broken.py").write_text("def unfinished(:\n", encoding="utf-8")
+
+    graph = analyzer.analyze_repository(tmp_path)
+
+    assert [node["kind"] for node in graph["nodes"]] == ["file"]
+    assert graph["coverage"]["symbol_parse_failures"] == 1
+
+
+def test_symbol_qualified_name_uses_import_root_for_src_layout(tmp_path: Path) -> None:
+    package = tmp_path / "src" / "allocation"
+    package.mkdir(parents=True)
+    (package / "service.py").write_text("def allocate():\n    pass\n", encoding="utf-8")
+
+    graph = analyzer.analyze_repository(tmp_path)
+    symbol = next(node for node in graph["nodes"] if node["kind"] == "function")
+
+    assert symbol["qualified_name"] == "allocation.service.allocate"
+

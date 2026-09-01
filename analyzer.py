@@ -108,6 +108,126 @@ def build_file_nodes(repo_root: Path, python_files: list[Path]) -> list[dict[str
 
 
 # --------------------------------------------------------------------------
+# Symbol extraction
+# --------------------------------------------------------------------------
+
+def module_qualified_name(relative_path: Path) -> str:
+    """Return a stable dotted module name for a repository-relative Python file."""
+    parts = list(relative_path.with_suffix("").parts)
+    if parts and parts[-1] == "__init__":
+        parts = parts[:-1]
+    return ".".join(parts) or relative_path.stem
+
+
+def symbol_start_line(node: ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef) -> int:
+    """Include decorators in a symbol's exact displayed source range."""
+    decorator_lines = [decorator.lineno for decorator in node.decorator_list]
+    return min([node.lineno, *decorator_lines])
+
+
+class SymbolVisitor(ast.NodeVisitor):
+    """Extract nested class, function, and method nodes with containment edges."""
+
+    def __init__(self, relative_path: Path, module_name: str) -> None:
+        self.path = relative_path.as_posix()
+        self.module_name = module_name
+        self.parents: list[tuple[str, str, str]] = []
+        self.nodes: list[dict[str, Any]] = []
+        self.edges: list[dict[str, Any]] = []
+
+    def _visit_symbol(
+        self,
+        node: ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef,
+        kind: str,
+    ) -> None:
+        local_parts = [parent[0] for parent in self.parents] + [node.name]
+        qualified_name = ".".join([self.module_name, *local_parts])
+        start_line = symbol_start_line(node)
+        end_line = getattr(node, "end_lineno", None) or node.lineno
+        symbol_id = f"symbol:{self.path}:{qualified_name}:{node.lineno}"
+        parent_id = self.parents[-1][1] if self.parents else f"file:{self.path}"
+        decorators = [ast.unparse(decorator) for decorator in node.decorator_list]
+
+        symbol: dict[str, Any] = {
+            "id": symbol_id,
+            "kind": kind,
+            "name": node.name,
+            "qualified_name": qualified_name,
+            "path": self.path,
+            "start_line": start_line,
+            "definition_line": node.lineno,
+            "end_line": end_line,
+            "parent_id": parent_id,
+            "decorators": decorators,
+        }
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            symbol["is_async"] = isinstance(node, ast.AsyncFunctionDef)
+        self.nodes.append(symbol)
+        self.edges.append(
+            {
+                "id": f"contains:{parent_id}->{symbol_id}",
+                "source": parent_id,
+                "target": symbol_id,
+                "kind": "contains",
+                "confidence": 1.0,
+                "resolution_method": "ast-static",
+                "evidence": {
+                    "path": self.path,
+                    "line": start_line,
+                    "end_line": end_line,
+                },
+            }
+        )
+
+        self.parents.append((node.name, symbol_id, kind))
+        self.generic_visit(node)
+        self.parents.pop()
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self._visit_symbol(node, "class")
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        direct_parent_kind = self.parents[-1][2] if self.parents else None
+        self._visit_symbol(node, "method" if direct_parent_kind == "class" else "function")
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        direct_parent_kind = self.parents[-1][2] if self.parents else None
+        self._visit_symbol(node, "method" if direct_parent_kind == "class" else "function")
+
+
+def extract_symbol_graph(
+    repo_root: Path,
+    python_files: list[Path],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
+    """Return symbol nodes, containment edges, and the number of parse failures."""
+    nodes: list[dict[str, Any]] = []
+    edges: list[dict[str, Any]] = []
+    parse_failures = 0
+    roots = find_module_roots(repo_root, python_files)
+
+    for path in sorted(python_files):
+        relative_path = path.relative_to(repo_root)
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except (SyntaxError, UnicodeDecodeError, OSError):
+            parse_failures += 1
+            continue
+
+        module_candidates = [
+            (len(root.parts), dotted)
+            for root in roots
+            if (dotted := path_to_dotted(path, root)) is not None
+        ]
+        module_name = max(module_candidates, default=(0, module_qualified_name(relative_path)))[1]
+        visitor = SymbolVisitor(relative_path, module_name)
+        visitor.visit(tree)
+        nodes.extend(visitor.nodes)
+        edges.extend(visitor.edges)
+
+    return nodes, edges, parse_failures
+
+
+# --------------------------------------------------------------------------
 # Import extraction
 # --------------------------------------------------------------------------
 
@@ -308,20 +428,28 @@ def analyze_repository(repo_root: Path) -> dict[str, Any]:
     if files_truncated:
         python_files = python_files[:MAX_PYTHON_FILES]
 
-    nodes = build_file_nodes(repo_root, python_files)
+    file_nodes = build_file_nodes(repo_root, python_files)
+    symbol_nodes, containment_edges, symbol_parse_failures = extract_symbol_graph(
+        repo_root, python_files
+    )
 
     roots = find_module_roots(repo_root, python_files)
     module_map = build_module_map(repo_root, python_files, roots)
-    edges = extract_import_edges(repo_root, python_files, module_map)
+    import_edges = extract_import_edges(repo_root, python_files, module_map)
 
     return {
-        "schema_version": "0.2",
+        "schema_version": "0.3",
         "repo_root": str(repo_root),
         "python_files_total_found": total_files_found,
         "python_files_analyzed": len(python_files),
         "python_files_truncated": files_truncated,
-        "nodes": nodes,
-        "edges": edges,
+        "nodes": [*file_nodes, *symbol_nodes],
+        "edges": [*import_edges, *containment_edges],
+        "coverage": {
+            "python_files": len(python_files),
+            "symbol_nodes": len(symbol_nodes),
+            "symbol_parse_failures": symbol_parse_failures,
+        },
     }
 
 
@@ -389,4 +517,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 

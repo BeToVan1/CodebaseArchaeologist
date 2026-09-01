@@ -22,6 +22,19 @@ def test_analyze_rejects_non_github_url() -> None:
     assert "not a valid" in response.json()["detail"]
 
 
+def test_cors_allows_local_frontend_on_any_port() -> None:
+    response = client.options(
+        "/api/analyze",
+        headers={
+            "Origin": "http://localhost:3010",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:3010"
+
+
 def test_analyze_returns_graph_and_cleans_up() -> None:
     checkout = Path("temporary-checkout")
     graph = {
@@ -53,4 +66,5 @@ def test_analyze_returns_graph_and_cleans_up() -> None:
     }
     assert payload["snapshot"] == {"commit_sha": "a" * 40}
     cleanup.assert_called_once_with(checkout)
+
 

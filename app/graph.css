@@ -44,6 +44,14 @@
 .error-state strong { color: #7a3e34; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .source-section { margin-top: 25px; }
+.symbols-section { margin-top: 25px; }
+.symbol-list { display: grid; gap: 6px; }
+.symbol-list button { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 8px 9px; border: 1px solid transparent; border-radius: 7px; background: #f3f6f1; color: #315b3d; text-align: left; cursor: pointer; }
+.symbol-list button:hover { background: var(--moss-soft); }
+.symbol-list button.active { border-color: #9dae9f; background: var(--moss-soft); box-shadow: 0 0 0 2px rgba(49,91,61,.08); }
+.symbol-list strong { min-width: 0; overflow: hidden; font: 700 10px/1.4 ui-monospace,monospace; text-overflow: ellipsis; white-space: nowrap; }
+.symbol-list small { flex: 0 0 auto; color: var(--muted); font-size: 8px; text-transform: capitalize; }
+.no-symbols { margin: 0; color: var(--muted); font-size: 10px; }
 .source-link { display: inline-block; margin: -2px 0 10px; color: #315b3d; font-size: 10px; font-weight: 700; text-decoration: none; }
 .source-link:hover { text-decoration: underline; }
 .explanation-section { margin-top: 26px; }
@@ -84,5 +92,6 @@
 .detail { overflow-y: auto; max-height: calc(100vh - 72px); }
 @media (max-width: 940px) { .graph-surface { height: 620px; } .detail { max-height: none; } }
 @media (max-width: 650px) { .graph-surface { height: 560px; } }
+
 
 
