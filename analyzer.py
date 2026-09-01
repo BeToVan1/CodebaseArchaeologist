@@ -39,6 +39,13 @@ IGNORED_DIR_NAMES = {
 
 MAX_SOURCE_BYTES = 200 * 1024  # 200 KB per file, applied to the encoded UTF-8 text
 MAX_PYTHON_FILES = 2000  # hard cap on how many discovered files a single run will analyze
+MAX_FLOW_DEPTH = 8
+MAX_REPRESENTATIVE_FLOWS = 3
+MAX_FLOW_CANDIDATES_PER_ENTRYPOINT = 12
+MAX_FLOW_CANDIDATES = 500
+FASTAPI_ROUTE_METHODS = {
+    "get", "post", "put", "patch", "delete", "options", "head", "websocket"
+}
 
 
 def find_python_files(repo_root: Path) -> list[Path]:
@@ -485,13 +492,106 @@ def direct_calls(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[ast.Call]
     return visitor.calls
 
 
+def fastapi_instances(tree: ast.Module, bindings: dict[str, str]) -> set[str]:
+    """Return module-level names assigned a FastAPI application or router."""
+    instances: set[str] = set()
+    for statement in tree.body:
+        if not isinstance(statement, (ast.Assign, ast.AnnAssign)):
+            continue
+        value = statement.value
+        if not isinstance(value, ast.Call):
+            continue
+        constructor = dotted_expression(value.func)
+        if not constructor:
+            continue
+        expanded = expand_bound_name(constructor, bindings)
+        if expanded not in {"fastapi.FastAPI", "fastapi.APIRouter"}:
+            continue
+        targets = statement.targets if isinstance(statement, ast.Assign) else [statement.target]
+        instances.update(target.id for target in targets if isinstance(target, ast.Name))
+    return instances
+
+
+def fastapi_route_metadata(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    instances: set[str],
+) -> tuple[dict[str, Any] | None, ast.AST | None]:
+    """Recognize routes registered on proven FastAPI app/router instances."""
+    for decorator in node.decorator_list:
+        if not isinstance(decorator, ast.Call):
+            continue
+        expression = dotted_expression(decorator.func)
+        if not expression or "." not in expression:
+            continue
+        owner, method = expression.rsplit(".", 1)
+        if owner not in instances or method not in FASTAPI_ROUTE_METHODS:
+            continue
+        route_path = None
+        if decorator.args and isinstance(decorator.args[0], ast.Constant):
+            if isinstance(decorator.args[0].value, str):
+                route_path = decorator.args[0].value
+        label = f"{method.upper()} {route_path or '(dynamic path)'}"
+        return (
+            {
+                "framework": "fastapi",
+                "kind": "route",
+                "method": method.upper(),
+                "route_path": route_path,
+                "label": label,
+            },
+            decorator,
+        )
+    return None, None
+
+
+def function_defaults(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> list[ast.expr]:
+    """Return every positional and keyword-only parameter default."""
+    return [
+        *node.args.defaults,
+        *(default for default in node.args.kw_defaults if default is not None),
+    ]
+
+
+def fastapi_dependency_calls(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    bindings: dict[str, str],
+) -> list[ast.Call]:
+    """Return Depends(...) calls used in defaults or modern Annotated parameters."""
+    dependencies: list[ast.Call] = []
+    parameter_annotations = [
+        argument.annotation
+        for argument in [
+            *node.args.posonlyargs,
+            *node.args.args,
+            *node.args.kwonlyargs,
+        ]
+        if argument.annotation is not None
+    ]
+    seen: set[tuple[int, int]] = set()
+    for expression_root in [*function_defaults(node), *parameter_annotations]:
+        for candidate in ast.walk(expression_root):
+            if not isinstance(candidate, ast.Call):
+                continue
+            expression = dotted_expression(candidate.func)
+            if expression and expand_bound_name(expression, bindings) == "fastapi.Depends":
+                location = (candidate.lineno, candidate.col_offset)
+                if location in seen:
+                    continue
+                seen.add(location)
+                dependencies.append(candidate)
+    return dependencies
+
+
 def extract_symbol_relationship_edges(
     repo_root: Path,
     python_files: list[Path],
     symbol_nodes: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]], dict[str, int]]:
+) -> tuple[list[dict[str, Any]], dict[str, int], list[dict[str, Any]]]:
     """Resolve deterministic inheritance/call edges and bounded dispatch candidates."""
     edges: list[dict[str, Any]] = []
+    unresolved_sites: list[dict[str, Any]] = []
     qualified_index = {node["qualified_name"]: node for node in symbol_nodes}
     location_index = {
         (node["path"], node["definition_line"]): node for node in symbol_nodes
@@ -506,6 +606,9 @@ def extract_symbol_relationship_edges(
         "candidate_calls": 0,
         "unresolved_calls": 0,
         "inheritance_edges": 0,
+        "fastapi_routes": 0,
+        "dependency_edges": 0,
+        "unresolved_dependencies": 0,
     }
 
     for path in sorted(python_files):
@@ -519,6 +622,7 @@ def extract_symbol_relationship_edges(
         file_symbols = [node for node in symbol_nodes if node["path"] == relative_posix]
         module_name = file_symbols[0]["module"] if file_symbols else module_qualified_name(relative_path)
         bindings = import_bindings(tree, module_name, path.name == "__init__.py")
+        route_instances = fastapi_instances(tree, bindings)
 
         for ast_node in ast.walk(tree):
             if not isinstance(ast_node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -563,11 +667,107 @@ def extract_symbol_relationship_edges(
                     metrics["inheritance_edges"] += 1
                 continue
 
+            route, route_decorator = fastapi_route_metadata(ast_node, route_instances)
+            if route is not None and route_decorator is not None:
+                source_symbol["entrypoint"] = route
+                source_symbol["framework"] = "fastapi"
+                source_symbol["architectural_role"] = "route"
+                source_symbol["entrypoint_evidence"] = {
+                    "path": relative_posix,
+                    "line": route_decorator.lineno,
+                    "column": route_decorator.col_offset,
+                    "expression": ast.unparse(route_decorator),
+                }
+                metrics["fastapi_routes"] += 1
+
+                for dependency in fastapi_dependency_calls(ast_node, bindings):
+                    if not dependency.args:
+                        metrics["unresolved_dependencies"] += 1
+                        unresolved_sites.append(
+                            {
+                                "source_id": source_symbol["id"],
+                                "reason": "implicit-fastapi-dependency",
+                                "evidence": {
+                                    "path": relative_posix,
+                                    "line": dependency.lineno,
+                                    "column": dependency.col_offset,
+                                    "expression": ast.unparse(dependency),
+                                },
+                            }
+                        )
+                        continue
+                    expression = dotted_expression(dependency.args[0])
+                    if not expression:
+                        metrics["unresolved_dependencies"] += 1
+                        unresolved_sites.append(
+                            {
+                                "source_id": source_symbol["id"],
+                                "reason": "dynamic-fastapi-dependency",
+                                "evidence": {
+                                    "path": relative_posix,
+                                    "line": dependency.lineno,
+                                    "column": dependency.col_offset,
+                                    "expression": ast.unparse(dependency),
+                                },
+                            }
+                        )
+                        continue
+                    target, method, confidence = exact_symbol_target(
+                        expression, source_symbol, bindings, qualified_index
+                    )
+                    if target is None:
+                        metrics["unresolved_dependencies"] += 1
+                        unresolved_sites.append(
+                            {
+                                "source_id": source_symbol["id"],
+                                "reason": "unresolved-fastapi-dependency",
+                                "evidence": {
+                                    "path": relative_posix,
+                                    "line": dependency.lineno,
+                                    "column": dependency.col_offset,
+                                    "expression": ast.unparse(dependency),
+                                },
+                            }
+                        )
+                        continue
+                    edges.append(
+                        {
+                            "id": (
+                                f"depends-on:{source_symbol['id']}->{target['id']}:"
+                                f"{dependency.lineno}:{dependency.col_offset}"
+                            ),
+                            "source": source_symbol["id"],
+                            "target": target["id"],
+                            "kind": "depends-on",
+                            "confidence": confidence,
+                            "resolution_method": method,
+                            "evidence": {
+                                "path": relative_posix,
+                                "line": dependency.lineno,
+                                "column": dependency.col_offset,
+                                "expression": ast.unparse(dependency),
+                            },
+                        }
+                    )
+                    metrics["dependency_edges"] += 1
+
             for call in direct_calls(ast_node):
                 metrics["call_sites"] += 1
                 expression = dotted_expression(call.func)
                 if not expression:
                     metrics["unresolved_calls"] += 1
+                    unresolved_sites.append(
+                        {
+                            "source_id": source_symbol["id"],
+                            "reason": "dynamic-call-target",
+                            "evidence": {
+                                "path": relative_posix,
+                                "line": call.lineno,
+                                "column": call.col_offset,
+                                "expression": ast.unparse(call.func),
+                            },
+                        }
+                    )
                     continue
                 target, method, confidence = exact_symbol_target(
                     expression, source_symbol, bindings, qualified_index
@@ -583,6 +783,18 @@ def extract_symbol_relationship_edges(
                         edge_kind = "may-dispatch-to"
                 if target is None:
                     metrics["unresolved_calls"] += 1
+                    unresolved_sites.append(
+                        {
+                            "source_id": source_symbol["id"],
+                            "reason": "target-outside-or-unresolved",
+                            "evidence": {
+                                "path": relative_posix,
+                                "line": call.lineno,
+                                "column": call.col_offset,
+                                "expression": expression,
+                            },
+                        }
+                    )
                     continue
                 metrics["resolved_calls" if edge_kind == "calls" else "candidate_calls"] += 1
                 edges.append(
@@ -602,7 +814,129 @@ def extract_symbol_relationship_edges(
                     }
                 )
 
-    return edges, metrics
+    return edges, metrics, unresolved_sites
+
+
+def discover_representative_flows(
+    symbol_nodes: list[dict[str, Any]],
+    relationship_edges: list[dict[str, Any]],
+    unresolved_sites: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Trace bounded, reproducible paths from recognized framework entrypoints."""
+    traversable_kinds = {"calls", "depends-on", "may-dispatch-to"}
+    adjacency: dict[str, list[dict[str, Any]]] = {}
+    for edge in relationship_edges:
+        if edge["kind"] in traversable_kinds:
+            adjacency.setdefault(edge["source"], []).append(edge)
+    for outgoing in adjacency.values():
+        outgoing.sort(key=lambda edge: (edge["kind"] == "may-dispatch-to", edge["id"]))
+
+    unresolved_by_source: dict[str, list[dict[str, Any]]] = {}
+    for site in unresolved_sites:
+        unresolved_by_source.setdefault(site["source_id"], []).append(site)
+
+    entrypoints = sorted(
+        (node for node in symbol_nodes if node.get("entrypoint")),
+        key=lambda node: (node["path"], node["definition_line"]),
+    )
+    symbol_index = {node["id"]: node for node in symbol_nodes}
+    candidates: list[dict[str, Any]] = []
+    candidate_counts: dict[str, int] = {}
+
+    def walk(
+        entrypoint: dict[str, Any],
+        current_id: str,
+        node_ids: list[str],
+        edge_ids: list[str],
+        confidence: float,
+    ) -> None:
+        if (
+            len(candidates) >= MAX_FLOW_CANDIDATES
+            or candidate_counts.get(entrypoint["id"], 0)
+            >= MAX_FLOW_CANDIDATES_PER_ENTRYPOINT
+        ):
+            return
+        outgoing = [
+            edge for edge in adjacency.get(current_id, [])
+            if edge["target"] not in node_ids
+        ]
+        depth_truncated = len(edge_ids) >= MAX_FLOW_DEPTH and bool(outgoing)
+        if len(edge_ids) >= MAX_FLOW_DEPTH:
+            outgoing = []
+        if outgoing:
+            for edge in outgoing:
+                walk(
+                    entrypoint,
+                    edge["target"],
+                    [*node_ids, edge["target"]],
+                    [*edge_ids, edge["id"]],
+                    min(confidence, float(edge.get("confidence", 1.0))),
+                )
+            return
+
+        unresolved_steps = [
+            step
+            for node_id in node_ids
+            for step in unresolved_by_source.get(node_id, [])
+        ]
+        if depth_truncated:
+            terminal = symbol_index[current_id]
+            unresolved_steps.append(
+                {
+                    "source_id": current_id,
+                    "reason": "maximum-flow-depth-reached",
+                    "evidence": {
+                        "path": terminal["path"],
+                        "line": terminal["definition_line"],
+                        "expression": terminal["qualified_name"],
+                    },
+                }
+            )
+        candidates.append(
+            {
+                "entrypoint_id": entrypoint["id"],
+                "label": entrypoint["entrypoint"]["label"],
+                "framework": entrypoint["entrypoint"]["framework"],
+                "ordered_node_ids": node_ids,
+                "ordered_edge_ids": edge_ids,
+                "confidence": confidence,
+                "completeness": "partial" if unresolved_steps else "complete",
+                "unresolved_steps": unresolved_steps,
+            }
+        )
+        candidate_counts[entrypoint["id"]] = candidate_counts.get(entrypoint["id"], 0) + 1
+
+    for entrypoint in entrypoints:
+        walk(entrypoint, entrypoint["id"], [entrypoint["id"]], [], 1.0)
+
+    candidates.sort(
+        key=lambda flow: (
+            -len(flow["ordered_edge_ids"]),
+            -flow["confidence"],
+            flow["label"],
+            flow["ordered_node_ids"],
+        )
+    )
+    representatives: list[dict[str, Any]] = []
+    represented_entrypoints: set[str] = set()
+    for flow in candidates:
+        if flow["entrypoint_id"] in represented_entrypoints:
+            continue
+        representatives.append(flow)
+        represented_entrypoints.add(flow["entrypoint_id"])
+        if len(representatives) == MAX_REPRESENTATIVE_FLOWS:
+            break
+    if len(representatives) < MAX_REPRESENTATIVE_FLOWS:
+        for flow in candidates:
+            if flow in representatives:
+                continue
+            representatives.append(flow)
+            if len(representatives) == MAX_REPRESENTATIVE_FLOWS:
+                break
+
+    for index, flow in enumerate(representatives, start=1):
+        flow["id"] = f"flow:{flow['entrypoint_id']}:{index}"
+    return representatives
 
 
 # --------------------------------------------------------------------------
@@ -677,22 +1011,27 @@ def analyze_repository(repo_root: Path) -> dict[str, Any]:
     roots = find_module_roots(repo_root, python_files)
     module_map = build_module_map(repo_root, python_files, roots)
     import_edges = extract_import_edges(repo_root, python_files, module_map)
-    relationship_edges, relationship_coverage = extract_symbol_relationship_edges(
+    relationship_edges, relationship_coverage, unresolved_sites = extract_symbol_relationship_edges(
         repo_root, python_files, symbol_nodes
+    )
+    flows = discover_representative_flows(
+        symbol_nodes, relationship_edges, unresolved_sites
     )
 
     return {
-        "schema_version": "0.4",
+        "schema_version": "0.5",
         "repo_root": str(repo_root),
         "python_files_total_found": total_files_found,
         "python_files_analyzed": len(python_files),
         "python_files_truncated": files_truncated,
         "nodes": [*file_nodes, *symbol_nodes],
         "edges": [*import_edges, *containment_edges, *relationship_edges],
+        "flows": flows,
         "coverage": {
             "python_files": len(python_files),
             "symbol_nodes": len(symbol_nodes),
             "symbol_parse_failures": symbol_parse_failures,
+            "representative_flows": len(flows),
             **relationship_coverage,
         },
     }

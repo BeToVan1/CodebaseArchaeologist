@@ -91,9 +91,49 @@
 .symbol-relationships .connection-group button strong { display: block; color: #315b3d; font: 700 9px/1.4 ui-monospace,monospace; overflow-wrap: anywhere; }
 .symbol-relationships .connection-group button small { display: block; margin-top: 3px; color: #778279; font-size: 8px; text-transform: capitalize; }
 .connection-group p { margin: 0; color: #929a94; font-size: 10px; }
+.flow-legend i { background: #c08a38; }
+.flow-surface { overflow: auto; }
+.flow-browser { display: grid; grid-template-columns: minmax(190px, 240px) minmax(420px, 1fr); min-height: 100%; }
+.flow-catalog { padding: 18px; border-right: 1px solid var(--line); background: rgba(244,247,242,.88); }
+.flow-catalog-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; color: #526057; font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
+.flow-catalog-heading span { display: grid; place-items: center; min-width: 22px; height: 22px; border-radius: 11px; background: #dfe9df; color: #315b3d; font-weight: 800; }
+.flow-catalog > button { position: relative; width: 100%; margin-bottom: 9px; padding: 12px; border: 1px solid transparent; border-radius: 9px; background: #fff; color: var(--ink); text-align: left; cursor: pointer; box-shadow: 0 3px 12px rgba(44,62,49,.05); }
+.flow-catalog > button:hover { border-color: #b9c6ba; }
+.flow-catalog > button.active { border-color: var(--moss); box-shadow: 0 0 0 2px rgba(49,91,61,.09); }
+.flow-catalog button strong, .flow-catalog button small { display: block; padding-right: 48px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-catalog button strong { font: 700 11px/1.4 ui-monospace,monospace; }
+.flow-catalog button small { margin-top: 4px; color: var(--muted); font-size: 8px; text-transform: capitalize; }
+.flow-status { position: absolute; top: 10px; right: 9px; padding: 3px 5px; border-radius: 4px; background: #e3eee4; color: #356343; font-size: 7px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.flow-status.partial { background: #fbf0df; color: #79551f; }
+.flow-inspector { padding: 28px 34px 36px; }
+.flow-inspector > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
+.flow-inspector > header span { color: #78837b; font-size: 8px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
+.flow-inspector > header h3 { margin: 5px 0 0; font: 500 24px Georgia,serif; }
+.flow-inspector > header > strong { padding: 6px 8px; border-radius: 6px; background: var(--moss-soft); color: #315b3d; font-size: 9px; white-space: nowrap; }
+.flow-path { margin: 0; padding: 24px 0 6px; list-style: none; }
+.flow-path li { position: relative; padding: 0 0 20px 30px; }
+.flow-path li::before { content: ""; position: absolute; top: 17px; bottom: -2px; left: 9px; width: 1px; background: #b9c7ba; }
+.flow-path li:last-child::before { display: none; }
+.flow-path li::after { content: ""; position: absolute; top: 13px; left: 5px; width: 7px; height: 7px; border: 2px solid #fff; border-radius: 50%; background: var(--moss); box-shadow: 0 0 0 1px #8ba08d; }
+.flow-path button { display: block; width: 100%; padding: 11px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); text-align: left; cursor: pointer; }
+.flow-path button:hover { border-color: #9dae9f; background: #fbfdf9; }
+.flow-path button strong, .flow-path button small { display: block; overflow-wrap: anywhere; }
+.flow-path button strong { color: #284c32; font: 700 10px/1.45 ui-monospace,monospace; }
+.flow-path button small { margin-top: 4px; color: var(--muted); font-size: 8px; }
+.flow-edge-kind { display: inline-block; margin: 0 0 6px 3px; padding: 3px 6px; border-radius: 4px; background: #e5eee6; color: #315b3d; font-size: 7px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+.flow-edge-kind.candidate { background: #fbf0df; color: #79551f; }
+.flow-gaps { margin-top: 8px; padding: 16px; border: 1px solid #ead7b8; border-radius: 9px; background: #fffaf1; }
+.flow-gaps ul { margin: 0; padding: 0; list-style: none; }
+.flow-gaps li { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-top: 1px solid #efe1ca; font-size: 9px; }
+.flow-gaps li:first-child { border-top: 0; }
+.flow-gaps li strong { font: 700 9px ui-monospace,monospace; overflow-wrap: anywhere; }
+.flow-gaps li span, .flow-gaps p { color: #806b4a; font-size: 8px; text-align: right; }
+.flow-gaps p { margin: 0; text-align: left; }
+.flow-gaps .flow-more-gaps { margin-top: 9px; padding-top: 9px; border-top: 1px solid #efe1ca; font-weight: 700; }
 .detail { overflow-y: auto; max-height: calc(100vh - 72px); }
+@media (max-width: 1100px) { .flow-browser { grid-template-columns: 190px minmax(360px,1fr); } .flow-inspector { padding: 24px; } }
 @media (max-width: 940px) { .graph-surface { height: 620px; } .detail { max-height: none; } }
-@media (max-width: 650px) { .graph-surface { height: 560px; } }
+@media (max-width: 650px) { .graph-surface { height: 560px; } .flow-browser { display: block; } .flow-catalog { border-right: 0; border-bottom: 1px solid var(--line); } .flow-inspector { padding: 20px; } }
 
 
 
