@@ -30,7 +30,7 @@ class AnalyzeRequest(BaseModel):
 app = FastAPI(title="Codebase Archaeologist API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origin_regex=r"^https?://(?:localhost|127\.0\.0\.1)(?::\d+)?$",
     allow_methods=["POST", "GET"],
     allow_headers=["Content-Type"],
 )
@@ -77,4 +77,5 @@ async def analyze(request: AnalyzeRequest) -> dict[str, Any]:
         finally:
             if repository_path is not None:
                 await asyncio.to_thread(cleanup_repository, repository_path)
+
 

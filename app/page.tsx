@@ -16,14 +16,22 @@ import { useEffect, useMemo, useState } from "react";
 
 type GraphNode = {
   id: string;
-  kind: "file";
+  kind: "file" | "class" | "function" | "method";
   path: string;
+  name?: string;
+  qualified_name?: string;
+  start_line?: number;
+  definition_line?: number;
+  end_line?: number;
+  parent_id?: string;
+  decorators?: string[];
+  is_async?: boolean;
   size_bytes?: number;
   source?: string;
   source_truncated?: boolean;
   source_error?: string;
 };
-type GraphEdge = { id: string; source: string; target: string; kind: "imports" };
+type GraphEdge = { id: string; source: string; target: string; kind: "imports" | "contains" };
 type RepositoryMetadata = {
   name: string;
   url?: string;
@@ -133,6 +141,37 @@ function explainNode(node: GraphNode, incoming: GraphEdge[], outgoing: GraphEdge
   };
 }
 
+function explainSymbol(symbol: GraphNode): { summary: string; role: string; rationale: string; claims: Claim[] } {
+  const range = `lines ${symbol.start_line}–${symbol.end_line}`;
+  const asyncPrefix = symbol.is_async ? "async " : "";
+  const decorators = symbol.decorators?.length ? ` It is decorated by ${symbol.decorators.join(", ")}.` : "";
+  const roles = {
+    class: "Groups related state and behavior behind a named Python type.",
+    method: "Implements behavior owned by its containing class.",
+    function: "Implements a callable unit of module or nested behavior.",
+    file: "Contains Python source.",
+  };
+  return {
+    summary: `Defines the ${asyncPrefix}${symbol.kind} ${symbol.qualified_name} at ${range}.${decorators}`,
+    role: roles[symbol.kind],
+    rationale: "Its nesting and decorators are reported directly from the Python syntax tree; architectural intent requires additional evidence.",
+    claims: [
+      {
+        classification: "fact",
+        text: `${symbol.qualified_name} occupies ${range}.`,
+        confidence: 1,
+        provenance: `Python AST source range in ${symbol.path}`,
+      },
+      {
+        classification: "interpretation",
+        text: roles[symbol.kind],
+        confidence: 0.7,
+        provenance: `Python symbol kind: ${symbol.kind}`,
+      },
+    ],
+  };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -149,8 +188,8 @@ function validateGraph(value: unknown): Graph {
   const edges = value.edges as unknown[];
   const nodeIds = new Set<string>();
   for (const [index, node] of nodes.entries()) {
-    if (!isRecord(node) || typeof node.id !== "string" || node.kind !== "file" || typeof node.path !== "string") {
-      throw new Error(`Invalid graph: node ${index + 1} must have string id/path fields and kind "file".`);
+    if (!isRecord(node) || typeof node.id !== "string" || !["file", "class", "function", "method"].includes(String(node.kind)) || typeof node.path !== "string") {
+      throw new Error(`Invalid graph: node ${index + 1} has invalid id, path, or kind fields.`);
     }
     if (nodeIds.has(node.id)) throw new Error(`Invalid graph: duplicate node id "${node.id}".`);
     if (node.source !== undefined && typeof node.source !== "string") {
@@ -162,11 +201,21 @@ function validateGraph(value: unknown): Graph {
     if (node.source_error !== undefined && typeof node.source_error !== "string") {
       throw new Error(`Invalid graph: source_error for "${node.id}" must be a string.`);
     }
+    if (node.kind !== "file" && (
+      typeof node.name !== "string"
+      || typeof node.qualified_name !== "string"
+      || !Number.isInteger(node.start_line)
+      || !Number.isInteger(node.end_line)
+      || Number(node.start_line) < 1
+      || Number(node.end_line) < Number(node.start_line)
+    )) {
+      throw new Error(`Invalid graph: symbol "${node.id}" must include its name and exact source range.`);
+    }
     nodeIds.add(node.id);
   }
   for (const [index, edge] of edges.entries()) {
-    if (!isRecord(edge) || typeof edge.id !== "string" || typeof edge.source !== "string" || typeof edge.target !== "string" || edge.kind !== "imports") {
-      throw new Error(`Invalid graph: edge ${index + 1} must have id, source, target, and kind "imports".`);
+    if (!isRecord(edge) || typeof edge.id !== "string" || typeof edge.source !== "string" || typeof edge.target !== "string" || !["imports", "contains"].includes(String(edge.kind))) {
+      throw new Error(`Invalid graph: edge ${index + 1} has invalid id, endpoints, or kind.`);
     }
     if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target)) {
       throw new Error(`Invalid graph: edge "${edge.id}" references a missing node.`);
@@ -199,7 +248,7 @@ function primaryNodeId(graph: Graph) {
     degree.set(edge.target, (degree.get(edge.target) ?? 0) + 1);
   });
   return graph.nodes
-    .filter((node) => !node.path.startsWith("tests/"))
+    .filter((node) => node.kind === "file" && !node.path.startsWith("tests/"))
     .sort((a, b) => (degree.get(b.id) ?? 0) - (degree.get(a.id) ?? 0))[0]?.id
     ?? graph.nodes[0]?.id
     ?? null;
@@ -208,6 +257,7 @@ function primaryNodeId(graph: Graph) {
 export default function Home() {
   const [graph, setGraph] = useState<Graph | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedSymbolId, setSelectedSymbolId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<"production" | "all">("production");
   const [error, setError] = useState<string | null>(null);
@@ -225,6 +275,7 @@ export default function Home() {
         const validated = validateGraph(data);
         setGraph(validated);
         setSelectedId(primaryNodeId(validated));
+        setSelectedSymbolId(null);
       })
       .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Could not load graph data"));
   }, []);
@@ -247,6 +298,7 @@ export default function Home() {
       const validated = validateGraph(data);
       setGraph(validated);
       setSelectedId(primaryNodeId(validated));
+      setSelectedSymbolId(null);
       setQuery("");
       setScope("production");
     } catch (cause: unknown) {
@@ -258,7 +310,8 @@ export default function Home() {
 
   const visibleGraphNodes = useMemo(
     () => graph?.nodes.filter((node) =>
-      (scope === "all" || !node.path.startsWith("tests/"))
+      node.kind === "file"
+      && (scope === "all" || !node.path.startsWith("tests/"))
       && node.path.toLowerCase().includes(query.toLowerCase()),
     ) ?? [],
     [graph, query, scope],
@@ -269,6 +322,7 @@ export default function Home() {
   useEffect(() => {
     if (selectedId && !visibleIds.has(selectedId)) setSelectedId(visibleGraphNodes[0]?.id ?? null);
   }, [selectedId, visibleGraphNodes, visibleIds]);
+  useEffect(() => setSelectedSymbolId(null), [selectedId]);
   const flowNodes = useMemo<Node[]>(
     () => visibleGraphNodes.map((node, index) => ({
       id: node.id,
@@ -295,12 +349,22 @@ export default function Home() {
     [graph, selectedId, visibleIds],
   );
   const selected = graph?.nodes.find((node) => node.id === selectedId) ?? null;
-  const incoming = graph?.edges.filter((edge) => edge.target === selectedId) ?? [];
-  const outgoing = graph?.edges.filter((edge) => edge.source === selectedId) ?? [];
-  const explanation = selected ? explainNode(selected, incoming, outgoing) : null;
+  const incoming = graph?.edges.filter((edge) => edge.kind === "imports" && edge.target === selectedId) ?? [];
+  const outgoing = graph?.edges.filter((edge) => edge.kind === "imports" && edge.source === selectedId) ?? [];
+  const selectedSymbol = graph?.nodes.find((node) => node.id === selectedSymbolId && node.kind !== "file") ?? null;
+  const symbolsForSelected = graph?.nodes
+    .filter((node) => node.kind !== "file" && node.path === selected?.path)
+    .sort((a, b) => Number(a.start_line) - Number(b.start_line)) ?? [];
+  const explanation = selectedSymbol ? explainSymbol(selectedSymbol) : selected ? explainNode(selected, incoming, outgoing) : null;
   const nodePath = (id: string) => graph?.nodes.find((node) => node.id === id)?.path ?? id;
   const displayedSource = selected?.source?.slice(0, MAX_SOURCE_CHARACTERS);
-  const sourceLines = displayedSource?.split("\n") ?? [];
+  const fileSourceLines = displayedSource?.split("\n") ?? [];
+  const sourceStartLine = selectedSymbol?.start_line ?? 1;
+  const sourceEndLine = selectedSymbol?.end_line ?? fileSourceLines.length;
+  const sourceLines = selectedSymbol
+    ? fileSourceLines.slice(sourceStartLine - 1, sourceEndLine)
+    : fileSourceLines;
+  const selectedRangeAvailable = !selectedSymbol || sourceStartLine <= fileSourceLines.length;
   const sourceIsTruncated = Boolean(
     selected?.source_truncated || (selected?.source && selected.source.length > MAX_SOURCE_CHARACTERS),
   );
@@ -312,8 +376,10 @@ export default function Home() {
   const pinnedRepositoryUrl = graph?.repository?.pinned_url ?? repositoryUrl;
   const commitSha = graph?.snapshot?.commit_sha;
   const selectedSourceUrl = repositorySource === "github" && repositoryUrl && commitSha && selected
-    ? `${repositoryUrl.replace(/\.git\/?$/, "")}/blob/${commitSha}/${selected.path}`
+    ? `${repositoryUrl.replace(/\.git\/?$/, "")}/blob/${commitSha}/${selected.path}${selectedSymbol ? `#L${selectedSymbol.start_line}-L${selectedSymbol.end_line}` : ""}`
     : undefined;
+  const fileCount = graph?.nodes.filter((node) => node.kind === "file").length ?? 0;
+  const symbolCount = graph?.nodes.filter((node) => node.kind !== "file").length ?? 0;
   const riskCount = graph?.nodes.filter((node) => node.source_error).length ?? 0;
 
   return (
@@ -323,7 +389,7 @@ export default function Home() {
           <div className="mark" aria-hidden="true">A</div>
           <div><div className="product-name">Archaeologist</div><div className="repo-name">{repositoryName}</div></div>
         </div>
-        <div className="snapshot"><span className={`status-dot${isAnalyzing ? " busy" : ""}`} />{isAnalyzing ? "Analyzing repository" : graph ? "Graph ready" : error ? "Graph unavailable" : "Loading graph"}<code>{graph ? `${graph.nodes.length} files · ${graph.edges.length} imports` : "Please wait"}</code></div>
+        <div className="snapshot"><span className={`status-dot${isAnalyzing ? " busy" : ""}`} />{isAnalyzing ? "Analyzing repository" : graph ? "Graph ready" : error ? "Graph unavailable" : "Loading graph"}<code>{graph ? `${fileCount} files · ${symbolCount} symbols` : "Please wait"}</code></div>
       </header>
 
       <section className="workspace">
@@ -344,8 +410,9 @@ export default function Home() {
             <button className={scope === "all" ? "active" : ""} onClick={() => setScope("all")}>All files</button>
           </div>
           <nav aria-label="Graph summary">
-            <div className="nav-item active"><span>Files</span><strong>{graph?.nodes.length ?? 0}</strong></div>
-            <div className="nav-item"><span>Dependencies</span><strong>{graph?.edges.length ?? 0}</strong></div>
+            <div className="nav-item active"><span>Files</span><strong>{fileCount}</strong></div>
+            <div className="nav-item"><span>Symbols</span><strong>{symbolCount}</strong></div>
+            <div className="nav-item"><span>Dependencies</span><strong>{graph?.edges.filter((edge) => edge.kind === "imports").length ?? 0}</strong></div>
             <div className={riskCount ? "nav-item warning" : "nav-item muted"}><span>Read warnings</span><strong>{riskCount}</strong></div>
           </nav>
           <div className="contract"><span>Graph contract</span><code>schema v{graph?.schema_version ?? "0.1"}</code></div>
@@ -389,6 +456,15 @@ export default function Home() {
             <div className="detail-icon">PY</div><h2>{filename(selected.path)}</h2><p className="full-path">{selected.path}</p>
             <div className="divider" />
             <dl><div><dt>Kind</dt><dd>Python file</dd></div><div><dt>Size</dt><dd>{formatBytes(selected.size_bytes)}</dd></div><div><dt>Node ID</dt><dd><code>{selected.id}</code></dd></div><div><dt>Folder</dt><dd>{folder(selected.path)}</dd></div></dl>
+            <section className="symbols-section">
+              <div className="section-heading"><h3>Symbols</h3><span>{symbolsForSelected.length}</span></div>
+              {symbolsForSelected.length ? <div className="symbol-list">
+                <button className={!selectedSymbol ? "active" : ""} onClick={() => setSelectedSymbolId(null)}><strong>Whole file</strong><small>All source lines</small></button>
+                {symbolsForSelected.map((symbol) => <button className={selectedSymbolId === symbol.id ? "active" : ""} key={symbol.id} onClick={() => setSelectedSymbolId(symbol.id)}>
+                  <strong>{symbol.name}</strong><small>{symbol.kind} · L{symbol.start_line}–{symbol.end_line}</small>
+                </button>)}
+              </div> : <p className="no-symbols">No class or function definitions found.</p>}
+            </section>
             {explanation && <section className="explanation-section">
               <div className="section-heading"><h3>Understanding</h3><span className="analysis-label">Static analysis</span></div>
               <div className="explanation-block"><h4>What it does</h4><p>{explanation.summary}</p></div>
@@ -400,17 +476,19 @@ export default function Home() {
               </article>)}</div>
             </section>}
             <section className="source-section">
-              <div className="section-heading"><h3>Source</h3>{sourceIsTruncated && <span>Truncated</span>}</div>
-              {selectedSourceUrl && <a className="source-link" href={selectedSourceUrl} target="_blank" rel="noreferrer">Open this file at the analyzed commit ↗</a>}
-              {displayedSource !== undefined ? (
+              <div className="section-heading"><h3>{selectedSymbol ? selectedSymbol.qualified_name : "Source"}</h3>{selectedSymbol ? <span>L{selectedSymbol.start_line}–{selectedSymbol.end_line}</span> : sourceIsTruncated && <span>Truncated</span>}</div>
+              {selectedSourceUrl && <a className="source-link" href={selectedSourceUrl} target="_blank" rel="noreferrer">Open {selectedSymbol ? "this symbol" : "this file"} at the analyzed commit ↗</a>}
+              {displayedSource !== undefined && selectedRangeAvailable ? (
                 <pre className="code-viewer" aria-label={`Source code for ${selected.path}`} tabIndex={0}>
                   <code>{sourceLines.map((line, index) => (
                     <span className="code-line" key={index}>
-                      <span className="line-number" aria-hidden="true">{index + 1}</span>
+                      <span className="line-number" aria-hidden="true">{sourceStartLine + index}</span>
                       <span className="line-content">{line || " "}</span>
                     </span>
                   ))}</code>
                 </pre>
+              ) : displayedSource !== undefined ? (
+                <div className="source-unavailable source-warning" role="alert"><strong>Source range unavailable</strong><p>This symbol begins after the analyzer's 200 KB source capture limit.</p></div>
               ) : selected.source_error ? (
                 <div className="source-unavailable source-warning" role="alert"><strong>Analyzer warning</strong><p>{selected.source_error}</p></div>
               ) : (
@@ -428,5 +506,6 @@ export default function Home() {
     </main>
   );
 }
+
 
 
