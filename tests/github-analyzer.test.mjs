@@ -6,6 +6,19 @@ import { inventoryStatus, inventoryUnavailable } from "../app/analysis-status.ts
 const commitSha = "a".repeat(40);
 const treeSha = "b".repeat(40);
 
+test("runtime diagnostics use fixed labels without leaking exception details", async (t) => {
+  const logs = [];
+  t.mock.method(console, "error", (...args) => logs.push(args));
+  const secret = "sensitive-token-and-source";
+  const response = await handleAnalyzeRequest(new Request("https://site.test/api/analyze", {
+    method: "POST", body: JSON.stringify({ repositoryUrl: "https://github.com/example/project" }),
+  }), async () => { throw new TypeError(`Illegal invocation https://example.test/${secret}`); });
+  assert.equal(response.status, 502);
+  assert.deepEqual(logs[0], ["hosted-analysis-failure", { stage: "repository", operation: "fetch", name: "TypeError", category: "invocation" }]);
+  assert.ok(!JSON.stringify(logs).includes(secret));
+  assert.ok(!(await response.text()).includes(secret));
+});
+
 function fixtureFetch(url) {
   const value = String(url);
   if (value === "https://api.github.com/repos/example/project") {
