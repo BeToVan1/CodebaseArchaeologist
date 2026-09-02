@@ -61,6 +61,23 @@
 .grounding-label { display: block; margin-top: 7px; color: #56705d; font-size: 8px; line-height: 1.45; }
 .grounding-label.heuristic { color: #806126; }
 .grounding-label.interpretation { color: #66558b; }
+.ai-interpretation-section { margin-top: 26px; padding-top: 22px; border-top: 1px solid var(--line); }
+.interpretation-label { background: #ece8f8 !important; color: #55448a !important; }
+.ai-intro { margin: 0 0 12px; color: var(--muted); font-size: 10px; line-height: 1.55; }
+.interpret-button, .regenerate-button { width: 100%; padding: 10px 12px; border: 0; border-radius: 7px; background: #55448a; color: #fff; font-size: 10px; font-weight: 750; cursor: pointer; }
+.interpret-button:disabled, .regenerate-button:disabled { cursor: wait; opacity: .62; }
+.interpretation-error { margin-top: 10px; padding: 11px; border: 1px solid #e0c8c3; border-radius: 7px; background: #fff7f5; color: #7a3e34; }
+.interpretation-error strong { font-size: 10px; }
+.interpretation-error p { margin: 5px 0 0; font-size: 9px; line-height: 1.5; }
+.ai-result { padding: 12px; border: 1px solid #d9d2eb; border-left: 3px solid #66558b; border-radius: 8px; background: #faf9ff; }
+.ai-result-meta { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 14px; color: #66558b; font-size: 8px; letter-spacing: .07em; text-transform: uppercase; }
+.ai-result article { margin-bottom: 14px; }
+.ai-result h4, .ai-uncertainties h4 { margin: 0 0 5px; color: #66558b; font-size: 8px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.ai-result article p { margin: 0 0 5px; font-size: 10px; line-height: 1.5; }
+.ai-result article small { color: #7b728f; font-size: 8px; line-height: 1.4; overflow-wrap: anywhere; }
+.ai-uncertainties { margin: 2px 0 14px; padding-top: 12px; border-top: 1px solid #e2ddef; }
+.ai-uncertainties ul { margin: 0; padding-left: 16px; color: #625b70; font-size: 9px; line-height: 1.5; }
+.regenerate-button { background: transparent; color: #55448a; border: 1px solid #bdb3d6; }
 .explanation-block p { margin: 0; color: #303b34; font-size: 11px; line-height: 1.55; }
 .claims { margin-top: 20px; }
 .claim { margin: 0 0 9px; padding: 10px; border: 1px solid var(--line); border-left-width: 3px; border-radius: 7px; background: #fafbf9; }
