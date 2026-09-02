@@ -44,6 +44,13 @@ Each flow records its ordered nodes and edges, combined confidence, completeness
 unresolved call site encountered along the path. The explorer's Execution flows view keeps those
 gaps visible and lets each path step open its exact source range.
 
+Graph schema v0.6 recognizes SQLAlchemy declarative bases, abstract model bases, concrete models,
+mapped columns, and ORM relationships. Conservative `reads` and `writes` edges connect functions
+to proven model classes for common `select`, `get`, `add`, `merge`, `delete`, mutation, and SQL
+statement operations. These edges retain source evidence and confidence, extend representative
+FastAPI flows into persistence, and appear alongside mapping metadata in the symbol inspector.
+
 The API is intentionally local-only for this milestone. The hosted site continues to use the committed Cosmic Python fixture until repository analysis runs in an isolated worker service.
+
 
 
