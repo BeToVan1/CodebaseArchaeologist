@@ -59,21 +59,24 @@ export async function readBoundedBody(body: ReadableStream<Uint8Array> | null, l
 async function githubJson(url: string, fetchImpl: Fetcher, signal: AbortSignal, stage: MetadataStage): Promise<Record<string, unknown>> {
   let operation = "fetch";
   try {
-  const response = await fetchImpl(url, { headers: GITHUB_HEADERS, redirect: "error", signal });
-  operation = "status";
-  if (!response.ok) {
-    await response.body?.cancel();
-    if (response.status === 404) throw new AnalysisError("Repository not found. Confirm that it is public and the URL is correct.", 404);
-    if (response.status === 403 || response.status === 429) throw new AnalysisError("GitHub's public request limit was reached. Please try again later.", 429);
-    throw new AnalysisError(`GitHub request failed (${response.status}).`, 502);
-  }
-  operation = "body";
-  const body = await readBoundedBody(response.body, 8 * 1024 * 1024);
-  if (body.truncated) throw new AnalysisError("Repository metadata exceeds the hosted analysis limit. Use the full Python analyzer.", 413);
-  operation = "json";
-  const value: unknown = JSON.parse(body.text);
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new AnalysisError("GitHub returned invalid repository metadata.", 502);
-  return value as Record<string, unknown>;
+    // The hosted runtime rejects redirect: "error". Manual returns 3xx to the
+    // status check below without following Location or leaving the fixed origin.
+    const response = await fetchImpl(url, { headers: GITHUB_HEADERS, redirect: "manual", signal });
+    operation = "status";
+    if (!response.ok) {
+      await response.body?.cancel();
+      if (response.status >= 300 && response.status < 400) throw new AnalysisError("GitHub redirected this repository. Enter its current public GitHub URL.", 502);
+      if (response.status === 404) throw new AnalysisError("Repository not found. Confirm that it is public and the URL is correct.", 404);
+      if (response.status === 403 || response.status === 429) throw new AnalysisError("GitHub's public request limit was reached. Please try again later.", 429);
+      throw new AnalysisError(`GitHub request failed (${response.status}).`, 502);
+    }
+    operation = "body";
+    const body = await readBoundedBody(response.body, 8 * 1024 * 1024);
+    if (body.truncated) throw new AnalysisError("Repository metadata exceeds the hosted analysis limit. Use the full Python analyzer.", 413);
+    operation = "json";
+    const value: unknown = JSON.parse(body.text);
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw new AnalysisError("GitHub returned invalid repository metadata.", 502);
+    return value as Record<string, unknown>;
   } catch (error) {
     if (!(error instanceof AnalysisError)) reportFailure(stage, operation, error);
     throw error;
@@ -151,7 +154,7 @@ async function fetchSources(owner: string, repository: string, sha: string, file
       try {
         const path = entry.path.split("/").map(encodeURIComponent).join("/");
         const response = await fetchImpl(`https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/${sha}/${path}`,
-          { headers: entry.size === 0 ? {} : { Range: `bytes=0-${MAX_SOURCE_BYTES - 1}` }, redirect: "error", signal });
+          { headers: entry.size === 0 ? {} : { Range: `bytes=0-${MAX_SOURCE_BYTES - 1}` }, redirect: "manual", signal });
         if (!response.ok) { await response.body?.cancel(); throw new Error("Source unavailable"); }
         const body = await readBoundedBody(response.body, MAX_SOURCE_BYTES);
         return { path: entry.path, size: entry.size ?? body.bytes, source: body.text, truncated: body.truncated || (entry.size ?? 0) > body.bytes };
