@@ -2147,7 +2147,7 @@ def analyze_repository(repo_root: Path) -> dict[str, Any]:
     )
 
     return {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "repo_root": str(repo_root),
         "python_files_total_found": total_files_found,
         "python_files_analyzed": len(python_files),
@@ -2157,6 +2157,13 @@ def analyze_repository(repo_root: Path) -> dict[str, Any]:
         "flows": flows,
         "findings": findings,
         "patterns": patterns,
+        "analysis": {
+            "tier": "deep",
+            "engine": "python-static-analyzer",
+            "limitations": [
+                "Static analysis can miss runtime dispatch, generated code, and dynamically assembled dependencies."
+            ],
+        },
         "coverage": {
             "python_files": len(python_files),
             "symbol_nodes": len(symbol_nodes),

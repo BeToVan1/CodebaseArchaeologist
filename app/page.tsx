@@ -13,6 +13,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import "./graph.css";
 import { useEffect, useMemo, useState } from "react";
+import { inventoryStatus, inventoryUnavailable, type InventoryCoverage } from "./analysis-status";
 
 type EvidenceStatement = {
   text: string;
@@ -76,6 +77,7 @@ type GraphEdge = {
   target: string;
   kind: "imports" | "contains" | "calls" | "extends" | "may-dispatch-to" | "depends-on" | "reads" | "writes";
   confidence?: number;
+  classification?: "fact" | "heuristic" | "interpretation";
   resolution_method?: string;
   evidence?: { path?: string; line?: number; column?: number; expression?: string };
 };
@@ -157,6 +159,12 @@ type Graph = {
   flows?: ExecutionFlow[];
   findings?: RiskFinding[];
   patterns?: ArchitecturePattern[];
+  coverage?: InventoryCoverage;
+  analysis?: {
+    tier: "inventory" | "deep";
+    engine: string;
+    limitations: string[];
+  };
 };
 type Claim = {
   id?: string;
@@ -192,8 +200,8 @@ type AIInterpretation = {
 const filename = (path: string) => path.split("/").at(-1) ?? path;
 const folder = (path: string) => path.split("/").slice(0, -1).join("/") || "repository root";
 const MAX_SOURCE_CHARACTERS = 200_000;
-const ANALYZER_API_URL = process.env.NEXT_PUBLIC_ANALYZER_API_URL ?? "http://127.0.0.1:8000";
-const LOCAL_ANALYZER_ENABLED = process.env.NODE_ENV === "development" || Boolean(process.env.NEXT_PUBLIC_ANALYZER_API_URL);
+const ANALYZER_API_URL = process.env.NEXT_PUBLIC_ANALYZER_API_URL ?? (process.env.NODE_ENV === "development" ? "http://127.0.0.1:8000" : "");
+const LOCAL_INTERPRETATION_ENABLED = Boolean(ANALYZER_API_URL);
 
 const layerFor = (path: string) => {
   if (path.startsWith("tests/")) return { key: "tests", label: "Tests", order: 0 };
@@ -226,7 +234,16 @@ function symbolsIn(source: string | undefined) {
   return [...source.matchAll(/^(?:async\s+)?(?:class|def)\s+([A-Za-z_]\w*)/gm)].map((match) => match[1]).slice(0, 5);
 }
 
-function explainNode(node: GraphNode, incoming: GraphEdge[], outgoing: GraphEdge[]): Explanation {
+function explainNode(node: GraphNode, incoming: GraphEdge[], outgoing: GraphEdge[], inventory = false): Explanation {
+  if (inventory) return {
+    summary: node.source_error ? "The snapshot lists this Python file, but its source could not be read." : `The snapshot lists this Python file. ${node.source_truncated ? "Only a bounded source excerpt is available." : "Its source is available below."}`,
+    role: "Execution behavior is not analyzed by the hosted inventory scanner.",
+    rationale: "Architectural intent cannot be established from the file inventory alone.",
+    claims: [
+      { classification: "fact", text: `The pinned GitHub tree contains ${node.path}.`, confidence: 1, provenance: "GitHub tree at the selected commit", evidence_refs: [node.id] },
+      { classification: "heuristic", text: `${outgoing.length} outgoing and ${incoming.length} incoming candidate import connections in this bounded inventory. These are not runtime or AST-verified dependencies.`, confidence: 0.75, provenance: "Lexical scan and snapshot module-path matching; not Python AST", evidence_refs: [...new Set([node.id, ...incoming.map((edge) => edge.id), ...outgoing.map((edge) => edge.id)])] },
+    ],
+  };
   const layer = layerFor(node.path);
   const symbols = symbolsIn(node.source);
   const roles: Record<string, string> = {
@@ -462,6 +479,28 @@ function validateGraph(value: unknown): Graph {
       throw new Error("Invalid graph: snapshot metadata must include a full commit SHA.");
     }
   }
+  if (value.analysis !== undefined) {
+    const analysis = value.analysis;
+    if (
+      !isRecord(analysis)
+      || !["inventory", "deep"].includes(String(analysis.tier))
+      || typeof analysis.engine !== "string"
+      || !Array.isArray(analysis.limitations)
+      || !analysis.limitations.every((item) => typeof item === "string")
+    ) {
+      throw new Error("Invalid graph: analysis metadata must identify its tier and limitations.");
+    }
+  }
+  if (value.coverage !== undefined) {
+    if (!isRecord(value.coverage)) throw new Error("Invalid graph: coverage must be an object.");
+    for (const key of ["python_files_total_found", "python_files_analyzed", "source_failures", "source_truncations", "unmatched_imports"]) {
+      const count = value.coverage[key];
+      if (count !== undefined && (!Number.isInteger(count) || Number(count) < 0)) throw new Error(`Invalid graph: coverage ${key} must be a non-negative integer.`);
+    }
+    for (const key of ["python_files_truncated", "github_tree_truncated"]) {
+      if (value.coverage[key] !== undefined && typeof value.coverage[key] !== "boolean") throw new Error(`Invalid graph: coverage ${key} must be a boolean.`);
+    }
+  }
   if (value.flows !== undefined) {
     if (!Array.isArray(value.flows)) throw new Error("Invalid graph: flows must be an array.");
     const edgeIds = new Set((edges as GraphEdge[]).map((edge) => edge.id));
@@ -639,6 +678,7 @@ export default function Home() {
       }
       const validated = validateGraph(data);
       setGraph(validated);
+      setError(null);
       setSelectedId(primaryNodeId(validated));
       setSelectedSymbolId(null);
       setSelectedFlowId(validated.flows?.[0]?.id ?? null);
@@ -686,9 +726,10 @@ export default function Home() {
       animated: false,
       markerEnd: { type: MarkerType.ArrowClosed },
       className: selectedId && (edge.source === selectedId || edge.target === selectedId) ? "relationship active" : "relationship",
-      style: selectedId && (edge.source === selectedId || edge.target === selectedId)
+      ariaLabel: `${edge.classification === "heuristic" ? "Candidate import" : "Import"} from ${edge.source} to ${edge.target}`,
+      style: { strokeDasharray: edge.classification === "heuristic" ? "5 4" : undefined, ...(selectedId && (edge.source === selectedId || edge.target === selectedId)
         ? { stroke: "#315b3d", strokeWidth: 2.4, opacity: 1 }
-        : { stroke: "#8e9b91", strokeWidth: 1.2, opacity: selectedId ? 0.16 : 0.48 },
+        : { stroke: "#8e9b91", strokeWidth: 1.2, opacity: selectedId ? 0.16 : 0.48 }) },
     })),
     [graph, selectedId, visibleIds],
   );
@@ -701,7 +742,10 @@ export default function Home() {
   const symbolsForSelected = graph?.nodes
     .filter((node) => node.kind !== "file" && node.path === selected?.path)
     .sort((a, b) => Number(a.start_line) - Number(b.start_line)) ?? [];
-  const explanation = selectedSymbol ? explainSymbol(selectedSymbol, symbolIncoming, symbolOutgoing) : selected ? explainNode(selected, incoming, outgoing) : null;
+  const inventory = graph?.analysis?.tier === "inventory";
+  const coverageStatus = inventoryStatus(graph?.coverage);
+  const unavailable = inventory && mapMode !== "architecture" ? inventoryUnavailable(mapMode) : null;
+  const explanation = selectedSymbol ? explainSymbol(selectedSymbol, symbolIncoming, symbolOutgoing) : selected ? explainNode(selected, incoming, outgoing, inventory) : null;
   const nodePath = (id: string) => graph?.nodes.find((node) => node.id === id)?.path ?? id;
   const nodeName = (id: string) => graph?.nodes.find((node) => node.id === id)?.qualified_name ?? nodePath(id);
   const selectFileNode = (id: string) => { setSelectedId(id); setSelectedSymbolId(null); };
@@ -734,7 +778,7 @@ export default function Home() {
     return selectedNodeId !== null
       && (finding.node_id === selectedNodeId || finding.related_node_ids.includes(selectedNodeId));
   });
-  const displayedSource = selected?.source?.slice(0, MAX_SOURCE_CHARACTERS);
+  const displayedSource = selected?.source_error ? undefined : selected?.source?.slice(0, MAX_SOURCE_CHARACTERS);
   const fileSourceLines = displayedSource?.split("\n") ?? [];
   const sourceStartLine = selectedSymbol?.start_line ?? 1;
   const sourceEndLine = selectedSymbol?.end_line ?? fileSourceLines.length;
@@ -791,7 +835,7 @@ export default function Home() {
   const highRiskCount = findings.filter((finding) => finding.severity === "high").length;
   const factPatternCount = patterns.filter((pattern) => pattern.classification === "fact").length;
   const canvasCopy = {
-    architecture: ["Architecture map", "Python imports", "A → B means file A imports file B."],
+    architecture: ["Architecture map", inventory ? "Candidate Python imports" : "Python imports", inventory ? "Dashed A → B is a lexical import candidate, not an AST-verified fact." : "A → B means file A imports file B."],
     patterns: ["Pattern detection", "Architectural patterns", "Every detected pattern reports its classification, confidence, provenance, metrics, and exact graph evidence."],
     flows: ["Flow discovery", "Representative execution paths", "Paths begin at proven framework entrypoints and preserve uncertain or unresolved steps."],
     risks: ["Risk analysis", "Evidence-backed findings", "Deterministic heuristics identify structural hotspots; each finding links to exact source evidence."],
@@ -804,21 +848,22 @@ export default function Home() {
           <div className="mark" aria-hidden="true">A</div>
           <div><div className="product-name">Archaeologist</div><div className="repo-name">{repositoryName}</div></div>
         </div>
-        <div className="snapshot"><span className={`status-dot${isAnalyzing ? " busy" : ""}`} />{isAnalyzing ? "Analyzing repository" : graph ? "Graph ready" : error ? "Graph unavailable" : "Loading graph"}<code>{graph ? `${fileCount} files · ${symbolCount} symbols` : "Please wait"}</code></div>
+        <div className="snapshot"><span className={`status-dot${isAnalyzing ? " busy" : ""}`} />{isAnalyzing ? "Analyzing repository" : graph ? inventory ? coverageStatus.partial ? "Partial inventory" : "Inventory ready" : "Graph ready" : error ? "Graph unavailable" : "Loading graph"}<code>{graph ? inventory ? `${fileCount} files · inventory only` : `${fileCount} files · ${symbolCount} symbols` : "Please wait"}</code></div>
       </header>
 
       <section className="workspace">
         <aside className="rail">
           <div className="eyebrow">Repository</div><h1>Dependency map</h1>
           <p className="rail-copy">Explore files, source, and internal imports from the analyzed repository.</p>
-          {LOCAL_ANALYZER_ENABLED && <form className="repository-form" onSubmit={analyzeSubmittedRepository}>
+          <form className="repository-form" onSubmit={analyzeSubmittedRepository}>
             <label htmlFor="repository-url">Public GitHub URL</label>
             <input id="repository-url" type="url" value={submittedUrl} onChange={(event) => setSubmittedUrl(event.target.value)} required pattern="https://github\.com/.+/.+" disabled={isAnalyzing} />
             <button type="submit" disabled={isAnalyzing}>{isAnalyzing ? "Analyzing…" : "Analyze repository"}</button>
-            <small>Local analyzer · public Python repositories only</small>
+            <small>{ANALYZER_API_URL ? "Full analyzer service" : "Hosted inventory"} · public Python repositories only</small>
             {analysisError && <p className="analysis-error" role="alert">{analysisError}</p>}
-          </form>}
+          </form>
           {graph && <div className="origin"><span>{repositorySource === "github" ? "Pinned GitHub snapshot" : "Local directory"}</span>{pinnedRepositoryUrl ? <a href={pinnedRepositoryUrl} target="_blank" rel="noreferrer">{commitSha ? `${commitSha.slice(0, 12)} ↗` : "Open repository ↗"}</a> : <strong>{repositoryName}</strong>}</div>}
+          {inventory && <div className="analysis-tier-notice" role="status"><strong>{coverageStatus.partial ? "Partial inventory" : "Inventory analysis"}</strong><p>{coverageStatus.summary}</p><small>Import edges are heuristics. Symbols, flows, patterns, and risks were not analyzed.</small><details><summary>Coverage and limitations</summary><ul>{[...coverageStatus.warnings, ...(graph?.analysis?.limitations ?? [])].map((message) => <li key={message}>{message}</li>)}</ul></details></div>}
           <label className="search"><span aria-hidden="true">⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter files" aria-label="Filter files" /></label>
           <div className="scope-switch" aria-label="Graph scope">
             <button className={scope === "production" ? "active" : ""} onClick={() => setScope("production")}>Production</button>
@@ -837,15 +882,17 @@ export default function Home() {
         </aside>
 
         <section className="canvas" aria-label="Repository dependency graph">
-          <div className="canvas-head"><div><div className="eyebrow">{canvasCopy[0]}</div><h2>{canvasCopy[1]}</h2><p className="relationship-help">{canvasCopy[2]}</p></div>{mapMode === "architecture" ? <div className="legend"><span /> Selected <i /> Imports →</div> : mapMode === "flows" ? <div className="legend flow-legend"><span /> Proven <i /> Candidate</div> : mapMode === "patterns" ? <div className="pattern-summary"><strong>{factPatternCount}</strong> facts · <strong>{patterns.length - factPatternCount}</strong> heuristics</div> : <div className="risk-summary"><strong>{highRiskCount}</strong> high · <strong>{riskCount - highRiskCount}</strong> medium/low</div>}</div>
+          <div className="canvas-head"><div><div className="eyebrow">{canvasCopy[0]}</div><h2>{canvasCopy[1]}</h2><p className="relationship-help">{canvasCopy[2]}</p></div>{unavailable ? <div className="risk-summary">Not analyzed</div> : mapMode === "architecture" ? <div className="legend"><span /> Selected <i /> {inventory ? "Candidate imports →" : "Imports →"}</div> : mapMode === "flows" ? <div className="legend flow-legend"><span /> Proven <i /> Candidate</div> : mapMode === "patterns" ? <div className="pattern-summary"><strong>{factPatternCount}</strong> facts · <strong>{patterns.length - factPatternCount}</strong> heuristics</div> : <div className="risk-summary"><strong>{highRiskCount}</strong> high · <strong>{riskCount - highRiskCount}</strong> medium/low</div>}</div>
           {mapMode === "architecture" && <div className="layer-guide" aria-hidden="true">
             {(scope === "all" ? ["Tests"] : []).concat(["Entry points", "Application", "Domain", "Infrastructure", "Support"]).map((layer) => <span key={layer}>{layer}</span>)}
           </div>}
           <div className={`graph-surface${mapMode !== "architecture" ? " flow-surface" : ""}`}>
             {error ? <div className="state-card error-state"><strong>Graph could not be loaded</strong><p>{error}</p></div> : !graph ? (
               <div className="state-card loading-state"><span aria-hidden="true" /><strong>Loading repository graph</strong><p>Validating nodes and dependencies…</p></div>
+            ) : unavailable ? (
+              <div className="state-card"><strong>{unavailable.title}</strong><p>{unavailable.detail}</p></div>
             ) : graph.nodes.length === 0 ? (
-              <div className="state-card"><strong>No Python files found</strong><p>This repository does not contain any analyzable .py files.</p></div>
+              <div className="state-card"><strong>No Python files in this inventory</strong><p>{inventory && coverageStatus.partial ? "The repository tree is incomplete; Python files may exist outside the returned inventory." : "No analyzable .py files were found in the returned snapshot."}</p></div>
             ) : mapMode === "patterns" ? patterns.length ? (
               <div className="pattern-browser">
                 <div className="pattern-list-heading"><div><span>Detected structure</span><h3>{patterns.length} architectural pattern{patterns.length === 1 ? "" : "s"}</h3></div><p>Facts come from proven syntax and framework relationships. Heuristics combine naming, placement, and dependency direction.</p></div>
@@ -960,7 +1007,7 @@ export default function Home() {
                 {symbolsForSelected.map((symbol) => <button className={selectedSymbolId === symbol.id ? "active" : ""} key={symbol.id} onClick={() => setSelectedSymbolId(symbol.id)}>
                   <strong>{symbol.name}</strong><small>{symbol.kind} · L{symbol.start_line}–{symbol.end_line}</small>
                 </button>)}
-              </div> : <p className="no-symbols">No class or function definitions found.</p>}
+              </div> : <p className="no-symbols">{inventory ? "Symbols were not analyzed in inventory mode." : "No class or function definitions found."}</p>}
             </section>
             {selectedNodeFindings.length > 0 && <section className="node-risks">
               <div className="section-heading"><h3>Risk evidence</h3><span>{selectedNodeFindings.length}</span></div>
@@ -980,7 +1027,7 @@ export default function Home() {
                 <p>{claim.text}</p><small>Provenance: {claim.provenance}{claim.evidence_refs?.length ? ` · ${claim.evidence_refs.length} evidence reference${claim.evidence_refs.length === 1 ? "" : "s"}` : ""}</small>
               </article>)}</div>
             </section>}
-            {selectedSymbol?.evidence_packet && LOCAL_ANALYZER_ENABLED && <section className="ai-interpretation-section">
+            {selectedSymbol?.evidence_packet && LOCAL_INTERPRETATION_ENABLED && <section className="ai-interpretation-section">
               <div className="section-heading"><h3>AI interpretation</h3><span className="interpretation-label">Optional</span></div>
               <p className="ai-intro">Generate a deeper explanation from this symbol’s evidence packet and visible source. Static facts above remain unchanged.</p>
               {!aiInterpretation && <button className="interpret-button" type="button" onClick={interpretSelectedSymbol} disabled={isInterpreting}>
@@ -1032,9 +1079,9 @@ export default function Home() {
               )}
               {sourceIsTruncated && <p className="truncation-note">Only the first 200 KB are shown.</p>}
             </section>
-            <section className="connections"><h3>Imports</h3>
-              <div className="connection-group"><span>Outgoing</span>{outgoing.length ? outgoing.map((edge) => <button key={edge.id} onClick={() => selectFileNode(edge.target)}>→ {nodePath(edge.target)}</button>) : <p>None in current graph</p>}</div>
-              <div className="connection-group"><span>Incoming</span>{incoming.length ? incoming.map((edge) => <button key={edge.id} onClick={() => selectFileNode(edge.source)}>← {nodePath(edge.source)}</button>) : <p>None in current graph</p>}</div>
+            <section className="connections"><h3>{inventory ? "Candidate imports" : "Imports"}</h3>
+              <div className="connection-group"><span>Outgoing</span>{outgoing.length ? outgoing.map((edge) => <button key={edge.id} onClick={() => selectFileNode(edge.target)}><strong>→ {nodePath(edge.target)}</strong>{inventory && <small>Heuristic · {Math.round((edge.confidence ?? 0.75) * 100)}% · source line {edge.evidence?.line}</small>}</button>) : <p>None in current graph</p>}</div>
+              <div className="connection-group"><span>Incoming</span>{incoming.length ? incoming.map((edge) => <button key={edge.id} onClick={() => selectFileNode(edge.source)}><strong>← {nodePath(edge.source)}</strong>{inventory && <small>Heuristic · {Math.round((edge.confidence ?? 0.75) * 100)}% · source line {edge.evidence?.line}</small>}</button>) : <p>None in current graph</p>}</div>
             </section>
           </> : <p>Select a node to inspect it.</p>}
         </aside>

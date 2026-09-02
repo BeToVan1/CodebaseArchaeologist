@@ -36,6 +36,14 @@
 .origin span { color: #68736b; font-size: 9px; font-weight: 750; letter-spacing: .09em; text-transform: uppercase; }
 .origin a, .origin strong { color: #315b3d; font-size: 10px; font-weight: 650; overflow-wrap: anywhere; text-decoration: none; }
 .origin a:hover { text-decoration: underline; }
+.analysis-tier-notice { margin: -8px 0 18px; padding: 10px; border: 1px solid #dbc9ad; border-radius: 8px; background: #fff9ef; }
+.analysis-tier-notice strong { color: #765426; font-size: 9px; text-transform: uppercase; letter-spacing: .07em; }
+.analysis-tier-notice p { margin: 6px 0 4px; color: #645b4e; font-size: 9px; line-height: 1.45; }
+.analysis-tier-notice small { color: #8b7658; font-size: 8px; line-height: 1.4; }
+.analysis-tier-notice details { margin-top: 8px; font-size: 9px; line-height: 1.5; }
+.analysis-tier-notice summary { cursor: pointer; color: #765426; font-weight: 650; }
+.analysis-tier-notice ul { padding-left: 15px; }
+.analysis-tier-notice li + li { margin-top: 7px; }
 .state-card { position: absolute; z-index: 4; inset: 50% auto auto 50%; width: min(360px, calc(100% - 40px)); padding: 24px; transform: translate(-50%,-50%); border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,.96); box-shadow: 0 10px 30px rgba(44,62,49,.09); text-align: center; }
 .state-card strong { display: block; font: 500 19px Georgia,serif; }
 .state-card p { margin: 8px 0 0; color: var(--muted); font-size: 11px; line-height: 1.55; overflow-wrap: anywhere; }

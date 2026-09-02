@@ -400,7 +400,9 @@ def create_item_route(
     }
     route = symbols["api.create_item_route"]
 
-    assert graph["schema_version"] == "1.0"
+    assert graph["schema_version"] == "1.1"
+    assert graph["analysis"]["tier"] == "deep"
+    assert graph["analysis"]["engine"] == "python-static-analyzer"
     assert route["entrypoint"] == {
         "framework": "fastapi",
         "kind": "route",

@@ -10,7 +10,9 @@ test("Cosmic Python fixture follows the frontend graph contract", async () => {
   const fileNodes = graph.nodes.filter((node) => node.kind === "file");
   const symbolNodes = graph.nodes.filter((node) => node.kind !== "file");
 
-  assert.equal(graph.schema_version, "1.0");
+  assert.equal(graph.schema_version, "1.1");
+  assert.equal(graph.analysis.tier, "deep");
+  assert.ok(graph.analysis.limitations.length > 0);
   assert.equal(graph.repository.name, "cosmicpython/code");
   assert.equal(graph.repository.url, "https://github.com/cosmicpython/code");
   assert.match(graph.snapshot.commit_sha, /^[0-9a-f]{40}$/);
