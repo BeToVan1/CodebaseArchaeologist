@@ -231,6 +231,7 @@ def bootstrap() -> Service:
         "risk_findings": 0,
         "high_risk_findings": 0,
         "medium_risk_findings": 0,
+        "evidence_packets": 4,
         "call_sites": 2,
         "resolved_calls": 2,
         "candidate_calls": 0,
@@ -398,7 +399,7 @@ def create_item_route(
     }
     route = symbols["api.create_item_route"]
 
-    assert graph["schema_version"] == "0.7"
+    assert graph["schema_version"] == "0.8"
     assert route["entrypoint"] == {
         "framework": "fastapi",
         "kind": "route",
@@ -584,6 +585,52 @@ def list_items_route():
     )
     assert persistence_edge["kind"] == "reads"
     assert persistence_edge["confidence"] == 0.98
+    route_packet = symbols["api.list_items_route"]["evidence_packet"]
+    repository_packet = symbols["repository.list_items"]["evidence_packet"]
+    model_packet = symbols["models.ItemModel"]["evidence_packet"]
+    assert route_packet["execution_role"]["classification"] == "fact"
+    assert route_packet["execution_role"]["text"] == (
+        "Receives GET /items and begins an HTTP execution flow."
+    )
+    assert persistence_flow["id"] in repository_packet["flow_ids"]
+    assert persistence_edge["id"] in repository_packet["related_edge_ids"]
+    assert any(
+        claim["text"] == "Reads models.ItemModel."
+        and claim["classification"] == "fact"
+        and claim["evidence_refs"] == [persistence_edge["id"]]
+        for claim in repository_packet["claims"]
+    )
+    assert model_packet["execution_role"]["classification"] == "fact"
+    assert model_packet["source_range"] == {
+        "path": "models.py",
+        "start_line": 6,
+        "end_line": 8,
+    }
+    assert graph["coverage"]["evidence_packets"] == graph["coverage"]["symbol_nodes"]
+
+
+def test_evidence_packet_uses_a_symbol_docstring_as_grounded_summary(tmp_path: Path) -> None:
+    (tmp_path / "service.py").write_text(
+        '''def allocate(order_id: str):
+    """Allocate an order against the first available batch."""
+    return order_id
+''',
+        encoding="utf-8",
+    )
+
+    graph = analyzer.analyze_repository(tmp_path)
+    symbol = next(node for node in graph["nodes"] if node["kind"] == "function")
+    packet = symbol["evidence_packet"]
+
+    assert symbol["docstring"] == "Allocate an order against the first available batch."
+    assert packet["summary"] == {
+        "text": "Allocate an order against the first available batch.",
+        "classification": "fact",
+        "confidence": 1.0,
+        "provenance": "Python docstring at service.py:1",
+    }
+    assert packet["structural_rationale"]["classification"] == "interpretation"
+    assert all(claim["evidence_refs"] for claim in packet["claims"])
 
 
 def test_risk_findings_are_bounded_and_evidence_backed() -> None:
@@ -680,6 +727,7 @@ def test_flow_discovery_marks_the_bounded_depth_as_an_explicit_gap() -> None:
     assert len(flow["ordered_edge_ids"]) == analyzer.MAX_FLOW_DEPTH
     assert flow["completeness"] == "partial"
     assert flow["unresolved_steps"][-1]["reason"] == "maximum-flow-depth-reached"
+
 
 
 

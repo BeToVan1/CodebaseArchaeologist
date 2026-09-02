@@ -14,6 +14,12 @@ import "@xyflow/react/dist/style.css";
 import "./graph.css";
 import { useEffect, useMemo, useState } from "react";
 
+type EvidenceStatement = {
+  text: string;
+  classification: "fact" | "heuristic" | "interpretation";
+  confidence: number;
+  provenance: string;
+};
 type GraphNode = {
   id: string;
   kind: "file" | "class" | "function" | "method";
@@ -27,6 +33,7 @@ type GraphNode = {
   decorators?: string[];
   bases?: string[];
   is_async?: boolean;
+  docstring?: string;
   size_bytes?: number;
   source?: string;
   source_truncated?: boolean;
@@ -48,6 +55,18 @@ type GraphNode = {
     is_abstract: boolean;
     columns: { name: string; line: number; annotation: string }[];
     relationships: { name: string; line: number; annotation: string }[];
+  };
+  evidence_packet?: {
+    version: string;
+    node_id: string;
+    source_range: { path: string; start_line: number; end_line: number };
+    summary: EvidenceStatement;
+    execution_role: EvidenceStatement;
+    structural_rationale: EvidenceStatement;
+    related_edge_ids: string[];
+    flow_ids: string[];
+    finding_ids: string[];
+    claims: Claim[];
   };
 };
 type GraphEdge = {
@@ -108,10 +127,19 @@ type Graph = {
   findings?: RiskFinding[];
 };
 type Claim = {
+  id?: string;
   classification: "fact" | "heuristic" | "interpretation";
   text: string;
   confidence: number;
   provenance: string;
+  evidence_refs?: string[];
+};
+type Explanation = {
+  summary: string;
+  role: string;
+  rationale: string;
+  claims: Claim[];
+  grounding?: { summary: EvidenceStatement; role: EvidenceStatement; rationale: EvidenceStatement };
 };
 
 const filename = (path: string) => path.split("/").at(-1) ?? path;
@@ -151,7 +179,7 @@ function symbolsIn(source: string | undefined) {
   return [...source.matchAll(/^(?:async\s+)?(?:class|def)\s+([A-Za-z_]\w*)/gm)].map((match) => match[1]).slice(0, 5);
 }
 
-function explainNode(node: GraphNode, incoming: GraphEdge[], outgoing: GraphEdge[]): { summary: string; role: string; rationale: string; claims: Claim[] } {
+function explainNode(node: GraphNode, incoming: GraphEdge[], outgoing: GraphEdge[]): Explanation {
   const layer = layerFor(node.path);
   const symbols = symbolsIn(node.source);
   const roles: Record<string, string> = {
@@ -200,7 +228,21 @@ function explainNode(node: GraphNode, incoming: GraphEdge[], outgoing: GraphEdge
   };
 }
 
-function explainSymbol(symbol: GraphNode, incoming: GraphEdge[], outgoing: GraphEdge[]): { summary: string; role: string; rationale: string; claims: Claim[] } {
+function explainSymbol(symbol: GraphNode, incoming: GraphEdge[], outgoing: GraphEdge[]): Explanation {
+  const packet = symbol.evidence_packet;
+  if (packet) {
+    return {
+      summary: packet.summary.text,
+      role: packet.execution_role.text,
+      rationale: packet.structural_rationale.text,
+      claims: packet.claims,
+      grounding: {
+        summary: packet.summary,
+        role: packet.execution_role,
+        rationale: packet.structural_rationale,
+      },
+    };
+  }
   const range = `lines ${symbol.start_line}–${symbol.end_line}`;
   const asyncPrefix = symbol.is_async ? "async " : "";
   const decorators = symbol.decorators?.length ? ` It is decorated by ${symbol.decorators.join(", ")}.` : "";
@@ -255,6 +297,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+function isEvidenceStatement(value: unknown): value is EvidenceStatement {
+  return isRecord(value)
+    && typeof value.text === "string"
+    && ["fact", "heuristic", "interpretation"].includes(String(value.classification))
+    && typeof value.confidence === "number"
+    && value.confidence >= 0
+    && value.confidence <= 1
+    && typeof value.provenance === "string";
+}
+
 function validateGraph(value: unknown): Graph {
   if (!isRecord(value) || typeof value.schema_version !== "string") {
     throw new Error("Invalid graph: schema_version must be a string.");
@@ -289,6 +341,24 @@ function validateGraph(value: unknown): Graph {
       || Number(node.end_line) < Number(node.start_line)
     )) {
       throw new Error(`Invalid graph: symbol "${node.id}" must include its name and exact source range.`);
+    }
+    if (node.evidence_packet !== undefined) {
+      const packet = node.evidence_packet;
+      if (
+        !isRecord(packet)
+        || packet.node_id !== node.id
+        || !isRecord(packet.source_range)
+        || packet.source_range.path !== node.path
+        || !isEvidenceStatement(packet.summary)
+        || !isEvidenceStatement(packet.execution_role)
+        || !isEvidenceStatement(packet.structural_rationale)
+        || !Array.isArray(packet.related_edge_ids)
+        || !Array.isArray(packet.flow_ids)
+        || !Array.isArray(packet.finding_ids)
+        || !Array.isArray(packet.claims)
+      ) {
+        throw new Error(`Invalid graph: symbol "${node.id}" has an invalid evidence packet.`);
+      }
     }
     nodeIds.add(node.id);
   }
@@ -716,12 +786,12 @@ export default function Home() {
             </section>}
             {explanation && <section className="explanation-section">
               <div className="section-heading"><h3>Understanding</h3><span className="analysis-label">Static analysis</span></div>
-              <div className="explanation-block"><h4>What it does</h4><p>{explanation.summary}</p></div>
-              <div className="explanation-block"><h4>Execution role</h4><p>{explanation.role}</p></div>
-              <div className="explanation-block"><h4>Why it is structured here</h4><p>{explanation.rationale}</p></div>
+              <div className="explanation-block"><h4>What it does</h4><p>{explanation.summary}</p>{explanation.grounding && <small className={`grounding-label ${explanation.grounding.summary.classification}`}>{explanation.grounding.summary.classification} · {Math.round(explanation.grounding.summary.confidence * 100)}% · {explanation.grounding.summary.provenance}</small>}</div>
+              <div className="explanation-block"><h4>Execution role</h4><p>{explanation.role}</p>{explanation.grounding && <small className={`grounding-label ${explanation.grounding.role.classification}`}>{explanation.grounding.role.classification} · {Math.round(explanation.grounding.role.confidence * 100)}% · {explanation.grounding.role.provenance}</small>}</div>
+              <div className="explanation-block"><h4>Why it is structured here</h4><p>{explanation.rationale}</p>{explanation.grounding && <small className={`grounding-label ${explanation.grounding.rationale.classification}`}>{explanation.grounding.rationale.classification} · {Math.round(explanation.grounding.rationale.confidence * 100)}% · {explanation.grounding.rationale.provenance}</small>}</div>
               <div className="claims"><h4>Claims and evidence</h4>{explanation.claims.map((claim, index) => <article className={`claim ${claim.classification}`} key={`${claim.classification}:${index}`}>
                 <div><span>{claim.classification}</span><strong>{Math.round(claim.confidence * 100)}% confidence</strong></div>
-                <p>{claim.text}</p><small>Provenance: {claim.provenance}</small>
+                <p>{claim.text}</p><small>Provenance: {claim.provenance}{claim.evidence_refs?.length ? ` · ${claim.evidence_refs.length} evidence reference${claim.evidence_refs.length === 1 ? "" : "s"}` : ""}</small>
               </article>)}</div>
             </section>}
             {selectedSymbol?.sqlalchemy && <section className="model-metadata">
@@ -765,6 +835,7 @@ export default function Home() {
     </main>
   );
 }
+
 
 
 

@@ -175,6 +175,9 @@ class SymbolVisitor(ast.NodeVisitor):
             symbol["bases"] = [ast.unparse(base) for base in node.bases]
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             symbol["is_async"] = isinstance(node, ast.AsyncFunctionDef)
+        docstring = ast.get_docstring(node, clean=True)
+        if docstring:
+            symbol["docstring"] = docstring
         self.nodes.append(symbol)
         self.edges.append(
             {
@@ -1513,6 +1516,226 @@ def detect_risk_findings(
     )
 
 
+def evidence_layer(path: str) -> tuple[str, str, str]:
+    """Return a bounded architectural role and interpretation for a source path."""
+    if path.startswith("tests/"):
+        return (
+            "test",
+            "Verifies production behavior and records an expected outcome.",
+            "Keeping verification code outside production modules separates test setup from runtime behavior.",
+        )
+    if "/entrypoints/" in path or path.endswith(("bootstrap.py", "views.py")):
+        return (
+            "entrypoint",
+            "Receives or starts an execution flow and delegates work inward.",
+            "A boundary module keeps delivery and startup concerns from leaking into application behavior.",
+        )
+    if "/service_layer/" in path or "/application/" in path:
+        return (
+            "application service",
+            "Coordinates an application use case across domain and infrastructure collaborators.",
+            "An application layer centralizes orchestration without coupling domain objects to delivery technology.",
+        )
+    if "/domain/" in path:
+        return (
+            "domain behavior",
+            "Represents business vocabulary or behavior independently of delivery and persistence details.",
+            "This placement protects business rules from framework and database dependencies.",
+        )
+    if "/adapters/" in path or "/infrastructure/" in path:
+        return (
+            "infrastructure adapter",
+            "Translates between application-facing behavior and an external technology.",
+            "An adapter boundary keeps replaceable infrastructure details behind application-facing code.",
+        )
+    return (
+        "supporting code",
+        "Provides reusable behavior or configuration to other repository modules.",
+        "The available structural evidence does not prove a more specific architectural intent.",
+    )
+
+
+def build_symbol_evidence_packets(
+    symbol_nodes: list[dict[str, Any]],
+    relationship_edges: list[dict[str, Any]],
+    flows: list[dict[str, Any]],
+    findings: list[dict[str, Any]],
+) -> int:
+    """Attach retrieval-ready, classification-preserving evidence to every symbol."""
+    symbol_index = {node["id"]: node for node in symbol_nodes}
+    relationship_kinds = {"calls", "extends", "may-dispatch-to", "depends-on", "reads", "writes"}
+    incoming: dict[str, list[dict[str, Any]]] = {}
+    outgoing: dict[str, list[dict[str, Any]]] = {}
+    for edge in relationship_edges:
+        if edge["kind"] not in relationship_kinds:
+            continue
+        outgoing.setdefault(edge["source"], []).append(edge)
+        incoming.setdefault(edge["target"], []).append(edge)
+    for edges in [*incoming.values(), *outgoing.values()]:
+        edges.sort(key=lambda edge: edge["id"])
+
+    flow_ids: dict[str, list[str]] = {}
+    for flow in flows:
+        for node_id in flow["ordered_node_ids"]:
+            flow_ids.setdefault(node_id, []).append(flow["id"])
+    finding_ids: dict[str, list[str]] = {}
+    findings_by_id = {finding["id"]: finding for finding in findings}
+    for finding in findings:
+        for node_id in [finding["node_id"], *finding["related_node_ids"]]:
+            finding_ids.setdefault(node_id, []).append(finding["id"])
+
+    for symbol in symbol_nodes:
+        symbol_incoming = incoming.get(symbol["id"], [])
+        symbol_outgoing = outgoing.get(symbol["id"], [])
+        layer, layer_role, layer_rationale = evidence_layer(symbol["path"])
+        model = symbol.get("sqlalchemy", {}).get("kind") == "model"
+        route = symbol.get("entrypoint", {}).get("kind") == "route"
+        symbol_flows = sorted(flow_ids.get(symbol["id"], []))
+        symbol_findings = sorted(finding_ids.get(symbol["id"], []))
+
+        if symbol.get("docstring"):
+            documented = " ".join(symbol["docstring"].split())
+            summary_text = documented[:297] + "..." if len(documented) > 300 else documented
+            summary_provenance = f"Python docstring at {symbol['path']}:{symbol['definition_line']}"
+        elif route:
+            summary_text = f"Handles {symbol['entrypoint']['label']} as a proven FastAPI route."
+            summary_provenance = "FastAPI route decorator resolved from the Python AST"
+        elif model:
+            table = symbol["sqlalchemy"].get("table_name") or symbol["sqlalchemy"].get("table_expression")
+            summary_text = f"Defines a SQLAlchemy model{f' mapped to {table}' if table else ''}."
+            summary_provenance = "SQLAlchemy declarative inheritance and mapped annotations"
+        else:
+            async_prefix = "async " if symbol.get("is_async") else ""
+            summary_text = f"Defines the {async_prefix}{symbol['kind']} {symbol['qualified_name']}."
+            summary_provenance = "Python AST symbol definition"
+
+        if route:
+            role_text = f"Receives {symbol['entrypoint']['label']} and begins an HTTP execution flow."
+            role_provenance = "Resolved FastAPI decorator"
+            rationale_text = "Keeping HTTP routing at a boundary lets application and domain code remain independent of request delivery details."
+        elif model:
+            table = symbol["sqlalchemy"].get("table_name") or "a database table"
+            role_text = f"Maps application state to {table} through SQLAlchemy."
+            role_provenance = "Resolved SQLAlchemy declarative model"
+            rationale_text = "A dedicated mapping type makes persistence structure explicit while callers can refer to a stable application concept."
+        else:
+            role_text = layer_role
+            role_provenance = f"Path convention and symbol placement: {symbol['path']}"
+            rationale_text = layer_rationale
+
+        claims: list[dict[str, Any]] = [
+            {
+                "id": f"claim:{symbol['id']}:source-range",
+                "classification": "fact",
+                "text": (
+                    f"{symbol['qualified_name']} occupies lines {symbol['start_line']}–{symbol['end_line']} "
+                    f"in {symbol['path']}."
+                ),
+                "confidence": 1.0,
+                "provenance": "Python AST source range",
+                "evidence_refs": [symbol["id"]],
+            },
+            {
+                "id": f"claim:{symbol['id']}:relationships",
+                "classification": "fact",
+                "text": (
+                    f"{len(symbol_outgoing)} outgoing and {len(symbol_incoming)} incoming execution or structural "
+                    "relationships were resolved."
+                ),
+                "confidence": 1.0,
+                "provenance": "Resolved relationship edge IDs in this evidence packet",
+                "evidence_refs": [
+                    symbol["id"],
+                    *[edge["id"] for edge in [*symbol_outgoing, *symbol_incoming]],
+                ],
+            },
+        ]
+        for edge in symbol_outgoing[:6]:
+            target = symbol_index.get(edge["target"])
+            if target is None:
+                continue
+            claims.append(
+                {
+                    "id": f"claim:{symbol['id']}:edge:{edge['id']}",
+                    "classification": "fact" if edge["kind"] != "may-dispatch-to" else "heuristic",
+                    "text": f"{edge['kind'].replace('-', ' ').capitalize()} {target['qualified_name']}.",
+                    "confidence": float(edge.get("confidence", 1.0)),
+                    "provenance": (
+                        f"{edge.get('resolution_method', 'static relationship')} at "
+                        f"{edge.get('evidence', {}).get('path', symbol['path'])}:"
+                        f"{edge.get('evidence', {}).get('line', symbol['definition_line'])}"
+                    ),
+                    "evidence_refs": [edge["id"]],
+                }
+            )
+        if symbol_flows:
+            claims.append(
+                {
+                    "id": f"claim:{symbol['id']}:flows",
+                    "classification": "fact",
+                    "text": f"Participates in {len(symbol_flows)} representative execution flow{'s' if len(symbol_flows) != 1 else ''}.",
+                    "confidence": 1.0,
+                    "provenance": "Bounded flow traversal from proven framework entrypoints",
+                    "evidence_refs": symbol_flows,
+                }
+            )
+        for finding_id in symbol_findings:
+            finding = findings_by_id[finding_id]
+            claims.append(
+                {
+                    "id": f"claim:{symbol['id']}:finding:{finding_id}",
+                    "classification": finding["classification"],
+                    "text": finding["summary"],
+                    "confidence": finding["confidence"],
+                    "provenance": finding["provenance"],
+                    "evidence_refs": [finding_id],
+                }
+            )
+        claims.append(
+            {
+                "id": f"claim:{symbol['id']}:role",
+                "classification": "heuristic" if not (route or model) else "fact",
+                "text": role_text,
+                "confidence": 0.9 if not (route or model) else 0.98,
+                "provenance": role_provenance,
+                "evidence_refs": [symbol["id"]],
+            }
+        )
+
+        symbol["evidence_packet"] = {
+            "version": "1",
+            "node_id": symbol["id"],
+            "source_range": {
+                "path": symbol["path"],
+                "start_line": symbol["start_line"],
+                "end_line": symbol["end_line"],
+            },
+            "summary": {
+                "text": summary_text,
+                "classification": "fact",
+                "confidence": 1.0,
+                "provenance": summary_provenance,
+            },
+            "execution_role": {
+                "text": role_text,
+                "classification": "fact" if route or model else "heuristic",
+                "confidence": 0.98 if route or model else 0.9,
+                "provenance": role_provenance,
+            },
+            "structural_rationale": {
+                "text": rationale_text,
+                "classification": "interpretation",
+                "confidence": 0.72,
+                "provenance": f"Architectural pattern interpretation for the {layer} layer",
+            },
+            "related_edge_ids": [edge["id"] for edge in [*symbol_outgoing, *symbol_incoming]],
+            "flow_ids": symbol_flows,
+            "finding_ids": symbol_findings,
+            "claims": claims,
+        }
+    return len(symbol_nodes)
+
+
 # --------------------------------------------------------------------------
 # Edge extraction
 # --------------------------------------------------------------------------
@@ -1601,9 +1824,12 @@ def analyze_repository(repo_root: Path) -> dict[str, Any]:
     findings = detect_risk_findings(
         file_nodes, symbol_nodes, import_edges, relationship_edges
     )
+    evidence_packets = build_symbol_evidence_packets(
+        symbol_nodes, relationship_edges, flows, findings
+    )
 
     return {
-        "schema_version": "0.7",
+        "schema_version": "0.8",
         "repo_root": str(repo_root),
         "python_files_total_found": total_files_found,
         "python_files_analyzed": len(python_files),
@@ -1620,6 +1846,7 @@ def analyze_repository(repo_root: Path) -> dict[str, Any]:
             "risk_findings": len(findings),
             "high_risk_findings": sum(finding["severity"] == "high" for finding in findings),
             "medium_risk_findings": sum(finding["severity"] == "medium" for finding in findings),
+            "evidence_packets": evidence_packets,
             **relationship_coverage,
             **sqlalchemy_coverage,
             **sqlalchemy_access_coverage,
@@ -1693,6 +1920,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 

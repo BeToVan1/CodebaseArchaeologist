@@ -10,7 +10,7 @@ test("Cosmic Python fixture follows the frontend graph contract", async () => {
   const fileNodes = graph.nodes.filter((node) => node.kind === "file");
   const symbolNodes = graph.nodes.filter((node) => node.kind !== "file");
 
-  assert.equal(graph.schema_version, "0.7");
+  assert.equal(graph.schema_version, "0.8");
   assert.equal(graph.repository.name, "cosmicpython/code");
   assert.equal(graph.repository.url, "https://github.com/cosmicpython/code");
   assert.match(graph.snapshot.commit_sha, /^[0-9a-f]{40}$/);
@@ -19,6 +19,11 @@ test("Cosmic Python fixture follows the frontend graph contract", async () => {
   assert.ok(fileNodes.every((node) => typeof node.source === "string"));
   assert.ok(fileNodes.every((node) => Number.isInteger(node.size_bytes) && node.size_bytes >= 0));
   assert.ok(symbolNodes.every((node) => Number.isInteger(node.start_line) && Number.isInteger(node.end_line)));
+  assert.ok(symbolNodes.every((node) =>
+    node.evidence_packet?.node_id === node.id
+    && node.evidence_packet.summary.classification === "fact"
+    && node.evidence_packet.claims.every((claim) => claim.evidence_refs.length > 0)
+  ));
   assert.ok(graph.edges.every((edge) => edge.id && nodeIds.has(edge.source) && nodeIds.has(edge.target)));
   assert.ok(graph.findings.length > 0);
   assert.ok(graph.findings.every((finding) =>
@@ -29,4 +34,5 @@ test("Cosmic Python fixture follows the frontend graph contract", async () => {
     && finding.provenance
   ));
 });
+
 
