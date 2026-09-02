@@ -12,168 +12,12 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import "./graph.css";
-import { useEffect, useMemo, useState } from "react";
-import { inventoryStatus, inventoryUnavailable, type InventoryCoverage } from "./analysis-status";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { inventoryStatus, inventoryUnavailable } from "./analysis-status";
+import type { Graph, GraphNode, GraphEdge, EvidenceStatement, Claim, ExecutionFlow, RiskFinding, ArchitecturePattern } from "./graph-types";
+import { isRecord, validateGraph } from "./graph-validation";
+import { canonicalGithubUrl, readReportFile, reportFilename, serializeReport } from "./graph-report";
 
-type EvidenceStatement = {
-  text: string;
-  classification: "fact" | "heuristic" | "interpretation";
-  confidence: number;
-  provenance: string;
-};
-type GraphNode = {
-  id: string;
-  kind: "file" | "class" | "function" | "method";
-  path: string;
-  name?: string;
-  qualified_name?: string;
-  start_line?: number;
-  definition_line?: number;
-  end_line?: number;
-  parent_id?: string;
-  decorators?: string[];
-  bases?: string[];
-  is_async?: boolean;
-  docstring?: string;
-  size_bytes?: number;
-  source?: string;
-  source_truncated?: boolean;
-  source_error?: string;
-  framework?: string;
-  architectural_role?: string;
-  entrypoint?: {
-    framework: string;
-    kind: string;
-    method?: string;
-    route_path?: string | null;
-    label: string;
-  };
-  entrypoint_evidence?: { path?: string; line?: number; column?: number; expression?: string };
-  sqlalchemy?: {
-    kind: "declarative-base" | "abstract-model" | "model";
-    table_name?: string | null;
-    table_expression?: string | null;
-    is_abstract: boolean;
-    columns: { name: string; line: number; annotation: string }[];
-    relationships: { name: string; line: number; annotation: string }[];
-  };
-  evidence_packet?: {
-    version: string;
-    node_id: string;
-    source_range: { path: string; start_line: number; end_line: number };
-    summary: EvidenceStatement;
-    execution_role: EvidenceStatement;
-    structural_rationale: EvidenceStatement;
-    related_edge_ids: string[];
-    flow_ids: string[];
-    finding_ids: string[];
-    pattern_ids: string[];
-    claims: Claim[];
-  };
-};
-type GraphEdge = {
-  id: string;
-  source: string;
-  target: string;
-  kind: "imports" | "contains" | "calls" | "extends" | "may-dispatch-to" | "depends-on" | "reads" | "writes";
-  confidence?: number;
-  classification?: "fact" | "heuristic" | "interpretation";
-  resolution_method?: string;
-  evidence?: { path?: string; line?: number; column?: number; expression?: string };
-};
-type RepositoryMetadata = {
-  name: string;
-  url?: string;
-  pinned_url?: string;
-  source: "github" | "local";
-};
-type SnapshotMetadata = { commit_sha: string };
-type UnresolvedStep = {
-  source_id: string;
-  reason: string;
-  evidence: { path?: string; line?: number; column?: number; expression?: string };
-};
-type ExecutionFlow = {
-  id: string;
-  entrypoint_id: string;
-  label: string;
-  framework: string;
-  ordered_node_ids: string[];
-  ordered_edge_ids: string[];
-  confidence: number;
-  completeness: "complete" | "partial";
-  unresolved_steps: UnresolvedStep[];
-};
-type RiskFinding = {
-  id: string;
-  rule_id: "large-symbol" | "high-fan-in" | "high-fan-out" | "import-cycle";
-  node_id: string;
-  related_node_ids: string[];
-  title: string;
-  severity: "low" | "medium" | "high";
-  classification: "fact" | "heuristic" | "interpretation";
-  confidence: number;
-  summary: string;
-  provenance: string;
-  evidence: { path: string; line: number; end_line?: number; expression?: string };
-  metrics: Record<string, number>;
-  remediation: {
-    classification: "heuristic";
-    confidence: number;
-    provenance: string;
-    why_it_matters: string;
-    actions: Array<{
-      id: string;
-      title: string;
-      description: string;
-      priority: number;
-      effort: "small" | "medium" | "large";
-      classification: "heuristic";
-      confidence: number;
-      evidence_refs: string[];
-    }>;
-    validation_steps: string[];
-  };
-};
-type ArchitecturePattern = {
-  id: string;
-  pattern_id: "layered-architecture" | "fastapi-boundary" | "dependency-injection" | "data-mapper" | "repository-boundary" | "unit-of-work";
-  title: string;
-  classification: "fact" | "heuristic";
-  confidence: number;
-  summary: string;
-  provenance: string;
-  node_ids: string[];
-  edge_ids: string[];
-  evidence_refs: string[];
-  metrics: Record<string, number>;
-};
-type Graph = {
-  schema_version: string;
-  repository?: RepositoryMetadata;
-  snapshot?: SnapshotMetadata;
-  source_url?: string;
-  repo_root?: string;
-  nodes: GraphNode[];
-  edges: GraphEdge[];
-  flows?: ExecutionFlow[];
-  findings?: RiskFinding[];
-  patterns?: ArchitecturePattern[];
-  coverage?: InventoryCoverage;
-  analysis?: {
-    tier: "inventory" | "deep";
-    engine: string;
-    limitations: string[];
-  };
-};
-type Claim = {
-  id?: string;
-  classification: "fact" | "heuristic" | "interpretation";
-  text: string;
-  confidence: number;
-  provenance: string;
-  evidence_refs?: string[];
-};
 type Explanation = {
   summary: string;
   role: string;
@@ -357,20 +201,6 @@ function explainSymbol(symbol: GraphNode, incoming: GraphEdge[], outgoing: Graph
   };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function isEvidenceStatement(value: unknown): value is EvidenceStatement {
-  return isRecord(value)
-    && typeof value.text === "string"
-    && ["fact", "heuristic", "interpretation"].includes(String(value.classification))
-    && typeof value.confidence === "number"
-    && value.confidence >= 0
-    && value.confidence <= 1
-    && typeof value.provenance === "string";
-}
-
 function isAIInterpretationSection(value: unknown): value is AIInterpretationSection {
   return isRecord(value)
     && typeof value.text === "string"
@@ -398,209 +228,6 @@ function validateAIInterpretation(value: unknown): AIInterpretation {
     throw new Error("The analyzer returned an invalid AI interpretation.");
   }
   return value as AIInterpretation;
-}
-
-function validateGraph(value: unknown): Graph {
-  if (!isRecord(value) || typeof value.schema_version !== "string") {
-    throw new Error("Invalid graph: schema_version must be a string.");
-  }
-  if (!Array.isArray(value.nodes) || !Array.isArray(value.edges)) {
-    throw new Error("Invalid graph: nodes and edges must be arrays.");
-  }
-
-  const nodes = value.nodes as unknown[];
-  const edges = value.edges as unknown[];
-  const nodeIds = new Set<string>();
-  for (const [index, node] of nodes.entries()) {
-    if (!isRecord(node) || typeof node.id !== "string" || !["file", "class", "function", "method"].includes(String(node.kind)) || typeof node.path !== "string") {
-      throw new Error(`Invalid graph: node ${index + 1} has invalid id, path, or kind fields.`);
-    }
-    if (nodeIds.has(node.id)) throw new Error(`Invalid graph: duplicate node id "${node.id}".`);
-    if (node.source !== undefined && typeof node.source !== "string") {
-      throw new Error(`Invalid graph: source for "${node.id}" must be a string.`);
-    }
-    if (node.size_bytes !== undefined && (typeof node.size_bytes !== "number" || node.size_bytes < 0)) {
-      throw new Error(`Invalid graph: size_bytes for "${node.id}" must be a non-negative number.`);
-    }
-    if (node.source_error !== undefined && typeof node.source_error !== "string") {
-      throw new Error(`Invalid graph: source_error for "${node.id}" must be a string.`);
-    }
-    if (node.kind !== "file" && (
-      typeof node.name !== "string"
-      || typeof node.qualified_name !== "string"
-      || !Number.isInteger(node.start_line)
-      || !Number.isInteger(node.end_line)
-      || Number(node.start_line) < 1
-      || Number(node.end_line) < Number(node.start_line)
-    )) {
-      throw new Error(`Invalid graph: symbol "${node.id}" must include its name and exact source range.`);
-    }
-    if (node.evidence_packet !== undefined) {
-      const packet = node.evidence_packet;
-      if (
-        !isRecord(packet)
-        || packet.node_id !== node.id
-        || !isRecord(packet.source_range)
-        || packet.source_range.path !== node.path
-        || !isEvidenceStatement(packet.summary)
-        || !isEvidenceStatement(packet.execution_role)
-        || !isEvidenceStatement(packet.structural_rationale)
-        || !Array.isArray(packet.related_edge_ids)
-        || !Array.isArray(packet.flow_ids)
-        || !Array.isArray(packet.finding_ids)
-        || !Array.isArray(packet.pattern_ids)
-        || !Array.isArray(packet.claims)
-      ) {
-        throw new Error(`Invalid graph: symbol "${node.id}" has an invalid evidence packet.`);
-      }
-    }
-    nodeIds.add(node.id);
-  }
-  for (const [index, edge] of edges.entries()) {
-    if (!isRecord(edge) || typeof edge.id !== "string" || typeof edge.source !== "string" || typeof edge.target !== "string" || !["imports", "contains", "calls", "extends", "may-dispatch-to", "depends-on", "reads", "writes"].includes(String(edge.kind))) {
-      throw new Error(`Invalid graph: edge ${index + 1} has invalid id, endpoints, or kind.`);
-    }
-    if (edge.confidence !== undefined && (typeof edge.confidence !== "number" || edge.confidence < 0 || edge.confidence > 1)) {
-      throw new Error(`Invalid graph: edge "${edge.id}" has invalid confidence.`);
-    }
-    if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target)) {
-      throw new Error(`Invalid graph: edge "${edge.id}" references a missing node.`);
-    }
-  }
-  if (value.repository !== undefined) {
-    const repository = value.repository;
-    if (!isRecord(repository) || typeof repository.name !== "string" || !["github", "local"].includes(String(repository.source))) {
-      throw new Error("Invalid graph: repository metadata must include name and source.");
-    }
-  }
-  if (value.snapshot !== undefined) {
-    const snapshot = value.snapshot;
-    if (!isRecord(snapshot) || typeof snapshot.commit_sha !== "string" || !/^[0-9a-f]{40}$/i.test(snapshot.commit_sha)) {
-      throw new Error("Invalid graph: snapshot metadata must include a full commit SHA.");
-    }
-  }
-  if (value.analysis !== undefined) {
-    const analysis = value.analysis;
-    if (
-      !isRecord(analysis)
-      || !["inventory", "deep"].includes(String(analysis.tier))
-      || typeof analysis.engine !== "string"
-      || !Array.isArray(analysis.limitations)
-      || !analysis.limitations.every((item) => typeof item === "string")
-    ) {
-      throw new Error("Invalid graph: analysis metadata must identify its tier and limitations.");
-    }
-  }
-  if (value.coverage !== undefined) {
-    if (!isRecord(value.coverage)) throw new Error("Invalid graph: coverage must be an object.");
-    for (const key of ["python_files_total_found", "python_files_analyzed", "source_failures", "source_truncations", "unmatched_imports"]) {
-      const count = value.coverage[key];
-      if (count !== undefined && (!Number.isInteger(count) || Number(count) < 0)) throw new Error(`Invalid graph: coverage ${key} must be a non-negative integer.`);
-    }
-    for (const key of ["python_files_truncated", "github_tree_truncated"]) {
-      if (value.coverage[key] !== undefined && typeof value.coverage[key] !== "boolean") throw new Error(`Invalid graph: coverage ${key} must be a boolean.`);
-    }
-  }
-  if (value.flows !== undefined) {
-    if (!Array.isArray(value.flows)) throw new Error("Invalid graph: flows must be an array.");
-    const edgeIds = new Set((edges as GraphEdge[]).map((edge) => edge.id));
-    const edgeById = new Map((edges as GraphEdge[]).map((edge) => [edge.id, edge]));
-    for (const [index, flow] of value.flows.entries()) {
-      if (
-        !isRecord(flow)
-        || typeof flow.id !== "string"
-        || typeof flow.entrypoint_id !== "string"
-        || !nodeIds.has(flow.entrypoint_id)
-        || typeof flow.label !== "string"
-        || typeof flow.framework !== "string"
-        || !Array.isArray(flow.ordered_node_ids)
-        || !Array.isArray(flow.ordered_edge_ids)
-        || !flow.ordered_node_ids.length
-        || !flow.ordered_node_ids.every((id) => typeof id === "string" && nodeIds.has(id))
-        || !flow.ordered_edge_ids.every((id) => typeof id === "string" && edgeIds.has(id))
-        || flow.ordered_edge_ids.length !== flow.ordered_node_ids.length - 1
-        || typeof flow.confidence !== "number"
-        || flow.confidence < 0
-        || flow.confidence > 1
-        || !["complete", "partial"].includes(String(flow.completeness))
-        || !Array.isArray(flow.unresolved_steps)
-        || !flow.unresolved_steps.every((step) =>
-          isRecord(step)
-          && typeof step.source_id === "string"
-          && nodeIds.has(step.source_id)
-          && typeof step.reason === "string"
-          && isRecord(step.evidence),
-        )
-      ) {
-        throw new Error(`Invalid graph: flow ${index + 1} has an invalid path or metadata.`);
-      }
-      const typedFlow = flow as unknown as ExecutionFlow;
-      if (!typedFlow.ordered_edge_ids.every((edgeId, edgeIndex) => {
-        const edge = edgeById.get(edgeId);
-        return edge?.source === typedFlow.ordered_node_ids[edgeIndex]
-          && edge.target === typedFlow.ordered_node_ids[edgeIndex + 1];
-      })) {
-        throw new Error(`Invalid graph: flow ${index + 1} contains a disconnected edge.`);
-      }
-    }
-  }
-  if (value.findings !== undefined) {
-    if (!Array.isArray(value.findings)) throw new Error("Invalid graph: findings must be an array.");
-    for (const [index, finding] of value.findings.entries()) {
-      if (
-        !isRecord(finding)
-        || typeof finding.id !== "string"
-        || typeof finding.rule_id !== "string"
-        || typeof finding.node_id !== "string"
-        || !nodeIds.has(finding.node_id)
-        || !Array.isArray(finding.related_node_ids)
-        || !finding.related_node_ids.every((id) => typeof id === "string" && nodeIds.has(id))
-        || typeof finding.title !== "string"
-        || !["low", "medium", "high"].includes(String(finding.severity))
-        || !["fact", "heuristic", "interpretation"].includes(String(finding.classification))
-        || typeof finding.confidence !== "number"
-        || finding.confidence < 0
-        || finding.confidence > 1
-        || typeof finding.summary !== "string"
-        || typeof finding.provenance !== "string"
-        || !isRecord(finding.evidence)
-        || typeof finding.evidence.path !== "string"
-        || !Number.isInteger(finding.evidence.line)
-        || !isRecord(finding.metrics)
-      ) {
-        throw new Error(`Invalid graph: finding ${index + 1} has invalid evidence or classification.`);
-      }
-    }
-  }
-  if (value.patterns !== undefined) {
-    if (!Array.isArray(value.patterns)) throw new Error("Invalid graph: patterns must be an array.");
-    const edgeIds = new Set((edges as GraphEdge[]).map((edge) => edge.id));
-    for (const [index, pattern] of value.patterns.entries()) {
-      if (
-        !isRecord(pattern)
-        || typeof pattern.id !== "string"
-        || typeof pattern.pattern_id !== "string"
-        || typeof pattern.title !== "string"
-        || !["fact", "heuristic"].includes(String(pattern.classification))
-        || typeof pattern.confidence !== "number"
-        || pattern.confidence < 0
-        || pattern.confidence > 1
-        || typeof pattern.summary !== "string"
-        || typeof pattern.provenance !== "string"
-        || !Array.isArray(pattern.node_ids)
-        || !pattern.node_ids.length
-        || !pattern.node_ids.every((id) => typeof id === "string" && nodeIds.has(id))
-        || !Array.isArray(pattern.edge_ids)
-        || !pattern.edge_ids.every((id) => typeof id === "string" && edgeIds.has(id))
-        || !Array.isArray(pattern.evidence_refs)
-        || !pattern.evidence_refs.length
-        || !isRecord(pattern.metrics)
-      ) {
-        throw new Error(`Invalid graph: architecture pattern ${index + 1} has invalid evidence or classification.`);
-      }
-    }
-  }
-  return value as Graph;
 }
 
 function githubName(url: string) {
@@ -637,25 +264,89 @@ export default function Home() {
   const [aiInterpretation, setAIInterpretation] = useState<AIInterpretation | null>(null);
   const [isInterpreting, setIsInterpreting] = useState(false);
   const [interpretationError, setInterpretationError] = useState<string | null>(null);
+  const [importedReport, setImportedReport] = useState<string | null>(null);
+  const [isLoadingReport, setIsLoadingReport] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const graphRequest = useRef(0);
+  const interpretationRequest = useRef(0);
+  const reportInput = useRef<HTMLInputElement>(null);
+  const isBusy = isAnalyzing || isLoadingReport;
+
+  function installGraph(validated: Graph, reportName: string | null = null) {
+    interpretationRequest.current++;
+    setAIInterpretation(null);
+    setInterpretationError(null);
+    setIsInterpreting(false);
+    setGraph(validated);
+    setImportedReport(reportName);
+    setError(null);
+    setAnalysisError(null);
+    setReportError(null);
+    setSelectedId(primaryNodeId(validated));
+    setSelectedSymbolId(null);
+    setSelectedFlowId(validated.flows?.[0]?.id ?? null);
+    setSelectedRiskId(validated.findings?.[0]?.id ?? null);
+    setMapMode("architecture");
+    setQuery("");
+    setScope("production");
+  }
+
+  async function loadExample() {
+    const requestId = ++graphRequest.current;
+    setIsLoadingReport(true);
+    setReportError(null);
+    try {
+      const response = await fetch("/graph.json");
+      if (!response.ok) throw new Error(`Example request failed (${response.status})`);
+      const validated = validateGraph(await response.json());
+      if (requestId === graphRequest.current) installGraph(validated);
+    } catch (cause) {
+      if (requestId === graphRequest.current) {
+        const message = cause instanceof Error ? cause.message : "Could not load the example report.";
+        setReportError(message);
+        if (!graph) setError(message);
+      }
+    } finally {
+      if (requestId === graphRequest.current) setIsLoadingReport(false);
+    }
+  }
 
   useEffect(() => {
-    fetch("/graph.json")
-      .then((response) => {
-        if (!response.ok) throw new Error(`Graph request failed (${response.status})`);
-        return response.json();
-      })
-      .then((data: unknown) => {
-        const validated = validateGraph(data);
-        setGraph(validated);
-        setSelectedId(primaryNodeId(validated));
-        setSelectedSymbolId(null);
-        setSelectedFlowId(validated.flows?.[0]?.id ?? null);
-        setSelectedRiskId(validated.findings?.[0]?.id ?? null);
-      })
-      .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Could not load graph data"));
+    void loadExample();
+    return () => { graphRequest.current++; interpretationRequest.current++; };
   }, []);
 
+  async function openReport(file: File) {
+    const requestId = ++graphRequest.current;
+    setIsLoadingReport(true);
+    setReportError(null);
+    try {
+      const validated = await readReportFile(file);
+      if (requestId === graphRequest.current) installGraph(validated, file.name || "Imported report");
+    } catch (cause) {
+      if (requestId === graphRequest.current) setReportError(cause instanceof Error ? cause.message : "Could not open the report.");
+    } finally {
+      if (requestId === graphRequest.current) setIsLoadingReport(false);
+    }
+  }
+
+  function downloadReport() {
+    if (!graph) return;
+    setReportError(null);
+    try {
+      const url = URL.createObjectURL(new Blob([serializeReport(graph)], { type: "application/json" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = reportFilename(graph);
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (cause) {
+      setReportError(cause instanceof Error ? cause.message : "Could not download this report.");
+    }
+  }
+
   useEffect(() => {
+    interpretationRequest.current++;
     setAIInterpretation(null);
     setInterpretationError(null);
     setIsInterpreting(false);
@@ -663,6 +354,7 @@ export default function Home() {
 
   async function analyzeSubmittedRepository(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const requestId = ++graphRequest.current;
     setIsAnalyzing(true);
     setAnalysisError(null);
     try {
@@ -677,19 +369,11 @@ export default function Home() {
         throw new Error(detail);
       }
       const validated = validateGraph(data);
-      setGraph(validated);
-      setError(null);
-      setSelectedId(primaryNodeId(validated));
-      setSelectedSymbolId(null);
-      setSelectedFlowId(validated.flows?.[0]?.id ?? null);
-      setSelectedRiskId(validated.findings?.[0]?.id ?? null);
-      setMapMode("architecture");
-      setQuery("");
-      setScope("production");
+      if (requestId === graphRequest.current) installGraph(validated);
     } catch (cause: unknown) {
-      setAnalysisError(cause instanceof Error ? cause.message : "Repository analysis failed");
+      if (requestId === graphRequest.current) setAnalysisError(cause instanceof Error ? cause.message : "Repository analysis failed");
     } finally {
-      setIsAnalyzing(false);
+      if (requestId === graphRequest.current) setIsAnalyzing(false);
     }
   }
 
@@ -787,7 +471,8 @@ export default function Home() {
     : fileSourceLines;
 
   async function interpretSelectedSymbol() {
-    if (!selectedSymbol?.evidence_packet) return;
+    if (!selectedSymbol?.evidence_packet || importedReport) return;
+    const requestId = ++interpretationRequest.current;
     setIsInterpreting(true);
     setInterpretationError(null);
     try {
@@ -806,12 +491,14 @@ export default function Home() {
           : `AI interpretation failed (${response.status})`;
         throw new Error(detail);
       }
-      setAIInterpretation(validateAIInterpretation(data));
+      if (requestId === interpretationRequest.current) setAIInterpretation(validateAIInterpretation(data));
     } catch (cause: unknown) {
-      setAIInterpretation(null);
-      setInterpretationError(cause instanceof Error ? cause.message : "AI interpretation failed");
+      if (requestId === interpretationRequest.current) {
+        setAIInterpretation(null);
+        setInterpretationError(cause instanceof Error ? cause.message : "AI interpretation failed");
+      }
     } finally {
-      setIsInterpreting(false);
+      if (requestId === interpretationRequest.current) setIsInterpreting(false);
     }
   }
   const selectedRangeAvailable = !selectedSymbol || sourceStartLine <= fileSourceLines.length;
@@ -822,11 +509,11 @@ export default function Home() {
     ?? (graph?.source_url ? githubName(graph.source_url) : graph?.repo_root?.split(/[\\/]/).filter(Boolean).at(-1))
     ?? "Analyzed repository";
   const repositorySource = graph?.repository?.source ?? (graph?.source_url ? "github" : "local");
-  const repositoryUrl = graph?.repository?.url ?? graph?.source_url;
-  const pinnedRepositoryUrl = graph?.repository?.pinned_url ?? repositoryUrl;
+  const repositoryUrl = canonicalGithubUrl(graph?.repository?.url ?? graph?.source_url ?? "");
+  const pinnedRepositoryUrl = repositoryUrl && graph?.snapshot?.commit_sha ? `${repositoryUrl}/tree/${graph.snapshot.commit_sha}` : repositoryUrl;
   const commitSha = graph?.snapshot?.commit_sha;
   const selectedSourceUrl = repositorySource === "github" && repositoryUrl && commitSha && selected
-    ? `${repositoryUrl.replace(/\.git\/?$/, "")}/blob/${commitSha}/${selected.path}${selectedSymbol ? `#L${selectedSymbol.start_line}-L${selectedSymbol.end_line}` : ""}`
+    ? `${repositoryUrl}/blob/${commitSha}/${selected.path.split("/").map(encodeURIComponent).join("/")}${selectedSymbol ? `#L${selectedSymbol.start_line}-L${selectedSymbol.end_line}` : ""}`
     : undefined;
   const fileCount = graph?.nodes.filter((node) => node.kind === "file").length ?? 0;
   const symbolCount = graph?.nodes.filter((node) => node.kind !== "file").length ?? 0;
@@ -848,7 +535,7 @@ export default function Home() {
           <div className="mark" aria-hidden="true">A</div>
           <div><div className="product-name">Archaeologist</div><div className="repo-name">{repositoryName}</div></div>
         </div>
-        <div className="snapshot"><span className={`status-dot${isAnalyzing ? " busy" : ""}`} />{isAnalyzing ? "Analyzing repository" : graph ? inventory ? coverageStatus.partial ? "Partial inventory" : "Inventory ready" : "Graph ready" : error ? "Graph unavailable" : "Loading graph"}<code>{graph ? inventory ? `${fileCount} files · inventory only` : `${fileCount} files · ${symbolCount} symbols` : "Please wait"}</code></div>
+        <div className="snapshot"><span className={`status-dot${isBusy ? " busy" : ""}`} />{isAnalyzing ? "Analyzing repository" : isLoadingReport ? "Reading report" : graph ? importedReport ? "Imported report" : inventory ? coverageStatus.partial ? "Partial inventory" : "Inventory ready" : "Graph ready" : error ? "Graph unavailable" : "Loading graph"}<code>{graph ? inventory ? `${fileCount} files · inventory only` : `${fileCount} files · ${symbolCount} symbols` : "Please wait"}</code></div>
       </header>
 
       <section className="workspace">
@@ -857,11 +544,26 @@ export default function Home() {
           <p className="rail-copy">Explore files, source, and internal imports from the analyzed repository.</p>
           <form className="repository-form" onSubmit={analyzeSubmittedRepository}>
             <label htmlFor="repository-url">Public GitHub URL</label>
-            <input id="repository-url" type="url" value={submittedUrl} onChange={(event) => setSubmittedUrl(event.target.value)} required pattern="https://github\.com/.+/.+" disabled={isAnalyzing} />
-            <button type="submit" disabled={isAnalyzing}>{isAnalyzing ? "Analyzing…" : "Analyze repository"}</button>
+            <input id="repository-url" type="url" value={submittedUrl} onChange={(event) => setSubmittedUrl(event.target.value)} required pattern="https://github\.com/.+/.+" disabled={isBusy} />
+            <button type="submit" disabled={isBusy}>{isAnalyzing ? "Analyzing…" : "Analyze repository"}</button>
             <small>{ANALYZER_API_URL ? "Full analyzer service" : "Hosted inventory"} · public Python repositories only</small>
             {analysisError && <p className="analysis-error" role="alert">{analysisError}</p>}
           </form>
+          <section className="report-controls" aria-label="Portable analysis reports">
+            <strong>Analysis reports</strong>
+            <input ref={reportInput} type="file" accept=".json,application/json" hidden onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (file) void openReport(file);
+            }} />
+            <button type="button" disabled={isBusy} onClick={() => reportInput.current?.click()}>{isLoadingReport ? "Reading report…" : "Open report JSON"}</button>
+            <button type="button" disabled={!graph || isBusy} onClick={downloadReport}>Download report (includes source)</button>
+            <button type="button" disabled={isBusy} onClick={() => void loadExample()}>Restore Cosmic Python example</button>
+            <small>Opened files stay in this browser tab. Reports contain source code and may contain local paths—review before sharing. 10 MiB / 500 files maximum.</small>
+            <details><summary>Get a full analysis report</summary><p>Run the Python analyzer locally, then open its output here:</p><code>python analyzer.py https://github.com/owner/repo --output graph.json</code><p>This does not run deep analysis on the hosted server.</p></details>
+            {reportError && <p className="analysis-error" role="alert">{reportError}{graph && " Your existing map has not been replaced."}</p>}
+          </section>
+          {importedReport && <div className="analysis-tier-notice imported-report" role="status"><strong>Imported report · {graph?.analysis?.tier}</strong><p>{importedReport}</p><small>Claims and commit metadata are supplied by this file, not independently verified by this site. AI requests are disabled for imported reports. Reloading clears the imported report.</small><details><summary>Reported analysis limitations</summary><ul>{graph?.analysis?.limitations.map((message, index) => <li key={index}>{message}</li>)}</ul></details></div>}
           {graph && <div className="origin"><span>{repositorySource === "github" ? "Pinned GitHub snapshot" : "Local directory"}</span>{pinnedRepositoryUrl ? <a href={pinnedRepositoryUrl} target="_blank" rel="noreferrer">{commitSha ? `${commitSha.slice(0, 12)} ↗` : "Open repository ↗"}</a> : <strong>{repositoryName}</strong>}</div>}
           {inventory && <div className="analysis-tier-notice" role="status"><strong>{coverageStatus.partial ? "Partial inventory" : "Inventory analysis"}</strong><p>{coverageStatus.summary}</p><small>Import edges are heuristics. Symbols, flows, patterns, and risks were not analyzed.</small><details><summary>Coverage and limitations</summary><ul>{[...coverageStatus.warnings, ...(graph?.analysis?.limitations ?? [])].map((message) => <li key={message}>{message}</li>)}</ul></details></div>}
           <label className="search"><span aria-hidden="true">⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter files" aria-label="Filter files" /></label>
@@ -1027,7 +729,7 @@ export default function Home() {
                 <p>{claim.text}</p><small>Provenance: {claim.provenance}{claim.evidence_refs?.length ? ` · ${claim.evidence_refs.length} evidence reference${claim.evidence_refs.length === 1 ? "" : "s"}` : ""}</small>
               </article>)}</div>
             </section>}
-            {selectedSymbol?.evidence_packet && LOCAL_INTERPRETATION_ENABLED && <section className="ai-interpretation-section">
+            {selectedSymbol?.evidence_packet && LOCAL_INTERPRETATION_ENABLED && !importedReport && <section className="ai-interpretation-section">
               <div className="section-heading"><h3>AI interpretation</h3><span className="interpretation-label">Optional</span></div>
               <p className="ai-intro">Generate a deeper explanation from this symbol’s evidence packet and visible source. Static facts above remain unchanged.</p>
               {!aiInterpretation && <button className="interpret-button" type="button" onClick={interpretSelectedSymbol} disabled={isInterpreting}>
