@@ -3,6 +3,19 @@ export const MAX_PYTHON_FILES = 40;
 export const MAX_SOURCE_BYTES = 200_000;
 const GITHUB_HEADERS = { Accept: "application/vnd.github+json", "User-Agent": "Codebase-Archaeologist", "X-GitHub-Api-Version": "2022-11-28" };
 type Fetcher = typeof fetch;
+type MetadataStage = "repository" | "commit" | "tree";
+
+/** Emit only fixed labels: never exception messages, URLs, headers, or source. */
+function reportFailure(stage: string, operation: string, error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  const name = error instanceof Error && ["TypeError", "SyntaxError", "RangeError", "AbortError", "TimeoutError"].includes(error.name) ? error.name : "Error";
+  const category = /illegal invocation|incorrect.*this/i.test(message) ? "invocation"
+    : /redirect/i.test(message) ? "redirect"
+    : /not implemented|unsupported|not supported/i.test(message) ? "unsupported"
+    : /denied|not allowed|forbidden|permission/i.test(message) ? "permission"
+    : /network|fetch failed|connect|dns/i.test(message) ? "network" : "other";
+  console.error("hosted-analysis-failure", { stage, operation, name, category });
+}
 type TreeEntry = { path: string; type: string; mode?: string; size?: number };
 type SourceFile = { path: string; size: number; source: string; truncated: boolean; sourceError?: string };
 
@@ -43,19 +56,31 @@ export async function readBoundedBody(body: ReadableStream<Uint8Array> | null, l
   return { text, bytes, truncated };
 }
 
-async function githubJson(url: string, fetchImpl: Fetcher, signal: AbortSignal): Promise<Record<string, unknown>> {
-  const response = await fetchImpl(url, { headers: GITHUB_HEADERS, redirect: "error", signal });
-  if (!response.ok) {
-    await response.body?.cancel();
-    if (response.status === 404) throw new AnalysisError("Repository not found. Confirm that it is public and the URL is correct.", 404);
-    if (response.status === 403 || response.status === 429) throw new AnalysisError("GitHub's public request limit was reached. Please try again later.", 429);
-    throw new AnalysisError(`GitHub request failed (${response.status}).`, 502);
+async function githubJson(url: string, fetchImpl: Fetcher, signal: AbortSignal, stage: MetadataStage): Promise<Record<string, unknown>> {
+  let operation = "fetch";
+  try {
+    // The hosted runtime rejects redirect: "error". Manual returns 3xx to the
+    // status check below without following Location or leaving the fixed origin.
+    const response = await fetchImpl(url, { headers: GITHUB_HEADERS, redirect: "manual", signal });
+    operation = "status";
+    if (!response.ok) {
+      await response.body?.cancel();
+      if (response.status >= 300 && response.status < 400) throw new AnalysisError("GitHub redirected this repository. Enter its current public GitHub URL.", 502);
+      if (response.status === 404) throw new AnalysisError("Repository not found. Confirm that it is public and the URL is correct.", 404);
+      if (response.status === 403 || response.status === 429) throw new AnalysisError("GitHub's public request limit was reached. Please try again later.", 429);
+      throw new AnalysisError(`GitHub request failed (${response.status}).`, 502);
+    }
+    operation = "body";
+    const body = await readBoundedBody(response.body, 8 * 1024 * 1024);
+    if (body.truncated) throw new AnalysisError("Repository metadata exceeds the hosted analysis limit. Use the full Python analyzer.", 413);
+    operation = "json";
+    const value: unknown = JSON.parse(body.text);
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw new AnalysisError("GitHub returned invalid repository metadata.", 502);
+    return value as Record<string, unknown>;
+  } catch (error) {
+    if (!(error instanceof AnalysisError)) reportFailure(stage, operation, error);
+    throw error;
   }
-  const body = await readBoundedBody(response.body, 8 * 1024 * 1024);
-  if (body.truncated) throw new AnalysisError("Repository metadata exceeds the hosted analysis limit. Use the full Python analyzer.", 413);
-  const value: unknown = JSON.parse(body.text);
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new AnalysisError("GitHub returned invalid repository metadata.", 502);
-  return value as Record<string, unknown>;
 }
 
 function parseRepositoryUrl(repositoryUrl: string) {
@@ -129,7 +154,7 @@ async function fetchSources(owner: string, repository: string, sha: string, file
       try {
         const path = entry.path.split("/").map(encodeURIComponent).join("/");
         const response = await fetchImpl(`https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/${sha}/${path}`,
-          { headers: entry.size === 0 ? {} : { Range: `bytes=0-${MAX_SOURCE_BYTES - 1}` }, redirect: "error", signal });
+          { headers: entry.size === 0 ? {} : { Range: `bytes=0-${MAX_SOURCE_BYTES - 1}` }, redirect: "manual", signal });
         if (!response.ok) { await response.body?.cancel(); throw new Error("Source unavailable"); }
         const body = await readBoundedBody(response.body, MAX_SOURCE_BYTES);
         return { path: entry.path, size: entry.size ?? body.bytes, source: body.text, truncated: body.truncated || (entry.size ?? 0) > body.bytes };
@@ -153,13 +178,13 @@ export async function analyzePublicGithubRepository(repositoryUrl: string, fetch
 async function analyzeSnapshot(repositoryUrl: string, fetchImpl: Fetcher, signal: AbortSignal) {
   const { owner, repository, url } = parseRepositoryUrl(repositoryUrl);
   const apiRoot = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}`;
-  const metadata = await githubJson(apiRoot, fetchImpl, signal);
+  const metadata = await githubJson(apiRoot, fetchImpl, signal, "repository");
   const branch = typeof metadata.default_branch === "string" ? metadata.default_branch : "main";
-  const commit = await githubJson(`${apiRoot}/commits/${encodeURIComponent(branch)}`, fetchImpl, signal);
+  const commit = await githubJson(`${apiRoot}/commits/${encodeURIComponent(branch)}`, fetchImpl, signal, "commit");
   const commitSha = typeof commit.sha === "string" ? commit.sha.toLowerCase() : "";
   const treeSha = (commit.commit as { tree?: { sha?: string } } | undefined)?.tree?.sha;
   if (!/^[0-9a-f]{40}$/.test(commitSha) || typeof treeSha !== "string" || !/^[0-9a-f]{40}$/i.test(treeSha)) throw new AnalysisError("GitHub did not return a stable commit snapshot.", 502);
-  const tree = await githubJson(`${apiRoot}/git/trees/${treeSha}?recursive=1`, fetchImpl, signal);
+  const tree = await githubJson(`${apiRoot}/git/trees/${treeSha}?recursive=1`, fetchImpl, signal, "tree");
   if (!Array.isArray(tree.tree)) throw new AnalysisError("GitHub returned an invalid repository tree.", 502);
   const discovered = (tree.tree as TreeEntry[])
     .filter((entry) => entry && entry.type === "blob" && entry.mode !== "120000" && typeof entry.path === "string" && entry.path.endsWith(".py"))
@@ -215,6 +240,7 @@ export async function handleAnalyzeRequest(request: Request, fetchImpl: Fetcher 
   } catch (error) {
     if (error instanceof AnalysisError) return jsonResponse({ detail: error.message }, error.status);
     if (error instanceof Error && ["AbortError", "TimeoutError"].includes(error.name)) return jsonResponse({ detail: "Analysis timed out or was cancelled. Try a smaller repository or use the full Python analyzer.", }, 504);
+    reportFailure("request", "analysis", error);
     return jsonResponse({ detail: "Repository analysis could not complete. Please retry or use the full Python analyzer." }, 502);
   }
 }
