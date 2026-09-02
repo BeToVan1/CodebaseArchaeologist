@@ -20,5 +20,6 @@ __pycache__/
 .DS_Store
 *.pem
 .env*
+!.env.example
 npm-debug.log*
 pnpm-debug.log*

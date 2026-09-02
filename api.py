@@ -11,6 +11,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from analyzer import analyze_repository
+from interpretation import (
+    InterpretRequest,
+    InterpretationGroundingError,
+    InterpretationResponse,
+    InterpretationUnavailable,
+    generate_interpretation,
+)
 from repository_loader import (
     RepositoryLoadError,
     cleanup_repository,
@@ -77,5 +84,23 @@ async def analyze(request: AnalyzeRequest) -> dict[str, Any]:
         finally:
             if repository_path is not None:
                 await asyncio.to_thread(cleanup_repository, repository_path)
+
+
+@app.post("/api/interpret", response_model=InterpretationResponse)
+async def interpret(request: InterpretRequest) -> InterpretationResponse:
+    """Interpret one symbol from its bounded evidence packet and source excerpt."""
+    try:
+        return await asyncio.to_thread(
+            generate_interpretation,
+            request.evidence_packet,
+            request.source_excerpt,
+        )
+    except InterpretationUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except InterpretationGroundingError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("AI interpretation failed")
+        raise HTTPException(status_code=502, detail="AI interpretation failed.") from exc
 
 

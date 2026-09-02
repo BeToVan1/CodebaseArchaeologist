@@ -141,6 +141,21 @@ type Explanation = {
   claims: Claim[];
   grounding?: { summary: EvidenceStatement; role: EvidenceStatement; rationale: EvidenceStatement };
 };
+type AIInterpretationSection = {
+  text: string;
+  classification: "interpretation";
+  confidence: number;
+  provenance: string;
+  evidence_refs: string[];
+};
+type AIInterpretation = {
+  model: string;
+  classification: "interpretation";
+  what_it_does: AIInterpretationSection;
+  execution_role: AIInterpretationSection;
+  structural_rationale: AIInterpretationSection;
+  uncertainties: string[];
+};
 
 const filename = (path: string) => path.split("/").at(-1) ?? path;
 const folder = (path: string) => path.split("/").slice(0, -1).join("/") || "repository root";
@@ -305,6 +320,35 @@ function isEvidenceStatement(value: unknown): value is EvidenceStatement {
     && value.confidence >= 0
     && value.confidence <= 1
     && typeof value.provenance === "string";
+}
+
+function isAIInterpretationSection(value: unknown): value is AIInterpretationSection {
+  return isRecord(value)
+    && typeof value.text === "string"
+    && value.classification === "interpretation"
+    && typeof value.confidence === "number"
+    && value.confidence >= 0
+    && value.confidence <= 0.85
+    && typeof value.provenance === "string"
+    && Array.isArray(value.evidence_refs)
+    && value.evidence_refs.length > 0
+    && value.evidence_refs.every((reference) => typeof reference === "string");
+}
+
+function validateAIInterpretation(value: unknown): AIInterpretation {
+  if (
+    !isRecord(value)
+    || typeof value.model !== "string"
+    || value.classification !== "interpretation"
+    || !isAIInterpretationSection(value.what_it_does)
+    || !isAIInterpretationSection(value.execution_role)
+    || !isAIInterpretationSection(value.structural_rationale)
+    || !Array.isArray(value.uncertainties)
+    || !value.uncertainties.every((uncertainty) => typeof uncertainty === "string")
+  ) {
+    throw new Error("The analyzer returned an invalid AI interpretation.");
+  }
+  return value as AIInterpretation;
 }
 
 function validateGraph(value: unknown): Graph {
@@ -490,6 +534,9 @@ export default function Home() {
   const [submittedUrl, setSubmittedUrl] = useState("https://github.com/cosmicpython/code");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [aiInterpretation, setAIInterpretation] = useState<AIInterpretation | null>(null);
+  const [isInterpreting, setIsInterpreting] = useState(false);
+  const [interpretationError, setInterpretationError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/graph.json")
@@ -507,6 +554,12 @@ export default function Home() {
       })
       .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Could not load graph data"));
   }, []);
+
+  useEffect(() => {
+    setAIInterpretation(null);
+    setInterpretationError(null);
+    setIsInterpreting(false);
+  }, [graph, selectedSymbolId]);
 
   async function analyzeSubmittedRepository(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -626,6 +679,35 @@ export default function Home() {
   const sourceLines = selectedSymbol
     ? fileSourceLines.slice(sourceStartLine - 1, sourceEndLine)
     : fileSourceLines;
+
+  async function interpretSelectedSymbol() {
+    if (!selectedSymbol?.evidence_packet) return;
+    setIsInterpreting(true);
+    setInterpretationError(null);
+    try {
+      const response = await fetch(`${ANALYZER_API_URL}/api/interpret`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          evidencePacket: selectedSymbol.evidence_packet,
+          sourceExcerpt: sourceLines.join("\n").slice(0, 12_000),
+        }),
+      });
+      const data: unknown = await response.json();
+      if (!response.ok) {
+        const detail = isRecord(data) && typeof data.detail === "string"
+          ? data.detail
+          : `AI interpretation failed (${response.status})`;
+        throw new Error(detail);
+      }
+      setAIInterpretation(validateAIInterpretation(data));
+    } catch (cause: unknown) {
+      setAIInterpretation(null);
+      setInterpretationError(cause instanceof Error ? cause.message : "AI interpretation failed");
+    } finally {
+      setIsInterpreting(false);
+    }
+  }
   const selectedRangeAvailable = !selectedSymbol || sourceStartLine <= fileSourceLines.length;
   const sourceIsTruncated = Boolean(
     selected?.source_truncated || (selected?.source && selected.source.length > MAX_SOURCE_CHARACTERS),
@@ -793,6 +875,27 @@ export default function Home() {
                 <div><span>{claim.classification}</span><strong>{Math.round(claim.confidence * 100)}% confidence</strong></div>
                 <p>{claim.text}</p><small>Provenance: {claim.provenance}{claim.evidence_refs?.length ? ` · ${claim.evidence_refs.length} evidence reference${claim.evidence_refs.length === 1 ? "" : "s"}` : ""}</small>
               </article>)}</div>
+            </section>}
+            {selectedSymbol?.evidence_packet && LOCAL_ANALYZER_ENABLED && <section className="ai-interpretation-section">
+              <div className="section-heading"><h3>AI interpretation</h3><span className="interpretation-label">Optional</span></div>
+              <p className="ai-intro">Generate a deeper explanation from this symbol’s evidence packet and visible source. Static facts above remain unchanged.</p>
+              {!aiInterpretation && <button className="interpret-button" type="button" onClick={interpretSelectedSymbol} disabled={isInterpreting}>
+                {isInterpreting ? "Interpreting evidence…" : "Generate grounded interpretation"}
+              </button>}
+              {interpretationError && <div className="interpretation-error" role="alert"><strong>AI interpretation unavailable</strong><p>{interpretationError}</p></div>}
+              {aiInterpretation && <div className="ai-result">
+                <div className="ai-result-meta"><span>Interpretation</span><strong>{aiInterpretation.model}</strong></div>
+                {([
+                  ["What it does", aiInterpretation.what_it_does],
+                  ["Execution role", aiInterpretation.execution_role],
+                  ["Why it may be structured this way", aiInterpretation.structural_rationale],
+                ] as [string, AIInterpretationSection][]).map(([label, section]) => <article key={label}>
+                  <h4>{label}</h4><p>{section.text}</p>
+                  <small>{Math.round(section.confidence * 100)}% confidence · {section.evidence_refs.join(", ")}</small>
+                </article>)}
+                {aiInterpretation.uncertainties.length > 0 && <div className="ai-uncertainties"><h4>Uncertainties</h4><ul>{aiInterpretation.uncertainties.map((uncertainty) => <li key={uncertainty}>{uncertainty}</li>)}</ul></div>}
+                <button className="regenerate-button" type="button" onClick={interpretSelectedSymbol} disabled={isInterpreting}>{isInterpreting ? "Interpreting…" : "Regenerate"}</button>
+              </div>}
             </section>}
             {selectedSymbol?.sqlalchemy && <section className="model-metadata">
               <div className="section-heading"><h3>SQLAlchemy mapping</h3><span>{selectedSymbol.sqlalchemy.kind.replaceAll("-", " ")}</span></div>
