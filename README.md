@@ -56,7 +56,15 @@ confidence, the rule threshold, exact source evidence, and provenance. The Risk 
 ranks these hotspots and opens the relevant file or symbol without presenting the heuristic as a
 proven defect.
 
+Graph schema v0.8 attaches a retrieval-ready evidence packet to every symbol. A packet combines
+the exact source range, docstring or framework metadata, resolved relationship IDs, representative
+flow IDs, risk finding IDs, and separately classified fact, heuristic, and interpretation claims.
+The explorer now renders its symbol summary, execution role, and structural rationale from this
+packet and shows the confidence and provenance for each section. This is the grounding boundary an
+LLM can consume later without being allowed to rewrite static-analysis facts.
+
 The API is intentionally local-only for this milestone. The hosted site continues to use the committed Cosmic Python fixture until repository analysis runs in an isolated worker service.
+
 
 
 
