@@ -1560,6 +1560,7 @@ def build_symbol_evidence_packets(
     relationship_edges: list[dict[str, Any]],
     flows: list[dict[str, Any]],
     findings: list[dict[str, Any]],
+    patterns: list[dict[str, Any]],
 ) -> int:
     """Attach retrieval-ready, classification-preserving evidence to every symbol."""
     symbol_index = {node["id"]: node for node in symbol_nodes}
@@ -1583,6 +1584,10 @@ def build_symbol_evidence_packets(
     for finding in findings:
         for node_id in [finding["node_id"], *finding["related_node_ids"]]:
             finding_ids.setdefault(node_id, []).append(finding["id"])
+    pattern_ids: dict[str, list[str]] = {}
+    for pattern in patterns:
+        for node_id in pattern["node_ids"]:
+            pattern_ids.setdefault(node_id, []).append(pattern["id"])
 
     for symbol in symbol_nodes:
         symbol_incoming = incoming.get(symbol["id"], [])
@@ -1592,6 +1597,7 @@ def build_symbol_evidence_packets(
         route = symbol.get("entrypoint", {}).get("kind") == "route"
         symbol_flows = sorted(flow_ids.get(symbol["id"], []))
         symbol_findings = sorted(finding_ids.get(symbol["id"], []))
+        symbol_patterns = sorted(pattern_ids.get(symbol["id"], []))
 
         if symbol.get("docstring"):
             documented = " ".join(symbol["docstring"].split())
@@ -1731,9 +1737,200 @@ def build_symbol_evidence_packets(
             "related_edge_ids": [edge["id"] for edge in [*symbol_outgoing, *symbol_incoming]],
             "flow_ids": symbol_flows,
             "finding_ids": symbol_findings,
+            "pattern_ids": symbol_patterns,
             "claims": claims,
         }
     return len(symbol_nodes)
+
+
+def detect_architecture_patterns(
+    symbol_nodes: list[dict[str, Any]],
+    relationship_edges: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Detect bounded architectural patterns while retaining their evidence."""
+    production_symbols = [node for node in symbol_nodes if not node["path"].startswith("tests/")]
+    node_index = {node["id"]: node for node in production_symbols}
+
+    def layer_for(node: dict[str, Any]) -> str:
+        if node.get("entrypoint", {}).get("kind") == "route":
+            return "entrypoint"
+        if node.get("sqlalchemy", {}).get("kind") == "model":
+            return "infrastructure adapter"
+        return evidence_layer(node["path"])[0]
+
+    layers: dict[str, list[dict[str, Any]]] = {}
+    for node in production_symbols:
+        layers.setdefault(layer_for(node), []).append(node)
+    architectural_layers = [
+        layer
+        for layer in ("entrypoint", "application service", "domain behavior", "infrastructure adapter")
+        if layers.get(layer)
+    ]
+    cross_layer_edges = [
+        edge
+        for edge in relationship_edges
+        if edge["source"] in node_index
+        and edge["target"] in node_index
+        and layer_for(node_index[edge["source"]]) != layer_for(node_index[edge["target"]])
+    ]
+    patterns: list[dict[str, Any]] = []
+
+    if len(architectural_layers) >= 3:
+        representative_nodes = [layers[layer][0]["id"] for layer in architectural_layers]
+        patterns.append(
+            {
+                "id": "pattern:layered-architecture",
+                "pattern_id": "layered-architecture",
+                "title": "Layered architecture",
+                "classification": "heuristic",
+                "confidence": min(0.96, 0.68 + 0.07 * len(architectural_layers) + 0.01 * min(len(cross_layer_edges), 8)),
+                "summary": (
+                    f"Code is separated across {len(architectural_layers)} recognizable layers: "
+                    f"{', '.join(layer.replace(' behavior', '').replace(' adapter', '') for layer in architectural_layers)}."
+                ),
+                "provenance": "Path conventions, proven framework roles, ORM roles, and cross-layer symbol relationships",
+                "node_ids": representative_nodes,
+                "edge_ids": [edge["id"] for edge in cross_layer_edges[:16]],
+                "evidence_refs": [*representative_nodes, *[edge["id"] for edge in cross_layer_edges[:16]]],
+                "metrics": {
+                    "recognized_layers": len(architectural_layers),
+                    "cross_layer_relationships": len(cross_layer_edges),
+                },
+            }
+        )
+
+    routes = [node for node in production_symbols if node.get("entrypoint", {}).get("framework") == "fastapi"]
+    if routes:
+        route_ids = {node["id"] for node in routes}
+        route_edges = [edge for edge in relationship_edges if edge["source"] in route_ids]
+        patterns.append(
+            {
+                "id": "pattern:fastapi-boundary",
+                "pattern_id": "fastapi-boundary",
+                "title": "FastAPI boundary",
+                "classification": "fact",
+                "confidence": 1.0,
+                "summary": f"{len(routes)} proven FastAPI route handler{'s' if len(routes) != 1 else ''} form an HTTP boundary around application behavior.",
+                "provenance": "FastAPI and APIRouter instances resolved through decorators and assignments",
+                "node_ids": [node["id"] for node in routes[:24]],
+                "edge_ids": [edge["id"] for edge in route_edges[:16]],
+                "evidence_refs": [*[node["id"] for node in routes[:24]], *[edge["id"] for edge in route_edges[:16]]],
+                "metrics": {"route_handlers": len(routes), "outgoing_relationships": len(route_edges)},
+            }
+        )
+
+    dependency_edges = [edge for edge in relationship_edges if edge["kind"] == "depends-on"]
+    if dependency_edges:
+        dependency_nodes = sorted({edge["source"] for edge in dependency_edges} | {edge["target"] for edge in dependency_edges})
+        patterns.append(
+            {
+                "id": "pattern:dependency-injection",
+                "pattern_id": "dependency-injection",
+                "title": "Dependency injection",
+                "classification": "fact",
+                "confidence": 0.98,
+                "summary": f"{len(dependency_edges)} framework dependency relationship{'s' if len(dependency_edges) != 1 else ''} inject collaborators at execution boundaries.",
+                "provenance": "Resolved FastAPI Depends expressions",
+                "node_ids": dependency_nodes[:24],
+                "edge_ids": [edge["id"] for edge in dependency_edges[:24]],
+                "evidence_refs": [*[edge["id"] for edge in dependency_edges[:24]], *dependency_nodes[:24]],
+                "metrics": {"dependency_relationships": len(dependency_edges)},
+            }
+        )
+
+    models = [node for node in production_symbols if node.get("sqlalchemy", {}).get("kind") == "model"]
+    persistence_edges = [edge for edge in relationship_edges if edge["kind"] in {"reads", "writes"}]
+    if models and persistence_edges:
+        persistence_nodes = sorted({node["id"] for node in models} | {edge["source"] for edge in persistence_edges})
+        patterns.append(
+            {
+                "id": "pattern:data-mapper",
+                "pattern_id": "data-mapper",
+                "title": "Data Mapper persistence",
+                "classification": "fact",
+                "confidence": 0.98,
+                "summary": f"{len(models)} SQLAlchemy model{'s' if len(models) != 1 else ''} are accessed through {len(persistence_edges)} resolved read/write relationship{'s' if len(persistence_edges) != 1 else ''}.",
+                "provenance": "SQLAlchemy declarative inheritance, mapped annotations, and resolved session operations",
+                "node_ids": persistence_nodes[:24],
+                "edge_ids": [edge["id"] for edge in persistence_edges[:24]],
+                "evidence_refs": [*[node["id"] for node in models[:24]], *[edge["id"] for edge in persistence_edges[:24]]],
+                "metrics": {
+                    "models": len(models),
+                    "reads": sum(edge["kind"] == "reads" for edge in persistence_edges),
+                    "writes": sum(edge["kind"] == "writes" for edge in persistence_edges),
+                },
+            }
+        )
+
+    repository_nodes = [
+        node
+        for node in production_symbols
+        if "repository" in node["path"].lower() or "repository" in node.get("qualified_name", "").lower()
+    ]
+    repository_ids = {node["id"] for node in repository_nodes}
+    repository_persistence_edges = [edge for edge in persistence_edges if edge["source"] in repository_ids]
+    repository_boundary_edges = [
+        edge
+        for edge in relationship_edges
+        if edge["source"] in repository_ids or edge["target"] in repository_ids
+    ]
+    if repository_nodes and (repository_boundary_edges or len(repository_nodes) >= 2):
+        node_ids = [node["id"] for node in repository_nodes[:24]]
+        patterns.append(
+            {
+                "id": "pattern:repository-boundary",
+                "pattern_id": "repository-boundary",
+                "title": "Repository boundary",
+                "classification": "heuristic",
+                "confidence": 0.92 if repository_persistence_edges else 0.84,
+                "summary": (
+                    f"{len(repository_nodes)} repository-named symbol{'s' if len(repository_nodes) != 1 else ''} "
+                    f"participate in {len(repository_boundary_edges)} resolved relationship{'s' if len(repository_boundary_edges) != 1 else ''}, "
+                    "suggesting data access is concentrated behind a repository boundary."
+                ),
+                "provenance": "Repository naming convention plus resolved symbol and persistence relationships",
+                "node_ids": node_ids,
+                "edge_ids": [edge["id"] for edge in repository_boundary_edges[:24]],
+                "evidence_refs": [*node_ids, *[edge["id"] for edge in repository_boundary_edges[:24]]],
+                "metrics": {
+                    "repository_symbols": len(repository_nodes),
+                    "boundary_relationships": len(repository_boundary_edges),
+                    "persistence_relationships": len(repository_persistence_edges),
+                },
+            }
+        )
+
+    unit_of_work_nodes = [
+        node
+        for node in production_symbols
+        if "unit_of_work" in node["path"].lower()
+        or "unitofwork" in node.get("qualified_name", "").lower().replace("_", "")
+    ]
+    unit_of_work_ids = {node["id"] for node in unit_of_work_nodes}
+    unit_of_work_edges = [
+        edge
+        for edge in relationship_edges
+        if edge["source"] in unit_of_work_ids or edge["target"] in unit_of_work_ids
+    ]
+    if unit_of_work_nodes and (unit_of_work_edges or len(unit_of_work_nodes) >= 2):
+        node_ids = [node["id"] for node in unit_of_work_nodes[:24]]
+        patterns.append(
+            {
+                "id": "pattern:unit-of-work",
+                "pattern_id": "unit-of-work",
+                "title": "Unit of Work boundary",
+                "classification": "heuristic",
+                "confidence": 0.86,
+                "summary": f"{len(unit_of_work_nodes)} Unit of Work-named symbol{'s' if len(unit_of_work_nodes) != 1 else ''} coordinate {len(unit_of_work_edges)} resolved relationship{'s' if len(unit_of_work_edges) != 1 else ''}, suggesting transaction-scoped persistence orchestration.",
+                "provenance": "Unit of Work naming convention plus resolved symbol relationships",
+                "node_ids": node_ids,
+                "edge_ids": [edge["id"] for edge in unit_of_work_edges[:24]],
+                "evidence_refs": [*node_ids, *[edge["id"] for edge in unit_of_work_edges[:24]]],
+                "metrics": {"unit_of_work_symbols": len(unit_of_work_nodes), "boundary_relationships": len(unit_of_work_edges)},
+            }
+        )
+
+    return patterns
 
 
 # --------------------------------------------------------------------------
@@ -1824,12 +2021,13 @@ def analyze_repository(repo_root: Path) -> dict[str, Any]:
     findings = detect_risk_findings(
         file_nodes, symbol_nodes, import_edges, relationship_edges
     )
+    patterns = detect_architecture_patterns(symbol_nodes, relationship_edges)
     evidence_packets = build_symbol_evidence_packets(
-        symbol_nodes, relationship_edges, flows, findings
+        symbol_nodes, relationship_edges, flows, findings, patterns
     )
 
     return {
-        "schema_version": "0.8",
+        "schema_version": "0.9",
         "repo_root": str(repo_root),
         "python_files_total_found": total_files_found,
         "python_files_analyzed": len(python_files),
@@ -1838,6 +2036,7 @@ def analyze_repository(repo_root: Path) -> dict[str, Any]:
         "edges": [*import_edges, *containment_edges, *relationship_edges],
         "flows": flows,
         "findings": findings,
+        "patterns": patterns,
         "coverage": {
             "python_files": len(python_files),
             "symbol_nodes": len(symbol_nodes),
@@ -1847,6 +2046,7 @@ def analyze_repository(repo_root: Path) -> dict[str, Any]:
             "high_risk_findings": sum(finding["severity"] == "high" for finding in findings),
             "medium_risk_findings": sum(finding["severity"] == "medium" for finding in findings),
             "evidence_packets": evidence_packets,
+            "architecture_patterns": len(patterns),
             **relationship_coverage,
             **sqlalchemy_coverage,
             **sqlalchemy_access_coverage,

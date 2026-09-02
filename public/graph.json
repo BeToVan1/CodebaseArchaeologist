@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.8",
+  "schema_version": "0.9",
   "python_files_total_found": 37,
   "python_files_analyzed": 37,
   "python_files_truncated": false,
@@ -347,6 +347,9 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [
+          "pattern:layered-architecture"
+        ],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/adapters/notifications.py:allocation.adapters.notifications.AbstractNotifications:7:source-range",
@@ -427,6 +430,7 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/adapters/notifications.py:allocation.adapters.notifications.AbstractNotifications.send:9:source-range",
@@ -509,6 +513,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/adapters/notifications.py:allocation.adapters.notifications.EmailNotifications:17:source-range",
@@ -598,6 +603,7 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/adapters/notifications.py:allocation.adapters.notifications.EmailNotifications.__init__:18:source-range",
@@ -674,6 +680,7 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/adapters/notifications.py:allocation.adapters.notifications.EmailNotifications.send:22:source-range",
@@ -753,6 +760,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/adapters/orm.py:allocation.adapters.orm.start_mappers:63:source-range",
@@ -833,6 +841,7 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/adapters/orm.py:allocation.adapters.orm.receive_load:85:source-range",
@@ -909,6 +918,7 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/adapters/redis_eventpublisher.py:allocation.adapters.redis_eventpublisher.publish:14:source-range",
@@ -990,6 +1000,9 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [
+          "pattern:repository-boundary"
+        ],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository:7:source-range",
@@ -1068,6 +1081,9 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [
+          "pattern:repository-boundary"
+        ],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.__init__:8:source-range",
@@ -1157,6 +1173,9 @@
         "flow_ids": [],
         "finding_ids": [
           "risk:high-fan-in:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.add:11"
+        ],
+        "pattern_ids": [
+          "pattern:repository-boundary"
         ],
         "claims": [
           {
@@ -1297,6 +1316,9 @@
         "finding_ids": [
           "risk:high-fan-in:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15"
         ],
+        "pattern_ids": [
+          "pattern:repository-boundary"
+        ],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:source-range",
@@ -1428,6 +1450,9 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [
+          "pattern:repository-boundary"
+        ],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get_by_batchref:21:source-range",
@@ -1533,6 +1558,9 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [
+          "pattern:repository-boundary"
+        ],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository._add:28:source-range",
@@ -1614,6 +1642,9 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [
+          "pattern:repository-boundary"
+        ],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository._get:32:source-range",
@@ -1695,6 +1726,9 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [
+          "pattern:repository-boundary"
+        ],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository._get_by_batchref:36:source-range",
@@ -1778,6 +1812,9 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [
+          "pattern:repository-boundary"
+        ],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.SqlAlchemyRepository:40:source-range",
@@ -1867,6 +1904,9 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [
+          "pattern:repository-boundary"
+        ],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.SqlAlchemyRepository.__init__:41:source-range",
@@ -1945,6 +1985,9 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [
+          "pattern:repository-boundary"
+        ],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.SqlAlchemyRepository._add:45:source-range",
@@ -2032,6 +2075,9 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [
+          "pattern:repository-boundary"
+        ],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.SqlAlchemyRepository._get:48:source-range",
@@ -2108,6 +2154,9 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [
+          "pattern:repository-boundary"
+        ],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.SqlAlchemyRepository._get_by_batchref:51:source-range",
@@ -2195,6 +2244,9 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [
+          "pattern:layered-architecture"
+        ],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/bootstrap.py:allocation.bootstrap.bootstrap:11:source-range",
@@ -2334,6 +2386,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/bootstrap.py:allocation.bootstrap.inject_dependencies:44:source-range",
@@ -2416,6 +2469,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/config.py:allocation.config.get_postgres_uri:4:source-range",
@@ -2521,6 +2575,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/config.py:allocation.config.get_api_url:12:source-range",
@@ -2615,6 +2670,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/config.py:allocation.config.get_redis_host_and_port:18:source-range",
@@ -2706,6 +2762,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/config.py:allocation.config.get_email_host_and_port:24:source-range",
@@ -2798,6 +2855,9 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [
+          "pattern:layered-architecture"
+        ],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/domain/commands.py:allocation.domain.commands.Command:7:source-range",
@@ -2899,6 +2959,7 @@
         "finding_ids": [
           "risk:high-fan-in:symbol:src/allocation/domain/commands.py:allocation.domain.commands.Allocate:12"
         ],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/domain/commands.py:allocation.domain.commands.Allocate:12:source-range",
@@ -3035,6 +3096,7 @@
         "finding_ids": [
           "risk:high-fan-in:symbol:src/allocation/domain/commands.py:allocation.domain.commands.CreateBatch:19"
         ],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/domain/commands.py:allocation.domain.commands.CreateBatch:19:source-range",
@@ -3159,6 +3221,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/domain/commands.py:allocation.domain.commands.ChangeBatchQuantity:27:source-range",
@@ -3254,6 +3317,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/domain/events.py:allocation.domain.events.Event:5:source-range",
@@ -3341,6 +3405,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/domain/events.py:allocation.domain.events.Allocated:10:source-range",
@@ -3437,6 +3502,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/domain/events.py:allocation.domain.events.Deallocated:18:source-range",
@@ -3533,6 +3599,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/domain/events.py:allocation.domain.events.OutOfStock:25:source-range",
@@ -3634,6 +3701,7 @@
         "finding_ids": [
           "risk:high-fan-in:symbol:src/allocation/domain/model.py:allocation.domain.model.Product:8"
         ],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/domain/model.py:allocation.domain.model.Product:8:source-range",
@@ -3729,6 +3797,7 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/domain/model.py:allocation.domain.model.Product.__init__:9:source-range",
@@ -3809,6 +3878,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/domain/model.py:allocation.domain.model.Product.allocate:15:source-range",
@@ -3922,6 +3992,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/domain/model.py:allocation.domain.model.Product.change_batch_quantity:33:source-range",
@@ -4039,6 +4110,7 @@
         "finding_ids": [
           "risk:high-fan-in:symbol:src/allocation/domain/model.py:allocation.domain.model.OrderLine:42"
         ],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/domain/model.py:allocation.domain.model.OrderLine:42:source-range",
@@ -4158,6 +4230,7 @@
         "finding_ids": [
           "risk:high-fan-in:symbol:src/allocation/domain/model.py:allocation.domain.model.Batch:48"
         ],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/domain/model.py:allocation.domain.model.Batch:48:source-range",
@@ -4261,6 +4334,7 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/domain/model.py:allocation.domain.model.Batch.__init__:49:source-range",
@@ -4337,6 +4411,7 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/domain/model.py:allocation.domain.model.Batch.__repr__:56:source-range",
@@ -4413,6 +4488,7 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/domain/model.py:allocation.domain.model.Batch.__eq__:59:source-range",
@@ -4489,6 +4565,7 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/domain/model.py:allocation.domain.model.Batch.__hash__:64:source-range",
@@ -4565,6 +4642,7 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/domain/model.py:allocation.domain.model.Batch.__gt__:67:source-range",
@@ -4644,6 +4722,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/domain/model.py:allocation.domain.model.Batch.allocate:74:source-range",
@@ -4744,6 +4823,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/domain/model.py:allocation.domain.model.Batch.deallocate_one:78:source-range",
@@ -4823,6 +4903,7 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/domain/model.py:allocation.domain.model.Batch.allocated_quantity:82:source-range",
@@ -4901,6 +4982,7 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/domain/model.py:allocation.domain.model.Batch.available_quantity:86:source-range",
@@ -4984,6 +5066,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/domain/model.py:allocation.domain.model.Batch.can_allocate:89:source-range",
@@ -5071,6 +5154,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/entrypoints/flask_app.py:allocation.entrypoints.flask_app.add_batch:12:source-range",
@@ -5174,6 +5258,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/entrypoints/flask_app.py:allocation.entrypoints.flask_app.allocate_endpoint:24:source-range",
@@ -5276,6 +5361,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/entrypoints/flask_app.py:allocation.entrypoints.flask_app.allocations_view_endpoint:37:source-range",
@@ -5366,6 +5452,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/entrypoints/redis_eventconsumer.py:allocation.entrypoints.redis_eventconsumer.main:13:source-range",
@@ -5468,6 +5555,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/entrypoints/redis_eventconsumer.py:allocation.entrypoints.redis_eventconsumer.handle_change_batch_quantity:23:source-range",
@@ -5571,6 +5659,9 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [
+          "pattern:layered-architecture"
+        ],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/service_layer/handlers.py:allocation.service_layer.handlers.InvalidSku:13:source-range",
@@ -5654,6 +5745,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/service_layer/handlers.py:allocation.service_layer.handlers.add_batch:17:source-range",
@@ -5791,6 +5883,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/service_layer/handlers.py:allocation.service_layer.handlers.allocate:30:source-range",
@@ -5915,6 +6008,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/service_layer/handlers.py:allocation.service_layer.handlers.reallocate:43:source-range",
@@ -6017,6 +6111,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/service_layer/handlers.py:allocation.service_layer.handlers.change_batch_quantity:50:source-range",
@@ -6126,6 +6221,7 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/service_layer/handlers.py:allocation.service_layer.handlers.send_out_of_stock_notification:63:source-range",
@@ -6202,6 +6298,7 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/service_layer/handlers.py:allocation.service_layer.handlers.publish_allocated_event:73:source-range",
@@ -6280,6 +6377,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/service_layer/handlers.py:allocation.service_layer.handlers.add_allocation_to_read_model:80:source-range",
@@ -6369,6 +6467,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/service_layer/handlers.py:allocation.service_layer.handlers.remove_allocation_from_read_model:95:source-range",
@@ -6458,6 +6557,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/service_layer/messagebus.py:allocation.service_layer.messagebus.MessageBus:15:source-range",
@@ -6535,6 +6635,7 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/service_layer/messagebus.py:allocation.service_layer.messagebus.MessageBus.__init__:16:source-range",
@@ -6647,6 +6748,7 @@
         "finding_ids": [
           "risk:high-fan-in:symbol:src/allocation/service_layer/messagebus.py:allocation.service_layer.messagebus.MessageBus.handle:26"
         ],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/service_layer/messagebus.py:allocation.service_layer.messagebus.MessageBus.handle:26:source-range",
@@ -6789,6 +6891,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/service_layer/messagebus.py:allocation.service_layer.messagebus.MessageBus.handle_event:37:source-range",
@@ -6880,6 +6983,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/service_layer/messagebus.py:allocation.service_layer.messagebus.MessageBus.handle_command:47:source-range",
@@ -6973,6 +7077,9 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [
+          "pattern:unit-of-work"
+        ],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork:13:source-range",
@@ -7051,6 +7158,9 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [
+          "pattern:unit-of-work"
+        ],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.__enter__:16:source-range",
@@ -7129,6 +7239,9 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [
+          "pattern:unit-of-work"
+        ],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.__exit__:19:source-range",
@@ -7229,6 +7342,9 @@
         "flow_ids": [],
         "finding_ids": [
           "risk:high-fan-in:symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.commit:22"
+        ],
+        "pattern_ids": [
+          "pattern:unit-of-work"
         ],
         "claims": [
           {
@@ -7340,6 +7456,9 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [
+          "pattern:unit-of-work"
+        ],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.collect_new_events:25:source-range",
@@ -7422,6 +7541,9 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [
+          "pattern:unit-of-work"
+        ],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork._commit:31:source-range",
@@ -7503,6 +7625,9 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [
+          "pattern:unit-of-work"
+        ],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.rollback:35:source-range",
@@ -7591,6 +7716,9 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [
+          "pattern:unit-of-work"
+        ],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork:47:source-range",
@@ -7685,6 +7813,9 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [
+          "pattern:unit-of-work"
+        ],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork.__init__:48:source-range",
@@ -7763,6 +7894,9 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [
+          "pattern:unit-of-work"
+        ],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork.__enter__:51:source-range",
@@ -7850,6 +7984,9 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [
+          "pattern:unit-of-work"
+        ],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork.__exit__:56:source-range",
@@ -7928,6 +8065,9 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [
+          "pattern:unit-of-work"
+        ],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork._commit:60:source-range",
@@ -8015,6 +8155,9 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [
+          "pattern:unit-of-work"
+        ],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork.rollback:63:source-range",
@@ -8095,6 +8238,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:src/allocation/views.py:allocation.views.allocations:4:source-range",
@@ -8176,6 +8320,7 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/conftest.py:tests.conftest.in_memory_sqlite_db:21:source-range",
@@ -8254,6 +8399,7 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/conftest.py:tests.conftest.sqlite_session_factory:28:source-range",
@@ -8334,6 +8480,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/conftest.py:tests.conftest.mappers:33:source-range",
@@ -8425,6 +8572,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/conftest.py:tests.conftest.wait_for_postgres_to_come_up:40:source-range",
@@ -8508,6 +8656,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/conftest.py:tests.conftest.wait_for_webapp_to_come_up:45:source-range",
@@ -8612,6 +8761,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/conftest.py:tests.conftest.wait_for_redis_to_come_up:50:source-range",
@@ -8705,6 +8855,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/conftest.py:tests.conftest.postgres_db:56:source-range",
@@ -8807,6 +8958,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/conftest.py:tests.conftest.postgres_session_factory:64:source-range",
@@ -8888,6 +9040,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/conftest.py:tests.conftest.postgres_session:69:source-range",
@@ -8979,6 +9132,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/conftest.py:tests.conftest.restart_api:74:source-range",
@@ -9070,6 +9224,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/conftest.py:tests.conftest.restart_redis_pubsub:81:source-range",
@@ -9164,6 +9319,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/e2e/api_client.py:tests.e2e.api_client.post_to_add_batch:5:source-range",
@@ -9261,6 +9417,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/e2e/api_client.py:tests.e2e.api_client.post_to_allocate:13:source-range",
@@ -9357,6 +9514,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/e2e/api_client.py:tests.e2e.api_client.get_allocation:28:source-range",
@@ -9460,6 +9618,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/e2e/redis_client.py:tests.e2e.redis_client.subscribe_to:9:source-range",
@@ -9539,6 +9698,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/e2e/redis_client.py:tests.e2e.redis_client.publish_message:17:source-range",
@@ -9633,6 +9793,7 @@
         "finding_ids": [
           "risk:high-fan-out:symbol:tests/e2e/test_api.py:tests.e2e.test_api.test_happy_path_returns_202_and_batch_is_allocated:8"
         ],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/e2e/test_api.py:tests.e2e.test_api.test_happy_path_returns_202_and_batch_is_allocated:8:source-range",
@@ -9798,6 +9959,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/e2e/test_api.py:tests.e2e.test_api.test_unhappy_path_returns_400_and_error_message:30:source-range",
@@ -9935,6 +10097,7 @@
         "finding_ids": [
           "risk:high-fan-out:symbol:tests/e2e/test_external_events.py:tests.e2e.test_external_events.test_change_batch_quantity_leading_to_reallocation:11"
         ],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/e2e/test_external_events.py:tests.e2e.test_external_events.test_change_batch_quantity_leading_to_reallocation:11:source-range",
@@ -10097,6 +10260,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/integration/test_email.py:tests.integration.test_email.bus:13:source-range",
@@ -10210,6 +10374,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/integration/test_email.py:tests.integration.test_email.get_email_from_mailhog:24:source-range",
@@ -10316,6 +10481,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/integration/test_email.py:tests.integration.test_email.test_out_of_stock_email:30:source-range",
@@ -10471,6 +10637,7 @@
         "finding_ids": [
           "risk:high-fan-out:symbol:tests/integration/test_repository.py:tests.integration.test_repository.test_get_by_batchref:8"
         ],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/integration/test_repository.py:tests.integration.test_repository.test_get_by_batchref:8:source-range",
@@ -10632,6 +10799,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/integration/test_uow.py:tests.integration.test_uow.insert_batch:15:source-range",
@@ -10714,6 +10882,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/integration/test_uow.py:tests.integration.test_uow.get_allocated_batch_ref:27:source-range",
@@ -10799,6 +10968,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/integration/test_uow.py:tests.integration.test_uow.test_uow_can_retrieve_a_batch_and_allocate_to_it:40:source-range",
@@ -10945,6 +11115,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/integration/test_uow.py:tests.integration.test_uow.test_rolls_back_uncommitted_work_by_default:56:source-range",
@@ -11047,6 +11218,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/integration/test_uow.py:tests.integration.test_uow.test_rolls_back_on_error:66:source-range",
@@ -11160,6 +11332,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/integration/test_uow.py:tests.integration.test_uow.test_rolls_back_on_error.MyException:67:source-range",
@@ -11244,6 +11417,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/integration/test_uow.py:tests.integration.test_uow.try_to_allocate:81:source-range",
@@ -11378,6 +11552,7 @@
         "finding_ids": [
           "risk:high-fan-out:symbol:tests/integration/test_uow.py:tests.integration.test_uow.test_concurrent_updates_to_version_are_not_allowed:94"
         ],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/integration/test_uow.py:tests.integration.test_uow.test_concurrent_updates_to_version_are_not_allowed:94:source-range",
@@ -11538,6 +11713,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/integration/test_views.py:tests.integration.test_views.sqlite_bus:14:source-range",
@@ -11654,6 +11830,7 @@
         "finding_ids": [
           "risk:high-fan-out:symbol:tests/integration/test_views.py:tests.integration.test_views.test_allocations_view:25"
         ],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/integration/test_views.py:tests.integration.test_views.test_allocations_view:25:source-range",
@@ -11827,6 +12004,7 @@
         "finding_ids": [
           "risk:high-fan-out:symbol:tests/integration/test_views.py:tests.integration.test_views.test_deallocation:41"
         ],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/integration/test_views.py:tests.integration.test_views.test_deallocation:41:source-range",
@@ -11986,6 +12164,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/random_refs.py:tests.random_refs.random_suffix:4:source-range",
@@ -12073,6 +12252,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/random_refs.py:tests.random_refs.random_sku:8:source-range",
@@ -12174,6 +12354,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/random_refs.py:tests.random_refs.random_batchref:12:source-range",
@@ -12274,6 +12455,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/random_refs.py:tests.random_refs.random_orderid:16:source-range",
@@ -12369,6 +12551,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_batches.py:tests.unit.test_batches.test_allocating_to_a_batch_reduces_the_available_quantity:5:source-range",
@@ -12474,6 +12657,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_batches.py:tests.unit.test_batches.make_batch_and_line:14:source-range",
@@ -12579,6 +12763,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_batches.py:tests.unit.test_batches.test_can_allocate_if_available_greater_than_required:21:source-range",
@@ -12680,6 +12865,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_batches.py:tests.unit.test_batches.test_cannot_allocate_if_available_smaller_than_required:26:source-range",
@@ -12781,6 +12967,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_batches.py:tests.unit.test_batches.test_can_allocate_if_available_equal_to_required:31:source-range",
@@ -12883,6 +13070,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_batches.py:tests.unit.test_batches.test_cannot_allocate_if_skus_do_not_match:36:source-range",
@@ -12994,6 +13182,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_batches.py:tests.unit.test_batches.test_allocation_is_idempotent:42:source-range",
@@ -13086,6 +13275,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_handlers.py:tests.unit.test_handlers.FakeRepository:14:source-range",
@@ -13174,6 +13364,7 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_handlers.py:tests.unit.test_handlers.FakeRepository.__init__:15:source-range",
@@ -13252,6 +13443,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_handlers.py:tests.unit.test_handlers.FakeRepository._add:19:source-range",
@@ -13339,6 +13531,7 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_handlers.py:tests.unit.test_handlers.FakeRepository._get:22:source-range",
@@ -13415,6 +13608,7 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_handlers.py:tests.unit.test_handlers.FakeRepository._get_by_batchref:25:source-range",
@@ -13497,6 +13691,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_handlers.py:tests.unit.test_handlers.FakeUnitOfWork:32:source-range",
@@ -13588,6 +13783,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_handlers.py:tests.unit.test_handlers.FakeUnitOfWork.__init__:33:source-range",
@@ -13675,6 +13871,7 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_handlers.py:tests.unit.test_handlers.FakeUnitOfWork._commit:37:source-range",
@@ -13751,6 +13948,7 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_handlers.py:tests.unit.test_handlers.FakeUnitOfWork.rollback:40:source-range",
@@ -13833,6 +14031,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_handlers.py:tests.unit.test_handlers.FakeNotifications:44:source-range",
@@ -13922,6 +14121,7 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_handlers.py:tests.unit.test_handlers.FakeNotifications.__init__:45:source-range",
@@ -13998,6 +14198,7 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_handlers.py:tests.unit.test_handlers.FakeNotifications.send:48:source-range",
@@ -14085,6 +14286,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_handlers.py:tests.unit.test_handlers.bootstrap_test_app:52:source-range",
@@ -14201,6 +14403,7 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_handlers.py:tests.unit.test_handlers.TestAddBatch:61:source-range",
@@ -14282,6 +14485,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_handlers.py:tests.unit.test_handlers.TestAddBatch.test_for_new_product:62:source-range",
@@ -14409,6 +14613,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_handlers.py:tests.unit.test_handlers.TestAddBatch.test_for_existing_product:68:source-range",
@@ -14551,6 +14756,7 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_handlers.py:tests.unit.test_handlers.TestAllocate:77:source-range",
@@ -14634,6 +14840,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_handlers.py:tests.unit.test_handlers.TestAllocate.test_allocates:78:source-range",
@@ -14782,6 +14989,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_handlers.py:tests.unit.test_handlers.TestAllocate.test_errors_for_invalid_sku:85:source-range",
@@ -14919,6 +15127,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_handlers.py:tests.unit.test_handlers.TestAllocate.test_commits:92:source-range",
@@ -15058,6 +15267,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_handlers.py:tests.unit.test_handlers.TestAllocate.test_sends_email_on_out_of_stock_error:98:source-range",
@@ -15201,6 +15411,7 @@
         "related_edge_ids": [],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_handlers.py:tests.unit.test_handlers.TestChangeBatchQuantity:113:source-range",
@@ -15284,6 +15495,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_handlers.py:tests.unit.test_handlers.TestChangeBatchQuantity.test_changes_available_quantity:114:source-range",
@@ -15438,6 +15650,7 @@
         "finding_ids": [
           "risk:high-fan-out:symbol:tests/unit/test_handlers.py:tests.unit.test_handlers.TestChangeBatchQuantity.test_reallocates_if_necessary:123"
         ],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_handlers.py:tests.unit.test_handlers.TestChangeBatchQuantity.test_reallocates_if_necessary:123:source-range",
@@ -15598,6 +15811,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_product.py:tests.unit.test_product.test_prefers_warehouse_batches_to_shipments:11:source-range",
@@ -15724,6 +15938,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_product.py:tests.unit.test_product.test_prefers_earlier_batches:23:source-range",
@@ -15860,6 +16075,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_product.py:tests.unit.test_product.test_returns_allocated_batch_ref:37:source-range",
@@ -15985,6 +16201,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_product.py:tests.unit.test_product.test_outputs_allocated_event:46:source-range",
@@ -16111,6 +16328,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_product.py:tests.unit.test_product.test_records_out_of_stock_event_if_cannot_allocate:57:source-range",
@@ -16246,6 +16464,7 @@
         ],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [
           {
             "id": "claim:symbol:tests/unit/test_product.py:tests.unit.test_product.test_increments_version_number:67:source-range",
@@ -23289,6 +23508,254 @@
       }
     }
   ],
+  "patterns": [
+    {
+      "id": "pattern:layered-architecture",
+      "pattern_id": "layered-architecture",
+      "title": "Layered architecture",
+      "classification": "heuristic",
+      "confidence": 0.96,
+      "summary": "Code is separated across 4 recognizable layers: entrypoint, application service, domain, infrastructure.",
+      "provenance": "Path conventions, proven framework roles, ORM roles, and cross-layer symbol relationships",
+      "node_ids": [
+        "symbol:src/allocation/bootstrap.py:allocation.bootstrap.bootstrap:11",
+        "symbol:src/allocation/service_layer/handlers.py:allocation.service_layer.handlers.InvalidSku:13",
+        "symbol:src/allocation/domain/commands.py:allocation.domain.commands.Command:7",
+        "symbol:src/allocation/adapters/notifications.py:allocation.adapters.notifications.AbstractNotifications:7"
+      ],
+      "edge_ids": [
+        "calls:symbol:src/allocation/bootstrap.py:allocation.bootstrap.bootstrap:11->symbol:src/allocation/adapters/notifications.py:allocation.adapters.notifications.EmailNotifications:17:19:24",
+        "calls:symbol:src/allocation/bootstrap.py:allocation.bootstrap.bootstrap:11->symbol:src/allocation/adapters/orm.py:allocation.adapters.orm.start_mappers:63:22:8",
+        "calls:symbol:src/allocation/bootstrap.py:allocation.bootstrap.bootstrap:11->symbol:src/allocation/service_layer/messagebus.py:allocation.service_layer.messagebus.MessageBus:15:37:11",
+        "may-dispatch-to:symbol:src/allocation/config.py:allocation.config.get_postgres_uri:4->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:5:11",
+        "may-dispatch-to:symbol:src/allocation/config.py:allocation.config.get_postgres_uri:4->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:7:15",
+        "may-dispatch-to:symbol:src/allocation/config.py:allocation.config.get_api_url:12->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:13:11",
+        "may-dispatch-to:symbol:src/allocation/config.py:allocation.config.get_redis_host_and_port:18->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:19:11",
+        "may-dispatch-to:symbol:src/allocation/config.py:allocation.config.get_email_host_and_port:24->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:25:11",
+        "may-dispatch-to:symbol:src/allocation/domain/model.py:allocation.domain.model.Batch.allocate:74->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.add:11:76:12",
+        "calls:symbol:src/allocation/entrypoints/flask_app.py:allocation.entrypoints.flask_app.add_batch:12->symbol:src/allocation/domain/commands.py:allocation.domain.commands.CreateBatch:19:16:10",
+        "may-dispatch-to:symbol:src/allocation/entrypoints/flask_app.py:allocation.entrypoints.flask_app.add_batch:12->symbol:src/allocation/service_layer/messagebus.py:allocation.service_layer.messagebus.MessageBus.handle:26:19:4",
+        "calls:symbol:src/allocation/entrypoints/flask_app.py:allocation.entrypoints.flask_app.allocate_endpoint:24->symbol:src/allocation/domain/commands.py:allocation.domain.commands.Allocate:12:26:14",
+        "may-dispatch-to:symbol:src/allocation/entrypoints/flask_app.py:allocation.entrypoints.flask_app.allocate_endpoint:24->symbol:src/allocation/service_layer/messagebus.py:allocation.service_layer.messagebus.MessageBus.handle:26:29:8",
+        "calls:symbol:src/allocation/entrypoints/redis_eventconsumer.py:allocation.entrypoints.redis_eventconsumer.handle_change_batch_quantity:23->symbol:src/allocation/domain/commands.py:allocation.domain.commands.ChangeBatchQuantity:27:26:10",
+        "may-dispatch-to:symbol:src/allocation/entrypoints/redis_eventconsumer.py:allocation.entrypoints.redis_eventconsumer.handle_change_batch_quantity:23->symbol:src/allocation/service_layer/messagebus.py:allocation.service_layer.messagebus.MessageBus.handle:26:27:4",
+        "may-dispatch-to:symbol:src/allocation/service_layer/handlers.py:allocation.service_layer.handlers.add_batch:17->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:22:18"
+      ],
+      "evidence_refs": [
+        "symbol:src/allocation/bootstrap.py:allocation.bootstrap.bootstrap:11",
+        "symbol:src/allocation/service_layer/handlers.py:allocation.service_layer.handlers.InvalidSku:13",
+        "symbol:src/allocation/domain/commands.py:allocation.domain.commands.Command:7",
+        "symbol:src/allocation/adapters/notifications.py:allocation.adapters.notifications.AbstractNotifications:7",
+        "calls:symbol:src/allocation/bootstrap.py:allocation.bootstrap.bootstrap:11->symbol:src/allocation/adapters/notifications.py:allocation.adapters.notifications.EmailNotifications:17:19:24",
+        "calls:symbol:src/allocation/bootstrap.py:allocation.bootstrap.bootstrap:11->symbol:src/allocation/adapters/orm.py:allocation.adapters.orm.start_mappers:63:22:8",
+        "calls:symbol:src/allocation/bootstrap.py:allocation.bootstrap.bootstrap:11->symbol:src/allocation/service_layer/messagebus.py:allocation.service_layer.messagebus.MessageBus:15:37:11",
+        "may-dispatch-to:symbol:src/allocation/config.py:allocation.config.get_postgres_uri:4->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:5:11",
+        "may-dispatch-to:symbol:src/allocation/config.py:allocation.config.get_postgres_uri:4->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:7:15",
+        "may-dispatch-to:symbol:src/allocation/config.py:allocation.config.get_api_url:12->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:13:11",
+        "may-dispatch-to:symbol:src/allocation/config.py:allocation.config.get_redis_host_and_port:18->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:19:11",
+        "may-dispatch-to:symbol:src/allocation/config.py:allocation.config.get_email_host_and_port:24->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:25:11",
+        "may-dispatch-to:symbol:src/allocation/domain/model.py:allocation.domain.model.Batch.allocate:74->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.add:11:76:12",
+        "calls:symbol:src/allocation/entrypoints/flask_app.py:allocation.entrypoints.flask_app.add_batch:12->symbol:src/allocation/domain/commands.py:allocation.domain.commands.CreateBatch:19:16:10",
+        "may-dispatch-to:symbol:src/allocation/entrypoints/flask_app.py:allocation.entrypoints.flask_app.add_batch:12->symbol:src/allocation/service_layer/messagebus.py:allocation.service_layer.messagebus.MessageBus.handle:26:19:4",
+        "calls:symbol:src/allocation/entrypoints/flask_app.py:allocation.entrypoints.flask_app.allocate_endpoint:24->symbol:src/allocation/domain/commands.py:allocation.domain.commands.Allocate:12:26:14",
+        "may-dispatch-to:symbol:src/allocation/entrypoints/flask_app.py:allocation.entrypoints.flask_app.allocate_endpoint:24->symbol:src/allocation/service_layer/messagebus.py:allocation.service_layer.messagebus.MessageBus.handle:26:29:8",
+        "calls:symbol:src/allocation/entrypoints/redis_eventconsumer.py:allocation.entrypoints.redis_eventconsumer.handle_change_batch_quantity:23->symbol:src/allocation/domain/commands.py:allocation.domain.commands.ChangeBatchQuantity:27:26:10",
+        "may-dispatch-to:symbol:src/allocation/entrypoints/redis_eventconsumer.py:allocation.entrypoints.redis_eventconsumer.handle_change_batch_quantity:23->symbol:src/allocation/service_layer/messagebus.py:allocation.service_layer.messagebus.MessageBus.handle:26:27:4",
+        "may-dispatch-to:symbol:src/allocation/service_layer/handlers.py:allocation.service_layer.handlers.add_batch:17->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:22:18"
+      ],
+      "metrics": {
+        "recognized_layers": 4,
+        "cross_layer_relationships": 25
+      }
+    },
+    {
+      "id": "pattern:repository-boundary",
+      "pattern_id": "repository-boundary",
+      "title": "Repository boundary",
+      "classification": "heuristic",
+      "confidence": 0.84,
+      "summary": "13 repository-named symbols participate in 36 resolved relationships, suggesting data access is concentrated behind a repository boundary.",
+      "provenance": "Repository naming convention plus resolved symbol and persistence relationships",
+      "node_ids": [
+        "symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository:7",
+        "symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.__init__:8",
+        "symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.add:11",
+        "symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15",
+        "symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get_by_batchref:21",
+        "symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository._add:28",
+        "symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository._get:32",
+        "symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository._get_by_batchref:36",
+        "symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.SqlAlchemyRepository:40",
+        "symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.SqlAlchemyRepository.__init__:41",
+        "symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.SqlAlchemyRepository._add:45",
+        "symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.SqlAlchemyRepository._get:48",
+        "symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.SqlAlchemyRepository._get_by_batchref:51"
+      ],
+      "edge_ids": [
+        "extends:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.SqlAlchemyRepository:40->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository:7:40",
+        "calls:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.add:11->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository._add:28:12:8",
+        "may-dispatch-to:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.add:11->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.add:11:13:8",
+        "calls:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository._get:32:16:18",
+        "may-dispatch-to:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.add:11:18:12",
+        "calls:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get_by_batchref:21->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository._get_by_batchref:36:22:18",
+        "may-dispatch-to:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get_by_batchref:21->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.add:11:24:12",
+        "may-dispatch-to:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.SqlAlchemyRepository._add:45->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.add:11:46:8",
+        "may-dispatch-to:symbol:src/allocation/config.py:allocation.config.get_postgres_uri:4->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:5:11",
+        "may-dispatch-to:symbol:src/allocation/config.py:allocation.config.get_postgres_uri:4->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:7:15",
+        "may-dispatch-to:symbol:src/allocation/config.py:allocation.config.get_api_url:12->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:13:11",
+        "may-dispatch-to:symbol:src/allocation/config.py:allocation.config.get_redis_host_and_port:18->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:19:11",
+        "may-dispatch-to:symbol:src/allocation/config.py:allocation.config.get_email_host_and_port:24->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:25:11",
+        "may-dispatch-to:symbol:src/allocation/domain/model.py:allocation.domain.model.Batch.allocate:74->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.add:11:76:12",
+        "may-dispatch-to:symbol:src/allocation/service_layer/handlers.py:allocation.service_layer.handlers.add_batch:17->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:22:18",
+        "may-dispatch-to:symbol:src/allocation/service_layer/handlers.py:allocation.service_layer.handlers.add_batch:17->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.add:11:25:12",
+        "may-dispatch-to:symbol:src/allocation/service_layer/handlers.py:allocation.service_layer.handlers.allocate:30->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:36:18",
+        "may-dispatch-to:symbol:src/allocation/service_layer/handlers.py:allocation.service_layer.handlers.change_batch_quantity:50->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get_by_batchref:21:55:18",
+        "calls:symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork.__enter__:51->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.SqlAlchemyRepository:40:53:24",
+        "may-dispatch-to:symbol:tests/conftest.py:tests.conftest.wait_for_webapp_to_come_up:45->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:46:11",
+        "may-dispatch-to:symbol:tests/e2e/api_client.py:tests.e2e.api_client.get_allocation:28->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:30:11",
+        "may-dispatch-to:symbol:tests/integration/test_email.py:tests.integration.test_email.get_email_from_mailhog:24->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:26:17",
+        "calls:symbol:tests/integration/test_repository.py:tests.integration.test_repository.test_get_by_batchref:8->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.SqlAlchemyRepository:40:10:11",
+        "may-dispatch-to:symbol:tests/integration/test_repository.py:tests.integration.test_repository.test_get_by_batchref:8->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.add:11:16:4"
+      ],
+      "evidence_refs": [
+        "symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository:7",
+        "symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.__init__:8",
+        "symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.add:11",
+        "symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15",
+        "symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get_by_batchref:21",
+        "symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository._add:28",
+        "symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository._get:32",
+        "symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository._get_by_batchref:36",
+        "symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.SqlAlchemyRepository:40",
+        "symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.SqlAlchemyRepository.__init__:41",
+        "symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.SqlAlchemyRepository._add:45",
+        "symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.SqlAlchemyRepository._get:48",
+        "symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.SqlAlchemyRepository._get_by_batchref:51",
+        "extends:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.SqlAlchemyRepository:40->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository:7:40",
+        "calls:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.add:11->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository._add:28:12:8",
+        "may-dispatch-to:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.add:11->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.add:11:13:8",
+        "calls:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository._get:32:16:18",
+        "may-dispatch-to:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.add:11:18:12",
+        "calls:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get_by_batchref:21->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository._get_by_batchref:36:22:18",
+        "may-dispatch-to:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get_by_batchref:21->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.add:11:24:12",
+        "may-dispatch-to:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.SqlAlchemyRepository._add:45->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.add:11:46:8",
+        "may-dispatch-to:symbol:src/allocation/config.py:allocation.config.get_postgres_uri:4->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:5:11",
+        "may-dispatch-to:symbol:src/allocation/config.py:allocation.config.get_postgres_uri:4->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:7:15",
+        "may-dispatch-to:symbol:src/allocation/config.py:allocation.config.get_api_url:12->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:13:11",
+        "may-dispatch-to:symbol:src/allocation/config.py:allocation.config.get_redis_host_and_port:18->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:19:11",
+        "may-dispatch-to:symbol:src/allocation/config.py:allocation.config.get_email_host_and_port:24->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:25:11",
+        "may-dispatch-to:symbol:src/allocation/domain/model.py:allocation.domain.model.Batch.allocate:74->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.add:11:76:12",
+        "may-dispatch-to:symbol:src/allocation/service_layer/handlers.py:allocation.service_layer.handlers.add_batch:17->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:22:18",
+        "may-dispatch-to:symbol:src/allocation/service_layer/handlers.py:allocation.service_layer.handlers.add_batch:17->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.add:11:25:12",
+        "may-dispatch-to:symbol:src/allocation/service_layer/handlers.py:allocation.service_layer.handlers.allocate:30->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:36:18",
+        "may-dispatch-to:symbol:src/allocation/service_layer/handlers.py:allocation.service_layer.handlers.change_batch_quantity:50->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get_by_batchref:21:55:18",
+        "calls:symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork.__enter__:51->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.SqlAlchemyRepository:40:53:24",
+        "may-dispatch-to:symbol:tests/conftest.py:tests.conftest.wait_for_webapp_to_come_up:45->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:46:11",
+        "may-dispatch-to:symbol:tests/e2e/api_client.py:tests.e2e.api_client.get_allocation:28->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:30:11",
+        "may-dispatch-to:symbol:tests/integration/test_email.py:tests.integration.test_email.get_email_from_mailhog:24->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:26:17",
+        "calls:symbol:tests/integration/test_repository.py:tests.integration.test_repository.test_get_by_batchref:8->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.SqlAlchemyRepository:40:10:11",
+        "may-dispatch-to:symbol:tests/integration/test_repository.py:tests.integration.test_repository.test_get_by_batchref:8->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.add:11:16:4"
+      ],
+      "metrics": {
+        "repository_symbols": 13,
+        "boundary_relationships": 36,
+        "persistence_relationships": 0
+      }
+    },
+    {
+      "id": "pattern:unit-of-work",
+      "pattern_id": "unit-of-work",
+      "title": "Unit of Work boundary",
+      "classification": "heuristic",
+      "confidence": 0.86,
+      "summary": "13 Unit of Work-named symbols coordinate 24 resolved relationships, suggesting transaction-scoped persistence orchestration.",
+      "provenance": "Unit of Work naming convention plus resolved symbol relationships",
+      "node_ids": [
+        "symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork:13",
+        "symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.__enter__:16",
+        "symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.__exit__:19",
+        "symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.commit:22",
+        "symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.collect_new_events:25",
+        "symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork._commit:31",
+        "symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.rollback:35",
+        "symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork:47",
+        "symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork.__init__:48",
+        "symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork.__enter__:51",
+        "symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork.__exit__:56",
+        "symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork._commit:60",
+        "symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork.rollback:63"
+      ],
+      "edge_ids": [
+        "may-dispatch-to:symbol:src/allocation/service_layer/handlers.py:allocation.service_layer.handlers.add_batch:17->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.commit:22:27:8",
+        "may-dispatch-to:symbol:src/allocation/service_layer/handlers.py:allocation.service_layer.handlers.allocate:30->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.commit:22:40:8",
+        "may-dispatch-to:symbol:src/allocation/service_layer/handlers.py:allocation.service_layer.handlers.change_batch_quantity:50->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.commit:22:57:8",
+        "may-dispatch-to:symbol:src/allocation/service_layer/handlers.py:allocation.service_layer.handlers.add_allocation_to_read_model:80->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.commit:22:92:8",
+        "may-dispatch-to:symbol:src/allocation/service_layer/handlers.py:allocation.service_layer.handlers.remove_allocation_from_read_model:95->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.commit:22:107:8",
+        "may-dispatch-to:symbol:src/allocation/service_layer/messagebus.py:allocation.service_layer.messagebus.MessageBus.handle_event:37->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.collect_new_events:25:42:34",
+        "may-dispatch-to:symbol:src/allocation/service_layer/messagebus.py:allocation.service_layer.messagebus.MessageBus.handle_command:47->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.collect_new_events:25:52:30",
+        "extends:symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork:47->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork:13:47",
+        "calls:symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.__exit__:19->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.rollback:35:20:8",
+        "calls:symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.commit:22->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork._commit:31:23:8",
+        "calls:symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork.__enter__:51->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.SqlAlchemyRepository:40:53:24",
+        "may-dispatch-to:symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork._commit:60->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.commit:22:61:8",
+        "calls:symbol:tests/integration/test_email.py:tests.integration.test_email.bus:13->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork:47:16:12",
+        "may-dispatch-to:symbol:tests/integration/test_uow.py:tests.integration.test_uow.test_uow_can_retrieve_a_batch_and_allocate_to_it:40->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.commit:22:43:4",
+        "calls:symbol:tests/integration/test_uow.py:tests.integration.test_uow.test_uow_can_retrieve_a_batch_and_allocate_to_it:40->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork:47:45:10",
+        "may-dispatch-to:symbol:tests/integration/test_uow.py:tests.integration.test_uow.test_uow_can_retrieve_a_batch_and_allocate_to_it:40->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.commit:22:50:8",
+        "calls:symbol:tests/integration/test_uow.py:tests.integration.test_uow.test_rolls_back_uncommitted_work_by_default:56->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork:47:57:10",
+        "calls:symbol:tests/integration/test_uow.py:tests.integration.test_uow.test_rolls_back_on_error:66->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork:47:70:10",
+        "calls:symbol:tests/integration/test_uow.py:tests.integration.test_uow.try_to_allocate:81->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork:47:84:13",
+        "may-dispatch-to:symbol:tests/integration/test_uow.py:tests.integration.test_uow.try_to_allocate:81->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.commit:22:88:12",
+        "may-dispatch-to:symbol:tests/integration/test_uow.py:tests.integration.test_uow.test_concurrent_updates_to_version_are_not_allowed:94->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.commit:22:98:4",
+        "calls:symbol:tests/integration/test_uow.py:tests.integration.test_uow.test_concurrent_updates_to_version_are_not_allowed:94->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork:47:131:9",
+        "calls:symbol:tests/integration/test_views.py:tests.integration.test_views.sqlite_bus:14->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork:47:17:12",
+        "extends:symbol:tests/unit/test_handlers.py:tests.unit.test_handlers.FakeUnitOfWork:32->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork:13:32"
+      ],
+      "evidence_refs": [
+        "symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork:13",
+        "symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.__enter__:16",
+        "symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.__exit__:19",
+        "symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.commit:22",
+        "symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.collect_new_events:25",
+        "symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork._commit:31",
+        "symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.rollback:35",
+        "symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork:47",
+        "symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork.__init__:48",
+        "symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork.__enter__:51",
+        "symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork.__exit__:56",
+        "symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork._commit:60",
+        "symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork.rollback:63",
+        "may-dispatch-to:symbol:src/allocation/service_layer/handlers.py:allocation.service_layer.handlers.add_batch:17->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.commit:22:27:8",
+        "may-dispatch-to:symbol:src/allocation/service_layer/handlers.py:allocation.service_layer.handlers.allocate:30->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.commit:22:40:8",
+        "may-dispatch-to:symbol:src/allocation/service_layer/handlers.py:allocation.service_layer.handlers.change_batch_quantity:50->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.commit:22:57:8",
+        "may-dispatch-to:symbol:src/allocation/service_layer/handlers.py:allocation.service_layer.handlers.add_allocation_to_read_model:80->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.commit:22:92:8",
+        "may-dispatch-to:symbol:src/allocation/service_layer/handlers.py:allocation.service_layer.handlers.remove_allocation_from_read_model:95->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.commit:22:107:8",
+        "may-dispatch-to:symbol:src/allocation/service_layer/messagebus.py:allocation.service_layer.messagebus.MessageBus.handle_event:37->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.collect_new_events:25:42:34",
+        "may-dispatch-to:symbol:src/allocation/service_layer/messagebus.py:allocation.service_layer.messagebus.MessageBus.handle_command:47->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.collect_new_events:25:52:30",
+        "extends:symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork:47->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork:13:47",
+        "calls:symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.__exit__:19->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.rollback:35:20:8",
+        "calls:symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.commit:22->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork._commit:31:23:8",
+        "calls:symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork.__enter__:51->symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.SqlAlchemyRepository:40:53:24",
+        "may-dispatch-to:symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork._commit:60->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.commit:22:61:8",
+        "calls:symbol:tests/integration/test_email.py:tests.integration.test_email.bus:13->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork:47:16:12",
+        "may-dispatch-to:symbol:tests/integration/test_uow.py:tests.integration.test_uow.test_uow_can_retrieve_a_batch_and_allocate_to_it:40->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.commit:22:43:4",
+        "calls:symbol:tests/integration/test_uow.py:tests.integration.test_uow.test_uow_can_retrieve_a_batch_and_allocate_to_it:40->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork:47:45:10",
+        "may-dispatch-to:symbol:tests/integration/test_uow.py:tests.integration.test_uow.test_uow_can_retrieve_a_batch_and_allocate_to_it:40->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.commit:22:50:8",
+        "calls:symbol:tests/integration/test_uow.py:tests.integration.test_uow.test_rolls_back_uncommitted_work_by_default:56->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork:47:57:10",
+        "calls:symbol:tests/integration/test_uow.py:tests.integration.test_uow.test_rolls_back_on_error:66->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork:47:70:10",
+        "calls:symbol:tests/integration/test_uow.py:tests.integration.test_uow.try_to_allocate:81->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork:47:84:13",
+        "may-dispatch-to:symbol:tests/integration/test_uow.py:tests.integration.test_uow.try_to_allocate:81->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.commit:22:88:12",
+        "may-dispatch-to:symbol:tests/integration/test_uow.py:tests.integration.test_uow.test_concurrent_updates_to_version_are_not_allowed:94->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.commit:22:98:4",
+        "calls:symbol:tests/integration/test_uow.py:tests.integration.test_uow.test_concurrent_updates_to_version_are_not_allowed:94->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork:47:131:9",
+        "calls:symbol:tests/integration/test_views.py:tests.integration.test_views.sqlite_bus:14->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.SqlAlchemyUnitOfWork:47:17:12",
+        "extends:symbol:tests/unit/test_handlers.py:tests.unit.test_handlers.FakeUnitOfWork:32->symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork:13:32"
+      ],
+      "metrics": {
+        "unit_of_work_symbols": 13,
+        "boundary_relationships": 24
+      }
+    }
+  ],
   "coverage": {
     "python_files": 37,
     "symbol_nodes": 159,
@@ -23298,6 +23765,7 @@
     "high_risk_findings": 4,
     "medium_risk_findings": 12,
     "evidence_packets": 159,
+    "architecture_patterns": 3,
     "call_sites": 445,
     "resolved_calls": 183,
     "candidate_calls": 79,

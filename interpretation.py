@@ -40,6 +40,7 @@ class EvidencePacket(BaseModel):
     related_edge_ids: list[str]
     flow_ids: list[str]
     finding_ids: list[str]
+    pattern_ids: list[str] = Field(default_factory=list)
     claims: list[EvidenceClaim]
 
 
@@ -97,6 +98,7 @@ def known_evidence_refs(packet: EvidencePacket) -> set[str]:
         *packet.related_edge_ids,
         *packet.flow_ids,
         *packet.finding_ids,
+        *packet.pattern_ids,
     }
     for claim in packet.claims:
         refs.update(claim.evidence_refs)

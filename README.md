@@ -68,6 +68,12 @@ The explorer now renders its symbol summary, execution role, and structural rati
 packet and shows the confidence and provenance for each section. This is the grounding boundary an
 LLM can consume later without being allowed to rewrite static-analysis facts.
 
+Graph schema v0.9 makes architectural patterns first-class evidence records. The analyzer now
+detects layered architecture, FastAPI boundaries, dependency injection, SQLAlchemy Data Mapper
+persistence, repository boundaries, and Unit of Work boundaries when their bounded static evidence is present. Every
+pattern retains a fact-or-heuristic classification, confidence, provenance, metrics, and exact
+node and edge references. Pattern IDs are also attached to participating symbol evidence packets.
+
 The API is intentionally local-only for this milestone. The hosted site continues to use the committed Cosmic Python fixture until repository analysis runs in an isolated worker service.
 
 

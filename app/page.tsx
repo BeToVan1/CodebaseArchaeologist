@@ -66,6 +66,7 @@ type GraphNode = {
     related_edge_ids: string[];
     flow_ids: string[];
     finding_ids: string[];
+    pattern_ids: string[];
     claims: Claim[];
   };
 };
@@ -115,6 +116,19 @@ type RiskFinding = {
   evidence: { path: string; line: number; end_line?: number; expression?: string };
   metrics: Record<string, number>;
 };
+type ArchitecturePattern = {
+  id: string;
+  pattern_id: "layered-architecture" | "fastapi-boundary" | "dependency-injection" | "data-mapper" | "repository-boundary" | "unit-of-work";
+  title: string;
+  classification: "fact" | "heuristic";
+  confidence: number;
+  summary: string;
+  provenance: string;
+  node_ids: string[];
+  edge_ids: string[];
+  evidence_refs: string[];
+  metrics: Record<string, number>;
+};
 type Graph = {
   schema_version: string;
   repository?: RepositoryMetadata;
@@ -125,6 +139,7 @@ type Graph = {
   edges: GraphEdge[];
   flows?: ExecutionFlow[];
   findings?: RiskFinding[];
+  patterns?: ArchitecturePattern[];
 };
 type Claim = {
   id?: string;
@@ -399,6 +414,7 @@ function validateGraph(value: unknown): Graph {
         || !Array.isArray(packet.related_edge_ids)
         || !Array.isArray(packet.flow_ids)
         || !Array.isArray(packet.finding_ids)
+        || !Array.isArray(packet.pattern_ids)
         || !Array.isArray(packet.claims)
       ) {
         throw new Error(`Invalid graph: symbol "${node.id}" has an invalid evidence packet.`);
@@ -500,6 +516,34 @@ function validateGraph(value: unknown): Graph {
       }
     }
   }
+  if (value.patterns !== undefined) {
+    if (!Array.isArray(value.patterns)) throw new Error("Invalid graph: patterns must be an array.");
+    const edgeIds = new Set((edges as GraphEdge[]).map((edge) => edge.id));
+    for (const [index, pattern] of value.patterns.entries()) {
+      if (
+        !isRecord(pattern)
+        || typeof pattern.id !== "string"
+        || typeof pattern.pattern_id !== "string"
+        || typeof pattern.title !== "string"
+        || !["fact", "heuristic"].includes(String(pattern.classification))
+        || typeof pattern.confidence !== "number"
+        || pattern.confidence < 0
+        || pattern.confidence > 1
+        || typeof pattern.summary !== "string"
+        || typeof pattern.provenance !== "string"
+        || !Array.isArray(pattern.node_ids)
+        || !pattern.node_ids.length
+        || !pattern.node_ids.every((id) => typeof id === "string" && nodeIds.has(id))
+        || !Array.isArray(pattern.edge_ids)
+        || !pattern.edge_ids.every((id) => typeof id === "string" && edgeIds.has(id))
+        || !Array.isArray(pattern.evidence_refs)
+        || !pattern.evidence_refs.length
+        || !isRecord(pattern.metrics)
+      ) {
+        throw new Error(`Invalid graph: architecture pattern ${index + 1} has invalid evidence or classification.`);
+      }
+    }
+  }
   return value as Graph;
 }
 
@@ -527,7 +571,7 @@ export default function Home() {
   const [selectedSymbolId, setSelectedSymbolId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<"production" | "all">("production");
-  const [mapMode, setMapMode] = useState<"architecture" | "flows" | "risks">("architecture");
+  const [mapMode, setMapMode] = useState<"architecture" | "patterns" | "flows" | "risks">("architecture");
   const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
   const [selectedRiskId, setSelectedRiskId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -655,6 +699,7 @@ export default function Home() {
   const selectedFlow = flows.find((flow) => flow.id === selectedFlowId) ?? flows[0] ?? null;
   const flowEdge = (index: number) => graph?.edges.find((edge) => edge.id === selectedFlow?.ordered_edge_ids[index]);
   const allFindings = graph?.findings ?? [];
+  const patterns = graph?.patterns ?? [];
   const findings = allFindings.filter((finding) =>
     (scope === "all" || !finding.evidence.path.startsWith("tests/"))
     && finding.evidence.path.toLowerCase().includes(query.toLowerCase()),
@@ -727,6 +772,13 @@ export default function Home() {
   const relationshipCount = graph?.edges.filter((edge) => ["calls", "extends", "may-dispatch-to", "depends-on", "reads", "writes"].includes(edge.kind)).length ?? 0;
   const riskCount = findings.length;
   const highRiskCount = findings.filter((finding) => finding.severity === "high").length;
+  const factPatternCount = patterns.filter((pattern) => pattern.classification === "fact").length;
+  const canvasCopy = {
+    architecture: ["Architecture map", "Python imports", "A → B means file A imports file B."],
+    patterns: ["Pattern detection", "Architectural patterns", "Every detected pattern reports its classification, confidence, provenance, metrics, and exact graph evidence."],
+    flows: ["Flow discovery", "Representative execution paths", "Paths begin at proven framework entrypoints and preserve uncertain or unresolved steps."],
+    risks: ["Risk analysis", "Evidence-backed findings", "Deterministic heuristics identify structural hotspots; each finding links to exact source evidence."],
+  }[mapMode];
 
   return (
     <main className="shell">
@@ -757,6 +809,7 @@ export default function Home() {
           </div>
           <nav aria-label="Graph summary">
             <button className={`nav-item${mapMode === "architecture" ? " active" : ""}`} onClick={() => setMapMode("architecture")}><span>Architecture map</span><strong>{fileCount}</strong></button>
+            <button className={`nav-item${mapMode === "patterns" ? " active" : patterns.length ? "" : " muted"}`} onClick={() => setMapMode("patterns")}><span>Patterns</span><strong>{patterns.length}</strong></button>
             <button className={`nav-item${mapMode === "flows" ? " active" : ""}`} onClick={() => setMapMode("flows")}><span>Execution flows</span><strong>{flows.length}</strong></button>
             <button className={`nav-item${mapMode === "risks" ? " active warning" : riskCount ? " warning" : " muted"}`} onClick={() => setMapMode("risks")}><span>Risk findings</span><strong>{riskCount}</strong></button>
             <div className="nav-item"><span>Symbols</span><strong>{symbolCount}</strong></div>
@@ -767,7 +820,7 @@ export default function Home() {
         </aside>
 
         <section className="canvas" aria-label="Repository dependency graph">
-          <div className="canvas-head"><div><div className="eyebrow">{mapMode === "architecture" ? "Architecture map" : mapMode === "flows" ? "Flow discovery" : "Risk analysis"}</div><h2>{mapMode === "architecture" ? "Python imports" : mapMode === "flows" ? "Representative execution paths" : "Evidence-backed findings"}</h2><p className="relationship-help">{mapMode === "architecture" ? "A → B means file A imports file B." : mapMode === "flows" ? "Paths begin at proven framework entrypoints and preserve uncertain or unresolved steps." : "Deterministic heuristics identify structural hotspots; each finding links to exact source evidence."}</p></div>{mapMode === "architecture" ? <div className="legend"><span /> Selected <i /> Imports →</div> : mapMode === "flows" ? <div className="legend flow-legend"><span /> Proven <i /> Candidate</div> : <div className="risk-summary"><strong>{highRiskCount}</strong> high · <strong>{riskCount - highRiskCount}</strong> medium/low</div>}</div>
+          <div className="canvas-head"><div><div className="eyebrow">{canvasCopy[0]}</div><h2>{canvasCopy[1]}</h2><p className="relationship-help">{canvasCopy[2]}</p></div>{mapMode === "architecture" ? <div className="legend"><span /> Selected <i /> Imports →</div> : mapMode === "flows" ? <div className="legend flow-legend"><span /> Proven <i /> Candidate</div> : mapMode === "patterns" ? <div className="pattern-summary"><strong>{factPatternCount}</strong> facts · <strong>{patterns.length - factPatternCount}</strong> heuristics</div> : <div className="risk-summary"><strong>{highRiskCount}</strong> high · <strong>{riskCount - highRiskCount}</strong> medium/low</div>}</div>
           {mapMode === "architecture" && <div className="layer-guide" aria-hidden="true">
             {(scope === "all" ? ["Tests"] : []).concat(["Entry points", "Application", "Domain", "Infrastructure", "Support"]).map((layer) => <span key={layer}>{layer}</span>)}
           </div>}
@@ -776,6 +829,21 @@ export default function Home() {
               <div className="state-card loading-state"><span aria-hidden="true" /><strong>Loading repository graph</strong><p>Validating nodes and dependencies…</p></div>
             ) : graph.nodes.length === 0 ? (
               <div className="state-card"><strong>No Python files found</strong><p>This repository does not contain any analyzable .py files.</p></div>
+            ) : mapMode === "patterns" ? patterns.length ? (
+              <div className="pattern-browser">
+                <div className="pattern-list-heading"><div><span>Detected structure</span><h3>{patterns.length} architectural pattern{patterns.length === 1 ? "" : "s"}</h3></div><p>Facts come from proven syntax and framework relationships. Heuristics combine naming, placement, and dependency direction.</p></div>
+                <div className="pattern-list" aria-label="Architecture patterns">
+                  {patterns.map((pattern) => <article className={`pattern-card ${pattern.classification}`} key={pattern.id}>
+                    <div className="pattern-card-top"><span>{pattern.classification}</span><strong>{Math.round(pattern.confidence * 100)}% confidence</strong></div>
+                    <h3>{pattern.title}</h3><p>{pattern.summary}</p>
+                    <dl>{Object.entries(pattern.metrics).map(([metric, value]) => <div key={metric}><dt>{metric.replaceAll("_", " ")}</dt><dd>{value}</dd></div>)}</dl>
+                    <small>{pattern.evidence_refs.length} evidence reference{pattern.evidence_refs.length === 1 ? "" : "s"} · {pattern.provenance}</small>
+                    <button type="button" onClick={() => { const nodeId = pattern.node_ids[0]; const node = graph.nodes.find((candidate) => candidate.id === nodeId); if (node?.kind === "file") selectFileNode(nodeId); else selectSymbolNode(nodeId); }}>Open representative evidence</button>
+                  </article>)}
+                </div>
+              </div>
+            ) : (
+              <div className="state-card"><strong>No supported patterns detected</strong><p>The analyzer did not find enough static evidence for a currently supported architecture pattern.</p></div>
             ) : mapMode === "risks" ? findings.length ? (
               <div className="risk-browser">
                 <div className="risk-list-heading"><div><span>Ranked findings</span><h3>{findings.length} structural hotspot{findings.length === 1 ? "" : "s"}</h3></div><p>Severity ranks urgency; confidence reports how strongly the static evidence supports the heuristic.</p></div>

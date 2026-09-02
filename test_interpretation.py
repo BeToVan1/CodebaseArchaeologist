@@ -31,11 +31,12 @@ def packet() -> EvidencePacket:
         "related_edge_ids": ["edge:1"],
         "flow_ids": ["flow:1"],
         "finding_ids": [],
+        "pattern_ids": ["pattern:layered-architecture"],
         "claims": [{**statement, "id": "claim:1", "evidence_refs": ["symbol:example.py:run"]}],
     })
 
 
-def generated(reference: str = "edge:1") -> GeneratedInterpretation:
+def generated(reference: str = "pattern:layered-architecture") -> GeneratedInterpretation:
     section = {"text": "Coordinates the selected operation.", "confidence": 0.8, "evidence_refs": [reference]}
     return GeneratedInterpretation.model_validate({
         "what_it_does": section,
@@ -68,7 +69,7 @@ def test_generate_interpretation_uses_structured_responses_and_preserves_labels(
     assert responses.arguments["store"] is False
     assert result.classification == "interpretation"
     assert result.what_it_does.classification == "interpretation"
-    assert result.what_it_does.evidence_refs == ["edge:1"]
+    assert result.what_it_does.evidence_refs == ["pattern:layered-architecture"]
     assert "test-model" in result.what_it_does.provenance
 
 
