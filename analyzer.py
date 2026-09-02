@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any, NamedTuple
@@ -52,12 +53,16 @@ FASTAPI_ROUTE_METHODS = {
 
 
 def find_python_files(repo_root: Path) -> list[Path]:
-    """Return Python files under repo_root, excluding generated/vendor folders."""
-    return [
-        path
-        for path in repo_root.rglob("*.py")
-        if not any(part in IGNORED_DIR_NAMES for part in path.relative_to(repo_root).parts)
-    ]
+    """Return regular Python files without traversing symlinks or ignored trees."""
+    files: list[Path] = []
+    for directory, dirs, names in os.walk(repo_root, followlinks=False):
+        dirs[:] = [name for name in dirs if name not in IGNORED_DIR_NAMES
+                   and not (Path(directory) / name).is_symlink()]
+        for name in names:
+            path = Path(directory) / name
+            if name.endswith(".py") and not path.is_symlink() and path.is_file():
+                files.append(path)
+    return files
 
 
 def read_source(path: Path) -> tuple[str | None, bool, str | None]:

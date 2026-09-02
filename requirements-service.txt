@@ -1,0 +1,3 @@
+# Private static-analysis service: no LLM client is needed in this image.
+fastapi>=0.116,<1.0
+uvicorn>=0.35,<1.0

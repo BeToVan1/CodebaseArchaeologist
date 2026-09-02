@@ -94,6 +94,12 @@ active so a partial hosted result cannot be mistaken for a complete analysis.
 The full AST and framework-aware API remains local-only. The hosted worker provides the bounded
 inventory tier; deploying deep analysis still requires an isolated Python analysis service.
 
+The new private Linux service scaffold (`deep_service:create_app`) is separate from the existing
+local API. It adds token authentication, bounded jobs, process-group cleanup and Linux resource
+limits. It is **not connected to the public site or production-approved**. See
+[deep service validation](docs/deep-service-validation.md) for the PowerShell container test
+script, exact limits and remaining deployment requirements.
+
 ### Explore and share full analysis reports
 
 Generate a report with the Python analyzer:

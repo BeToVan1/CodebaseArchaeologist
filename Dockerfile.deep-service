@@ -1,0 +1,22 @@
+FROM python:3.13-slim AS runtime
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY requirements-service.txt /app/
+RUN pip install --no-cache-dir -r requirements-service.txt
+COPY analyzer.py repository_loader.py deep_analysis_worker.py deep_service.py /app/
+RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin archaeologist
+USER 10001:10001
+EXPOSE 8000
+CMD ["uvicorn", "deep_service:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--no-access-log"]
+
+FROM runtime AS validation
+USER root
+COPY requirements.txt requirements-dev.txt /app/
+RUN pip install --no-cache-dir -r requirements-dev.txt
+COPY api.py interpretation.py test_*.py /app/
+COPY tests/fixtures /app/tests/fixtures
+COPY scripts/container_smoke.py /app/scripts/container_smoke.py
+USER 10001:10001
+CMD ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "--basetemp=/tmp/pytest"]
