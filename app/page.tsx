@@ -157,6 +157,11 @@ type Graph = {
   flows?: ExecutionFlow[];
   findings?: RiskFinding[];
   patterns?: ArchitecturePattern[];
+  analysis?: {
+    tier: "inventory" | "deep";
+    engine: string;
+    limitations: string[];
+  };
 };
 type Claim = {
   id?: string;
@@ -192,8 +197,8 @@ type AIInterpretation = {
 const filename = (path: string) => path.split("/").at(-1) ?? path;
 const folder = (path: string) => path.split("/").slice(0, -1).join("/") || "repository root";
 const MAX_SOURCE_CHARACTERS = 200_000;
-const ANALYZER_API_URL = process.env.NEXT_PUBLIC_ANALYZER_API_URL ?? "http://127.0.0.1:8000";
-const LOCAL_ANALYZER_ENABLED = process.env.NODE_ENV === "development" || Boolean(process.env.NEXT_PUBLIC_ANALYZER_API_URL);
+const ANALYZER_API_URL = process.env.NEXT_PUBLIC_ANALYZER_API_URL ?? "";
+const LOCAL_INTERPRETATION_ENABLED = process.env.NODE_ENV === "development" || Boolean(process.env.NEXT_PUBLIC_ANALYZER_API_URL);
 
 const layerFor = (path: string) => {
   if (path.startsWith("tests/")) return { key: "tests", label: "Tests", order: 0 };
@@ -460,6 +465,18 @@ function validateGraph(value: unknown): Graph {
     const snapshot = value.snapshot;
     if (!isRecord(snapshot) || typeof snapshot.commit_sha !== "string" || !/^[0-9a-f]{40}$/i.test(snapshot.commit_sha)) {
       throw new Error("Invalid graph: snapshot metadata must include a full commit SHA.");
+    }
+  }
+  if (value.analysis !== undefined) {
+    const analysis = value.analysis;
+    if (
+      !isRecord(analysis)
+      || !["inventory", "deep"].includes(String(analysis.tier))
+      || typeof analysis.engine !== "string"
+      || !Array.isArray(analysis.limitations)
+      || !analysis.limitations.every((item) => typeof item === "string")
+    ) {
+      throw new Error("Invalid graph: analysis metadata must identify its tier and limitations.");
     }
   }
   if (value.flows !== undefined) {
@@ -811,14 +828,15 @@ export default function Home() {
         <aside className="rail">
           <div className="eyebrow">Repository</div><h1>Dependency map</h1>
           <p className="rail-copy">Explore files, source, and internal imports from the analyzed repository.</p>
-          {LOCAL_ANALYZER_ENABLED && <form className="repository-form" onSubmit={analyzeSubmittedRepository}>
+          <form className="repository-form" onSubmit={analyzeSubmittedRepository}>
             <label htmlFor="repository-url">Public GitHub URL</label>
             <input id="repository-url" type="url" value={submittedUrl} onChange={(event) => setSubmittedUrl(event.target.value)} required pattern="https://github\.com/.+/.+" disabled={isAnalyzing} />
             <button type="submit" disabled={isAnalyzing}>{isAnalyzing ? "Analyzing…" : "Analyze repository"}</button>
-            <small>Local analyzer · public Python repositories only</small>
+            <small>{ANALYZER_API_URL ? "Full analyzer service" : "Hosted inventory"} · public Python repositories only</small>
             {analysisError && <p className="analysis-error" role="alert">{analysisError}</p>}
-          </form>}
+          </form>
           {graph && <div className="origin"><span>{repositorySource === "github" ? "Pinned GitHub snapshot" : "Local directory"}</span>{pinnedRepositoryUrl ? <a href={pinnedRepositoryUrl} target="_blank" rel="noreferrer">{commitSha ? `${commitSha.slice(0, 12)} ↗` : "Open repository ↗"}</a> : <strong>{repositoryName}</strong>}</div>}
+          {graph?.analysis?.tier === "inventory" && <div className="analysis-tier-notice" role="status"><strong>Inventory analysis</strong><p>{graph.analysis.limitations[0]}</p><small>Deep symbols, flows, patterns, and risks are not inferred in this mode.</small></div>}
           <label className="search"><span aria-hidden="true">⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter files" aria-label="Filter files" /></label>
           <div className="scope-switch" aria-label="Graph scope">
             <button className={scope === "production" ? "active" : ""} onClick={() => setScope("production")}>Production</button>
@@ -980,7 +998,7 @@ export default function Home() {
                 <p>{claim.text}</p><small>Provenance: {claim.provenance}{claim.evidence_refs?.length ? ` · ${claim.evidence_refs.length} evidence reference${claim.evidence_refs.length === 1 ? "" : "s"}` : ""}</small>
               </article>)}</div>
             </section>}
-            {selectedSymbol?.evidence_packet && LOCAL_ANALYZER_ENABLED && <section className="ai-interpretation-section">
+            {selectedSymbol?.evidence_packet && LOCAL_INTERPRETATION_ENABLED && <section className="ai-interpretation-section">
               <div className="section-heading"><h3>AI interpretation</h3><span className="interpretation-label">Optional</span></div>
               <p className="ai-intro">Generate a deeper explanation from this symbol’s evidence packet and visible source. Static facts above remain unchanged.</p>
               {!aiInterpretation && <button className="interpret-button" type="button" onClick={interpretSelectedSymbol} disabled={isInterpreting}>

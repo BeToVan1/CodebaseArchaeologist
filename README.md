@@ -1,6 +1,8 @@
 # Codebase Archaeologist
 
-The current development build analyzes public Python repositories through a local FastAPI service and displays the resulting file/import graph in the web explorer.
+The hosted build ingests public Python repositories into a bounded file/import inventory. Local
+development can additionally use the full FastAPI analyzer for AST symbols, execution flows,
+architecture patterns, risks, remediation guidance, and optional LLM interpretation.
 
 ## Local development
 
@@ -79,7 +81,14 @@ plan explains why the heuristic matters, proposes ordered actions with effort an
 lists concrete validation checks. Guidance cites both the finding and its source nodes, remains
 classified as heuristic, and never raises confidence above the underlying static finding.
 
-The API is intentionally local-only for this milestone. The hosted site continues to use the committed Cosmic Python fixture until repository analysis runs in an isolated worker service.
+Graph schema v1.1 identifies the analysis tier explicitly. The hosted site can now ingest a public
+GitHub URL at an immutable commit and build a bounded Python file/import inventory without a local
+service. This hosted inventory deliberately makes no symbol, flow, pattern, or risk claims. The
+full Python analyzer continues to produce the deep tier, and the interface shows which tier is
+active so a partial hosted result cannot be mistaken for a complete analysis.
+
+The full AST and framework-aware API remains local-only. The hosted worker provides the bounded
+inventory tier; deploying deep analysis still requires an isolated Python analysis service.
 
 
 
