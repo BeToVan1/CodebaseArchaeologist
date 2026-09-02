@@ -1509,6 +1509,126 @@ def detect_risk_findings(
             }
         )
 
+    remediation_templates = {
+        "large-symbol": {
+            "why_it_matters": (
+                "A large callable can hide multiple reasons to change and make regressions harder "
+                "to isolate, although size alone does not prove that its responsibilities are mixed."
+            ),
+            "actions": [
+                (
+                    "Characterize current behavior",
+                    "Add or strengthen tests around inputs, outputs, side effects, and failure paths before restructuring the callable.",
+                    "small",
+                ),
+                (
+                    "Extract one coherent responsibility",
+                    "If the tests reveal a stable seam, move one cohesive step behind a well-named helper while preserving the public API.",
+                    "medium",
+                ),
+            ],
+            "validation_steps": [
+                "Run the existing behavior tests and compare observable outputs and side effects.",
+                "Re-run the analyzer and review the callable's line span and outgoing relationships for unintended movement.",
+            ],
+        },
+        "high-fan-in": {
+            "why_it_matters": (
+                "Many incoming relationships increase the potential blast radius of an interface change, "
+                "but a widely reused, stable abstraction may be entirely intentional."
+            ),
+            "actions": [
+                (
+                    "Protect the public contract",
+                    "Add contract-focused tests for the behavior relied on by callers before changing signatures or semantics.",
+                    "small",
+                ),
+                (
+                    "Inspect caller groups",
+                    "Only introduce a facade or split the abstraction when callers cluster around distinct behaviors that change independently.",
+                    "medium",
+                ),
+            ],
+            "validation_steps": [
+                "Run contract tests for representative callers and confirm their observable behavior is unchanged.",
+                "Re-run the analyzer and inspect whether incoming relationships still target the intended stable boundary.",
+            ],
+        },
+        "high-fan-out": {
+            "why_it_matters": (
+                "Coordinating many collaborators can couple a callable to several failure modes and sequencing rules, "
+                "although orchestration is sometimes its legitimate single responsibility."
+            ),
+            "actions": [
+                (
+                    "Record the collaboration sequence",
+                    "Add tests for collaborator order, error handling, and side effects so the current orchestration contract is explicit.",
+                    "small",
+                ),
+                (
+                    "Group related collaborators",
+                    "If several collaborators serve one use case, consider a narrower service boundary without hiding materially different effects.",
+                    "medium",
+                ),
+            ],
+            "validation_steps": [
+                "Exercise success and failure paths and verify collaborator calls and side effects.",
+                "Re-run the analyzer and confirm any new boundary reduces accidental coupling without creating a new hotspot.",
+            ],
+        },
+        "import-cycle": {
+            "why_it_matters": (
+                "A closed import cycle can make initialization order and module ownership fragile, "
+                "although some cycles are tolerated when imports are deliberately deferred."
+            ),
+            "actions": [
+                (
+                    "Choose a dependency direction",
+                    "Identify which module owns the shared policy, then make the other modules depend toward that boundary.",
+                    "medium",
+                ),
+                (
+                    "Extract the smallest shared contract",
+                    "Move only shared protocols, value types, or interfaces to a neutral module and keep runtime wiring in a composition root.",
+                    "medium",
+                ),
+            ],
+            "validation_steps": [
+                "Import each affected module in a fresh Python process and run its focused tests.",
+                "Re-run the analyzer and verify that the strongly connected component no longer forms a cycle.",
+            ],
+        },
+    }
+    for finding in findings:
+        template = remediation_templates[finding["rule_id"]]
+        evidence_refs = [
+            finding["id"],
+            finding["node_id"],
+            *finding["related_node_ids"],
+        ]
+        finding["remediation"] = {
+            "classification": "heuristic",
+            "confidence": min(finding["confidence"], 0.86),
+            "provenance": f"Deterministic remediation template for {finding['rule_id']}",
+            "why_it_matters": template["why_it_matters"],
+            "actions": [
+                {
+                    "id": f"{finding['id']}:action:{index}",
+                    "title": title,
+                    "description": description,
+                    "priority": index,
+                    "effort": effort,
+                    "classification": "heuristic",
+                    "confidence": min(finding["confidence"], 0.86),
+                    "evidence_refs": evidence_refs,
+                }
+                for index, (title, description, effort) in enumerate(
+                    template["actions"], start=1
+                )
+            ],
+            "validation_steps": template["validation_steps"],
+        }
+
     severity_order = {"high": 0, "medium": 1, "low": 2}
     return sorted(
         findings,
@@ -2027,7 +2147,7 @@ def analyze_repository(repo_root: Path) -> dict[str, Any]:
     )
 
     return {
-        "schema_version": "0.9",
+        "schema_version": "1.0",
         "repo_root": str(repo_root),
         "python_files_total_found": total_files_found,
         "python_files_analyzed": len(python_files),

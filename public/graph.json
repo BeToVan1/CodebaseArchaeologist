@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.9",
+  "schema_version": "1.0",
   "python_files_total_found": 37,
   "python_files_analyzed": 37,
   "python_files_truncated": false,
@@ -23175,6 +23175,44 @@
       "metrics": {
         "fan_in": 17,
         "threshold": 8
+      },
+      "remediation": {
+        "classification": "heuristic",
+        "confidence": 0.86,
+        "provenance": "Deterministic remediation template for high-fan-in",
+        "why_it_matters": "Many incoming relationships increase the potential blast radius of an interface change, but a widely reused, stable abstraction may be entirely intentional.",
+        "actions": [
+          {
+            "id": "risk:high-fan-in:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:action:1",
+            "title": "Protect the public contract",
+            "description": "Add contract-focused tests for the behavior relied on by callers before changing signatures or semantics.",
+            "priority": 1,
+            "effort": "small",
+            "classification": "heuristic",
+            "confidence": 0.86,
+            "evidence_refs": [
+              "risk:high-fan-in:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15",
+              "symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15"
+            ]
+          },
+          {
+            "id": "risk:high-fan-in:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15:action:2",
+            "title": "Inspect caller groups",
+            "description": "Only introduce a facade or split the abstraction when callers cluster around distinct behaviors that change independently.",
+            "priority": 2,
+            "effort": "medium",
+            "classification": "heuristic",
+            "confidence": 0.86,
+            "evidence_refs": [
+              "risk:high-fan-in:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15",
+              "symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.get:15"
+            ]
+          }
+        ],
+        "validation_steps": [
+          "Run contract tests for representative callers and confirm their observable behavior is unchanged.",
+          "Re-run the analyzer and inspect whether incoming relationships still target the intended stable boundary."
+        ]
       }
     },
     {
@@ -23197,6 +23235,44 @@
       "metrics": {
         "fan_in": 17,
         "threshold": 8
+      },
+      "remediation": {
+        "classification": "heuristic",
+        "confidence": 0.86,
+        "provenance": "Deterministic remediation template for high-fan-in",
+        "why_it_matters": "Many incoming relationships increase the potential blast radius of an interface change, but a widely reused, stable abstraction may be entirely intentional.",
+        "actions": [
+          {
+            "id": "risk:high-fan-in:symbol:src/allocation/domain/commands.py:allocation.domain.commands.CreateBatch:19:action:1",
+            "title": "Protect the public contract",
+            "description": "Add contract-focused tests for the behavior relied on by callers before changing signatures or semantics.",
+            "priority": 1,
+            "effort": "small",
+            "classification": "heuristic",
+            "confidence": 0.86,
+            "evidence_refs": [
+              "risk:high-fan-in:symbol:src/allocation/domain/commands.py:allocation.domain.commands.CreateBatch:19",
+              "symbol:src/allocation/domain/commands.py:allocation.domain.commands.CreateBatch:19"
+            ]
+          },
+          {
+            "id": "risk:high-fan-in:symbol:src/allocation/domain/commands.py:allocation.domain.commands.CreateBatch:19:action:2",
+            "title": "Inspect caller groups",
+            "description": "Only introduce a facade or split the abstraction when callers cluster around distinct behaviors that change independently.",
+            "priority": 2,
+            "effort": "medium",
+            "classification": "heuristic",
+            "confidence": 0.86,
+            "evidence_refs": [
+              "risk:high-fan-in:symbol:src/allocation/domain/commands.py:allocation.domain.commands.CreateBatch:19",
+              "symbol:src/allocation/domain/commands.py:allocation.domain.commands.CreateBatch:19"
+            ]
+          }
+        ],
+        "validation_steps": [
+          "Run contract tests for representative callers and confirm their observable behavior is unchanged.",
+          "Re-run the analyzer and inspect whether incoming relationships still target the intended stable boundary."
+        ]
       }
     },
     {
@@ -23219,6 +23295,44 @@
       "metrics": {
         "fan_in": 17,
         "threshold": 8
+      },
+      "remediation": {
+        "classification": "heuristic",
+        "confidence": 0.86,
+        "provenance": "Deterministic remediation template for high-fan-in",
+        "why_it_matters": "Many incoming relationships increase the potential blast radius of an interface change, but a widely reused, stable abstraction may be entirely intentional.",
+        "actions": [
+          {
+            "id": "risk:high-fan-in:symbol:src/allocation/domain/model.py:allocation.domain.model.Batch:48:action:1",
+            "title": "Protect the public contract",
+            "description": "Add contract-focused tests for the behavior relied on by callers before changing signatures or semantics.",
+            "priority": 1,
+            "effort": "small",
+            "classification": "heuristic",
+            "confidence": 0.86,
+            "evidence_refs": [
+              "risk:high-fan-in:symbol:src/allocation/domain/model.py:allocation.domain.model.Batch:48",
+              "symbol:src/allocation/domain/model.py:allocation.domain.model.Batch:48"
+            ]
+          },
+          {
+            "id": "risk:high-fan-in:symbol:src/allocation/domain/model.py:allocation.domain.model.Batch:48:action:2",
+            "title": "Inspect caller groups",
+            "description": "Only introduce a facade or split the abstraction when callers cluster around distinct behaviors that change independently.",
+            "priority": 2,
+            "effort": "medium",
+            "classification": "heuristic",
+            "confidence": 0.86,
+            "evidence_refs": [
+              "risk:high-fan-in:symbol:src/allocation/domain/model.py:allocation.domain.model.Batch:48",
+              "symbol:src/allocation/domain/model.py:allocation.domain.model.Batch:48"
+            ]
+          }
+        ],
+        "validation_steps": [
+          "Run contract tests for representative callers and confirm their observable behavior is unchanged.",
+          "Re-run the analyzer and inspect whether incoming relationships still target the intended stable boundary."
+        ]
       }
     },
     {
@@ -23241,6 +23355,44 @@
       "metrics": {
         "fan_in": 31,
         "threshold": 8
+      },
+      "remediation": {
+        "classification": "heuristic",
+        "confidence": 0.86,
+        "provenance": "Deterministic remediation template for high-fan-in",
+        "why_it_matters": "Many incoming relationships increase the potential blast radius of an interface change, but a widely reused, stable abstraction may be entirely intentional.",
+        "actions": [
+          {
+            "id": "risk:high-fan-in:symbol:src/allocation/service_layer/messagebus.py:allocation.service_layer.messagebus.MessageBus.handle:26:action:1",
+            "title": "Protect the public contract",
+            "description": "Add contract-focused tests for the behavior relied on by callers before changing signatures or semantics.",
+            "priority": 1,
+            "effort": "small",
+            "classification": "heuristic",
+            "confidence": 0.86,
+            "evidence_refs": [
+              "risk:high-fan-in:symbol:src/allocation/service_layer/messagebus.py:allocation.service_layer.messagebus.MessageBus.handle:26",
+              "symbol:src/allocation/service_layer/messagebus.py:allocation.service_layer.messagebus.MessageBus.handle:26"
+            ]
+          },
+          {
+            "id": "risk:high-fan-in:symbol:src/allocation/service_layer/messagebus.py:allocation.service_layer.messagebus.MessageBus.handle:26:action:2",
+            "title": "Inspect caller groups",
+            "description": "Only introduce a facade or split the abstraction when callers cluster around distinct behaviors that change independently.",
+            "priority": 2,
+            "effort": "medium",
+            "classification": "heuristic",
+            "confidence": 0.86,
+            "evidence_refs": [
+              "risk:high-fan-in:symbol:src/allocation/service_layer/messagebus.py:allocation.service_layer.messagebus.MessageBus.handle:26",
+              "symbol:src/allocation/service_layer/messagebus.py:allocation.service_layer.messagebus.MessageBus.handle:26"
+            ]
+          }
+        ],
+        "validation_steps": [
+          "Run contract tests for representative callers and confirm their observable behavior is unchanged.",
+          "Re-run the analyzer and inspect whether incoming relationships still target the intended stable boundary."
+        ]
       }
     },
     {
@@ -23263,6 +23415,44 @@
       "metrics": {
         "fan_in": 9,
         "threshold": 8
+      },
+      "remediation": {
+        "classification": "heuristic",
+        "confidence": 0.86,
+        "provenance": "Deterministic remediation template for high-fan-in",
+        "why_it_matters": "Many incoming relationships increase the potential blast radius of an interface change, but a widely reused, stable abstraction may be entirely intentional.",
+        "actions": [
+          {
+            "id": "risk:high-fan-in:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.add:11:action:1",
+            "title": "Protect the public contract",
+            "description": "Add contract-focused tests for the behavior relied on by callers before changing signatures or semantics.",
+            "priority": 1,
+            "effort": "small",
+            "classification": "heuristic",
+            "confidence": 0.86,
+            "evidence_refs": [
+              "risk:high-fan-in:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.add:11",
+              "symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.add:11"
+            ]
+          },
+          {
+            "id": "risk:high-fan-in:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.add:11:action:2",
+            "title": "Inspect caller groups",
+            "description": "Only introduce a facade or split the abstraction when callers cluster around distinct behaviors that change independently.",
+            "priority": 2,
+            "effort": "medium",
+            "classification": "heuristic",
+            "confidence": 0.86,
+            "evidence_refs": [
+              "risk:high-fan-in:symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.add:11",
+              "symbol:src/allocation/adapters/repository.py:allocation.adapters.repository.AbstractRepository.add:11"
+            ]
+          }
+        ],
+        "validation_steps": [
+          "Run contract tests for representative callers and confirm their observable behavior is unchanged.",
+          "Re-run the analyzer and inspect whether incoming relationships still target the intended stable boundary."
+        ]
       }
     },
     {
@@ -23285,6 +23475,44 @@
       "metrics": {
         "fan_in": 14,
         "threshold": 8
+      },
+      "remediation": {
+        "classification": "heuristic",
+        "confidence": 0.86,
+        "provenance": "Deterministic remediation template for high-fan-in",
+        "why_it_matters": "Many incoming relationships increase the potential blast radius of an interface change, but a widely reused, stable abstraction may be entirely intentional.",
+        "actions": [
+          {
+            "id": "risk:high-fan-in:symbol:src/allocation/domain/commands.py:allocation.domain.commands.Allocate:12:action:1",
+            "title": "Protect the public contract",
+            "description": "Add contract-focused tests for the behavior relied on by callers before changing signatures or semantics.",
+            "priority": 1,
+            "effort": "small",
+            "classification": "heuristic",
+            "confidence": 0.86,
+            "evidence_refs": [
+              "risk:high-fan-in:symbol:src/allocation/domain/commands.py:allocation.domain.commands.Allocate:12",
+              "symbol:src/allocation/domain/commands.py:allocation.domain.commands.Allocate:12"
+            ]
+          },
+          {
+            "id": "risk:high-fan-in:symbol:src/allocation/domain/commands.py:allocation.domain.commands.Allocate:12:action:2",
+            "title": "Inspect caller groups",
+            "description": "Only introduce a facade or split the abstraction when callers cluster around distinct behaviors that change independently.",
+            "priority": 2,
+            "effort": "medium",
+            "classification": "heuristic",
+            "confidence": 0.86,
+            "evidence_refs": [
+              "risk:high-fan-in:symbol:src/allocation/domain/commands.py:allocation.domain.commands.Allocate:12",
+              "symbol:src/allocation/domain/commands.py:allocation.domain.commands.Allocate:12"
+            ]
+          }
+        ],
+        "validation_steps": [
+          "Run contract tests for representative callers and confirm their observable behavior is unchanged.",
+          "Re-run the analyzer and inspect whether incoming relationships still target the intended stable boundary."
+        ]
       }
     },
     {
@@ -23307,6 +23535,44 @@
       "metrics": {
         "fan_in": 13,
         "threshold": 8
+      },
+      "remediation": {
+        "classification": "heuristic",
+        "confidence": 0.86,
+        "provenance": "Deterministic remediation template for high-fan-in",
+        "why_it_matters": "Many incoming relationships increase the potential blast radius of an interface change, but a widely reused, stable abstraction may be entirely intentional.",
+        "actions": [
+          {
+            "id": "risk:high-fan-in:symbol:src/allocation/domain/model.py:allocation.domain.model.OrderLine:42:action:1",
+            "title": "Protect the public contract",
+            "description": "Add contract-focused tests for the behavior relied on by callers before changing signatures or semantics.",
+            "priority": 1,
+            "effort": "small",
+            "classification": "heuristic",
+            "confidence": 0.86,
+            "evidence_refs": [
+              "risk:high-fan-in:symbol:src/allocation/domain/model.py:allocation.domain.model.OrderLine:42",
+              "symbol:src/allocation/domain/model.py:allocation.domain.model.OrderLine:42"
+            ]
+          },
+          {
+            "id": "risk:high-fan-in:symbol:src/allocation/domain/model.py:allocation.domain.model.OrderLine:42:action:2",
+            "title": "Inspect caller groups",
+            "description": "Only introduce a facade or split the abstraction when callers cluster around distinct behaviors that change independently.",
+            "priority": 2,
+            "effort": "medium",
+            "classification": "heuristic",
+            "confidence": 0.86,
+            "evidence_refs": [
+              "risk:high-fan-in:symbol:src/allocation/domain/model.py:allocation.domain.model.OrderLine:42",
+              "symbol:src/allocation/domain/model.py:allocation.domain.model.OrderLine:42"
+            ]
+          }
+        ],
+        "validation_steps": [
+          "Run contract tests for representative callers and confirm their observable behavior is unchanged.",
+          "Re-run the analyzer and inspect whether incoming relationships still target the intended stable boundary."
+        ]
       }
     },
     {
@@ -23329,6 +23595,44 @@
       "metrics": {
         "fan_in": 9,
         "threshold": 8
+      },
+      "remediation": {
+        "classification": "heuristic",
+        "confidence": 0.86,
+        "provenance": "Deterministic remediation template for high-fan-in",
+        "why_it_matters": "Many incoming relationships increase the potential blast radius of an interface change, but a widely reused, stable abstraction may be entirely intentional.",
+        "actions": [
+          {
+            "id": "risk:high-fan-in:symbol:src/allocation/domain/model.py:allocation.domain.model.Product:8:action:1",
+            "title": "Protect the public contract",
+            "description": "Add contract-focused tests for the behavior relied on by callers before changing signatures or semantics.",
+            "priority": 1,
+            "effort": "small",
+            "classification": "heuristic",
+            "confidence": 0.86,
+            "evidence_refs": [
+              "risk:high-fan-in:symbol:src/allocation/domain/model.py:allocation.domain.model.Product:8",
+              "symbol:src/allocation/domain/model.py:allocation.domain.model.Product:8"
+            ]
+          },
+          {
+            "id": "risk:high-fan-in:symbol:src/allocation/domain/model.py:allocation.domain.model.Product:8:action:2",
+            "title": "Inspect caller groups",
+            "description": "Only introduce a facade or split the abstraction when callers cluster around distinct behaviors that change independently.",
+            "priority": 2,
+            "effort": "medium",
+            "classification": "heuristic",
+            "confidence": 0.86,
+            "evidence_refs": [
+              "risk:high-fan-in:symbol:src/allocation/domain/model.py:allocation.domain.model.Product:8",
+              "symbol:src/allocation/domain/model.py:allocation.domain.model.Product:8"
+            ]
+          }
+        ],
+        "validation_steps": [
+          "Run contract tests for representative callers and confirm their observable behavior is unchanged.",
+          "Re-run the analyzer and inspect whether incoming relationships still target the intended stable boundary."
+        ]
       }
     },
     {
@@ -23351,6 +23655,44 @@
       "metrics": {
         "fan_in": 10,
         "threshold": 8
+      },
+      "remediation": {
+        "classification": "heuristic",
+        "confidence": 0.86,
+        "provenance": "Deterministic remediation template for high-fan-in",
+        "why_it_matters": "Many incoming relationships increase the potential blast radius of an interface change, but a widely reused, stable abstraction may be entirely intentional.",
+        "actions": [
+          {
+            "id": "risk:high-fan-in:symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.commit:22:action:1",
+            "title": "Protect the public contract",
+            "description": "Add contract-focused tests for the behavior relied on by callers before changing signatures or semantics.",
+            "priority": 1,
+            "effort": "small",
+            "classification": "heuristic",
+            "confidence": 0.86,
+            "evidence_refs": [
+              "risk:high-fan-in:symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.commit:22",
+              "symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.commit:22"
+            ]
+          },
+          {
+            "id": "risk:high-fan-in:symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.commit:22:action:2",
+            "title": "Inspect caller groups",
+            "description": "Only introduce a facade or split the abstraction when callers cluster around distinct behaviors that change independently.",
+            "priority": 2,
+            "effort": "medium",
+            "classification": "heuristic",
+            "confidence": 0.86,
+            "evidence_refs": [
+              "risk:high-fan-in:symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.commit:22",
+              "symbol:src/allocation/service_layer/unit_of_work.py:allocation.service_layer.unit_of_work.AbstractUnitOfWork.commit:22"
+            ]
+          }
+        ],
+        "validation_steps": [
+          "Run contract tests for representative callers and confirm their observable behavior is unchanged.",
+          "Re-run the analyzer and inspect whether incoming relationships still target the intended stable boundary."
+        ]
       }
     },
     {
@@ -23373,6 +23715,44 @@
       "metrics": {
         "fan_out": 11,
         "threshold": 8
+      },
+      "remediation": {
+        "classification": "heuristic",
+        "confidence": 0.86,
+        "provenance": "Deterministic remediation template for high-fan-out",
+        "why_it_matters": "Coordinating many collaborators can couple a callable to several failure modes and sequencing rules, although orchestration is sometimes its legitimate single responsibility.",
+        "actions": [
+          {
+            "id": "risk:high-fan-out:symbol:tests/e2e/test_api.py:tests.e2e.test_api.test_happy_path_returns_202_and_batch_is_allocated:8:action:1",
+            "title": "Record the collaboration sequence",
+            "description": "Add tests for collaborator order, error handling, and side effects so the current orchestration contract is explicit.",
+            "priority": 1,
+            "effort": "small",
+            "classification": "heuristic",
+            "confidence": 0.86,
+            "evidence_refs": [
+              "risk:high-fan-out:symbol:tests/e2e/test_api.py:tests.e2e.test_api.test_happy_path_returns_202_and_batch_is_allocated:8",
+              "symbol:tests/e2e/test_api.py:tests.e2e.test_api.test_happy_path_returns_202_and_batch_is_allocated:8"
+            ]
+          },
+          {
+            "id": "risk:high-fan-out:symbol:tests/e2e/test_api.py:tests.e2e.test_api.test_happy_path_returns_202_and_batch_is_allocated:8:action:2",
+            "title": "Group related collaborators",
+            "description": "If several collaborators serve one use case, consider a narrower service boundary without hiding materially different effects.",
+            "priority": 2,
+            "effort": "medium",
+            "classification": "heuristic",
+            "confidence": 0.86,
+            "evidence_refs": [
+              "risk:high-fan-out:symbol:tests/e2e/test_api.py:tests.e2e.test_api.test_happy_path_returns_202_and_batch_is_allocated:8",
+              "symbol:tests/e2e/test_api.py:tests.e2e.test_api.test_happy_path_returns_202_and_batch_is_allocated:8"
+            ]
+          }
+        ],
+        "validation_steps": [
+          "Exercise success and failure paths and verify collaborator calls and side effects.",
+          "Re-run the analyzer and confirm any new boundary reduces accidental coupling without creating a new hotspot."
+        ]
       }
     },
     {
@@ -23395,6 +23775,44 @@
       "metrics": {
         "fan_out": 10,
         "threshold": 8
+      },
+      "remediation": {
+        "classification": "heuristic",
+        "confidence": 0.86,
+        "provenance": "Deterministic remediation template for high-fan-out",
+        "why_it_matters": "Coordinating many collaborators can couple a callable to several failure modes and sequencing rules, although orchestration is sometimes its legitimate single responsibility.",
+        "actions": [
+          {
+            "id": "risk:high-fan-out:symbol:tests/e2e/test_external_events.py:tests.e2e.test_external_events.test_change_batch_quantity_leading_to_reallocation:11:action:1",
+            "title": "Record the collaboration sequence",
+            "description": "Add tests for collaborator order, error handling, and side effects so the current orchestration contract is explicit.",
+            "priority": 1,
+            "effort": "small",
+            "classification": "heuristic",
+            "confidence": 0.86,
+            "evidence_refs": [
+              "risk:high-fan-out:symbol:tests/e2e/test_external_events.py:tests.e2e.test_external_events.test_change_batch_quantity_leading_to_reallocation:11",
+              "symbol:tests/e2e/test_external_events.py:tests.e2e.test_external_events.test_change_batch_quantity_leading_to_reallocation:11"
+            ]
+          },
+          {
+            "id": "risk:high-fan-out:symbol:tests/e2e/test_external_events.py:tests.e2e.test_external_events.test_change_batch_quantity_leading_to_reallocation:11:action:2",
+            "title": "Group related collaborators",
+            "description": "If several collaborators serve one use case, consider a narrower service boundary without hiding materially different effects.",
+            "priority": 2,
+            "effort": "medium",
+            "classification": "heuristic",
+            "confidence": 0.86,
+            "evidence_refs": [
+              "risk:high-fan-out:symbol:tests/e2e/test_external_events.py:tests.e2e.test_external_events.test_change_batch_quantity_leading_to_reallocation:11",
+              "symbol:tests/e2e/test_external_events.py:tests.e2e.test_external_events.test_change_batch_quantity_leading_to_reallocation:11"
+            ]
+          }
+        ],
+        "validation_steps": [
+          "Exercise success and failure paths and verify collaborator calls and side effects.",
+          "Re-run the analyzer and confirm any new boundary reduces accidental coupling without creating a new hotspot."
+        ]
       }
     },
     {
@@ -23417,6 +23835,44 @@
       "metrics": {
         "fan_out": 10,
         "threshold": 8
+      },
+      "remediation": {
+        "classification": "heuristic",
+        "confidence": 0.86,
+        "provenance": "Deterministic remediation template for high-fan-out",
+        "why_it_matters": "Coordinating many collaborators can couple a callable to several failure modes and sequencing rules, although orchestration is sometimes its legitimate single responsibility.",
+        "actions": [
+          {
+            "id": "risk:high-fan-out:symbol:tests/integration/test_repository.py:tests.integration.test_repository.test_get_by_batchref:8:action:1",
+            "title": "Record the collaboration sequence",
+            "description": "Add tests for collaborator order, error handling, and side effects so the current orchestration contract is explicit.",
+            "priority": 1,
+            "effort": "small",
+            "classification": "heuristic",
+            "confidence": 0.86,
+            "evidence_refs": [
+              "risk:high-fan-out:symbol:tests/integration/test_repository.py:tests.integration.test_repository.test_get_by_batchref:8",
+              "symbol:tests/integration/test_repository.py:tests.integration.test_repository.test_get_by_batchref:8"
+            ]
+          },
+          {
+            "id": "risk:high-fan-out:symbol:tests/integration/test_repository.py:tests.integration.test_repository.test_get_by_batchref:8:action:2",
+            "title": "Group related collaborators",
+            "description": "If several collaborators serve one use case, consider a narrower service boundary without hiding materially different effects.",
+            "priority": 2,
+            "effort": "medium",
+            "classification": "heuristic",
+            "confidence": 0.86,
+            "evidence_refs": [
+              "risk:high-fan-out:symbol:tests/integration/test_repository.py:tests.integration.test_repository.test_get_by_batchref:8",
+              "symbol:tests/integration/test_repository.py:tests.integration.test_repository.test_get_by_batchref:8"
+            ]
+          }
+        ],
+        "validation_steps": [
+          "Exercise success and failure paths and verify collaborator calls and side effects.",
+          "Re-run the analyzer and confirm any new boundary reduces accidental coupling without creating a new hotspot."
+        ]
       }
     },
     {
@@ -23439,6 +23895,44 @@
       "metrics": {
         "fan_out": 9,
         "threshold": 8
+      },
+      "remediation": {
+        "classification": "heuristic",
+        "confidence": 0.86,
+        "provenance": "Deterministic remediation template for high-fan-out",
+        "why_it_matters": "Coordinating many collaborators can couple a callable to several failure modes and sequencing rules, although orchestration is sometimes its legitimate single responsibility.",
+        "actions": [
+          {
+            "id": "risk:high-fan-out:symbol:tests/integration/test_uow.py:tests.integration.test_uow.test_concurrent_updates_to_version_are_not_allowed:94:action:1",
+            "title": "Record the collaboration sequence",
+            "description": "Add tests for collaborator order, error handling, and side effects so the current orchestration contract is explicit.",
+            "priority": 1,
+            "effort": "small",
+            "classification": "heuristic",
+            "confidence": 0.86,
+            "evidence_refs": [
+              "risk:high-fan-out:symbol:tests/integration/test_uow.py:tests.integration.test_uow.test_concurrent_updates_to_version_are_not_allowed:94",
+              "symbol:tests/integration/test_uow.py:tests.integration.test_uow.test_concurrent_updates_to_version_are_not_allowed:94"
+            ]
+          },
+          {
+            "id": "risk:high-fan-out:symbol:tests/integration/test_uow.py:tests.integration.test_uow.test_concurrent_updates_to_version_are_not_allowed:94:action:2",
+            "title": "Group related collaborators",
+            "description": "If several collaborators serve one use case, consider a narrower service boundary without hiding materially different effects.",
+            "priority": 2,
+            "effort": "medium",
+            "classification": "heuristic",
+            "confidence": 0.86,
+            "evidence_refs": [
+              "risk:high-fan-out:symbol:tests/integration/test_uow.py:tests.integration.test_uow.test_concurrent_updates_to_version_are_not_allowed:94",
+              "symbol:tests/integration/test_uow.py:tests.integration.test_uow.test_concurrent_updates_to_version_are_not_allowed:94"
+            ]
+          }
+        ],
+        "validation_steps": [
+          "Exercise success and failure paths and verify collaborator calls and side effects.",
+          "Re-run the analyzer and confirm any new boundary reduces accidental coupling without creating a new hotspot."
+        ]
       }
     },
     {
@@ -23461,6 +23955,44 @@
       "metrics": {
         "fan_out": 15,
         "threshold": 8
+      },
+      "remediation": {
+        "classification": "heuristic",
+        "confidence": 0.86,
+        "provenance": "Deterministic remediation template for high-fan-out",
+        "why_it_matters": "Coordinating many collaborators can couple a callable to several failure modes and sequencing rules, although orchestration is sometimes its legitimate single responsibility.",
+        "actions": [
+          {
+            "id": "risk:high-fan-out:symbol:tests/integration/test_views.py:tests.integration.test_views.test_allocations_view:25:action:1",
+            "title": "Record the collaboration sequence",
+            "description": "Add tests for collaborator order, error handling, and side effects so the current orchestration contract is explicit.",
+            "priority": 1,
+            "effort": "small",
+            "classification": "heuristic",
+            "confidence": 0.86,
+            "evidence_refs": [
+              "risk:high-fan-out:symbol:tests/integration/test_views.py:tests.integration.test_views.test_allocations_view:25",
+              "symbol:tests/integration/test_views.py:tests.integration.test_views.test_allocations_view:25"
+            ]
+          },
+          {
+            "id": "risk:high-fan-out:symbol:tests/integration/test_views.py:tests.integration.test_views.test_allocations_view:25:action:2",
+            "title": "Group related collaborators",
+            "description": "If several collaborators serve one use case, consider a narrower service boundary without hiding materially different effects.",
+            "priority": 2,
+            "effort": "medium",
+            "classification": "heuristic",
+            "confidence": 0.86,
+            "evidence_refs": [
+              "risk:high-fan-out:symbol:tests/integration/test_views.py:tests.integration.test_views.test_allocations_view:25",
+              "symbol:tests/integration/test_views.py:tests.integration.test_views.test_allocations_view:25"
+            ]
+          }
+        ],
+        "validation_steps": [
+          "Exercise success and failure paths and verify collaborator calls and side effects.",
+          "Re-run the analyzer and confirm any new boundary reduces accidental coupling without creating a new hotspot."
+        ]
       }
     },
     {
@@ -23483,6 +24015,44 @@
       "metrics": {
         "fan_out": 9,
         "threshold": 8
+      },
+      "remediation": {
+        "classification": "heuristic",
+        "confidence": 0.86,
+        "provenance": "Deterministic remediation template for high-fan-out",
+        "why_it_matters": "Coordinating many collaborators can couple a callable to several failure modes and sequencing rules, although orchestration is sometimes its legitimate single responsibility.",
+        "actions": [
+          {
+            "id": "risk:high-fan-out:symbol:tests/integration/test_views.py:tests.integration.test_views.test_deallocation:41:action:1",
+            "title": "Record the collaboration sequence",
+            "description": "Add tests for collaborator order, error handling, and side effects so the current orchestration contract is explicit.",
+            "priority": 1,
+            "effort": "small",
+            "classification": "heuristic",
+            "confidence": 0.86,
+            "evidence_refs": [
+              "risk:high-fan-out:symbol:tests/integration/test_views.py:tests.integration.test_views.test_deallocation:41",
+              "symbol:tests/integration/test_views.py:tests.integration.test_views.test_deallocation:41"
+            ]
+          },
+          {
+            "id": "risk:high-fan-out:symbol:tests/integration/test_views.py:tests.integration.test_views.test_deallocation:41:action:2",
+            "title": "Group related collaborators",
+            "description": "If several collaborators serve one use case, consider a narrower service boundary without hiding materially different effects.",
+            "priority": 2,
+            "effort": "medium",
+            "classification": "heuristic",
+            "confidence": 0.86,
+            "evidence_refs": [
+              "risk:high-fan-out:symbol:tests/integration/test_views.py:tests.integration.test_views.test_deallocation:41",
+              "symbol:tests/integration/test_views.py:tests.integration.test_views.test_deallocation:41"
+            ]
+          }
+        ],
+        "validation_steps": [
+          "Exercise success and failure paths and verify collaborator calls and side effects.",
+          "Re-run the analyzer and confirm any new boundary reduces accidental coupling without creating a new hotspot."
+        ]
       }
     },
     {
@@ -23505,6 +24075,44 @@
       "metrics": {
         "fan_out": 9,
         "threshold": 8
+      },
+      "remediation": {
+        "classification": "heuristic",
+        "confidence": 0.86,
+        "provenance": "Deterministic remediation template for high-fan-out",
+        "why_it_matters": "Coordinating many collaborators can couple a callable to several failure modes and sequencing rules, although orchestration is sometimes its legitimate single responsibility.",
+        "actions": [
+          {
+            "id": "risk:high-fan-out:symbol:tests/unit/test_handlers.py:tests.unit.test_handlers.TestChangeBatchQuantity.test_reallocates_if_necessary:123:action:1",
+            "title": "Record the collaboration sequence",
+            "description": "Add tests for collaborator order, error handling, and side effects so the current orchestration contract is explicit.",
+            "priority": 1,
+            "effort": "small",
+            "classification": "heuristic",
+            "confidence": 0.86,
+            "evidence_refs": [
+              "risk:high-fan-out:symbol:tests/unit/test_handlers.py:tests.unit.test_handlers.TestChangeBatchQuantity.test_reallocates_if_necessary:123",
+              "symbol:tests/unit/test_handlers.py:tests.unit.test_handlers.TestChangeBatchQuantity.test_reallocates_if_necessary:123"
+            ]
+          },
+          {
+            "id": "risk:high-fan-out:symbol:tests/unit/test_handlers.py:tests.unit.test_handlers.TestChangeBatchQuantity.test_reallocates_if_necessary:123:action:2",
+            "title": "Group related collaborators",
+            "description": "If several collaborators serve one use case, consider a narrower service boundary without hiding materially different effects.",
+            "priority": 2,
+            "effort": "medium",
+            "classification": "heuristic",
+            "confidence": 0.86,
+            "evidence_refs": [
+              "risk:high-fan-out:symbol:tests/unit/test_handlers.py:tests.unit.test_handlers.TestChangeBatchQuantity.test_reallocates_if_necessary:123",
+              "symbol:tests/unit/test_handlers.py:tests.unit.test_handlers.TestChangeBatchQuantity.test_reallocates_if_necessary:123"
+            ]
+          }
+        ],
+        "validation_steps": [
+          "Exercise success and failure paths and verify collaborator calls and side effects.",
+          "Re-run the analyzer and confirm any new boundary reduces accidental coupling without creating a new hotspot."
+        ]
       }
     }
   ],
