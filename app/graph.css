@@ -123,6 +123,34 @@
 .flow-edge-kind { display: inline-block; margin: 0 0 6px 3px; padding: 3px 6px; border-radius: 4px; background: #e5eee6; color: #315b3d; font-size: 7px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
 .flow-edge-kind.candidate { background: #fbf0df; color: #79551f; }
 .flow-edge-kind.persistence { background: #ece8f8; color: #55448a; }
+.risk-summary { color: #8a5b20; font-size: 10px; }
+.risk-summary strong { color: #6c3d13; }
+.risk-browser { min-height: 100%; padding: 28px 34px 40px; background: rgba(250,251,248,.9); }
+.risk-list-heading { display: flex; align-items: end; justify-content: space-between; gap: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
+.risk-list-heading span { color: #8a6b43; font-size: 8px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.risk-list-heading h3 { margin: 5px 0 0; font: 500 24px Georgia,serif; }
+.risk-list-heading p { max-width: 380px; margin: 0; color: var(--muted); font-size: 9px; line-height: 1.55; }
+.risk-list { display: grid; grid-template-columns: repeat(2,minmax(240px,1fr)); gap: 12px; padding-top: 20px; }
+.risk-list > button { min-height: 168px; padding: 16px; border: 1px solid var(--line); border-left: 4px solid #c79853; border-radius: 10px; background: #fff; color: var(--ink); text-align: left; cursor: pointer; box-shadow: 0 4px 14px rgba(55,49,38,.05); }
+.risk-list > button.high { border-left-color: #b85c44; }
+.risk-list > button:hover, .risk-list > button.active { border-color: #9c7b51; box-shadow: 0 0 0 2px rgba(156,123,81,.12); }
+.risk-list > button.active.high { border-color: #a84c37; box-shadow: 0 0 0 2px rgba(168,76,55,.12); }
+.risk-list > button > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.risk-severity, .risk-classification { font-size: 7px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
+.risk-severity { padding: 4px 6px; border-radius: 4px; background: #fbf0df; color: #79551f; }
+.risk-severity.high { background: #f9e4df; color: #8a3928; }
+.risk-classification { color: #89918b; }
+.risk-list button > strong { display: block; margin-top: 14px; font: 500 18px Georgia,serif; }
+.risk-list button > p { margin: 8px 0 12px; color: #566159; font-size: 10px; line-height: 1.55; }
+.risk-list button > small { display: block; color: #7b837d; font: 8px/1.45 ui-monospace,monospace; overflow-wrap: anywhere; }
+.node-risks { margin-top: 26px; padding-top: 22px; border-top: 1px solid var(--line); }
+.node-risk { margin-bottom: 10px; padding: 12px; border-left: 3px solid #c79853; border-radius: 6px; background: #fff9ef; }
+.node-risk.high { border-left-color: #b85c44; background: #fff4f1; }
+.node-risk > div { display: flex; align-items: center; gap: 8px; }
+.node-risk > div span { color: #8a5b20; font-size: 7px; font-weight: 800; text-transform: uppercase; }
+.node-risk > div strong { font-size: 10px; }
+.node-risk p { margin: 7px 0; font-size: 9px; line-height: 1.5; }
+.node-risk small { color: var(--muted); font-size: 8px; line-height: 1.45; }
 .model-metadata { margin-top: 26px; padding-top: 22px; border-top: 1px solid var(--line); }
 .model-table { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 16px; color: var(--muted); font-size: 10px; text-transform: uppercase; }
 .model-table code { padding: 4px 7px; border-radius: 5px; background: #ece8f8; color: #55448a; font-size: 10px; text-transform: none; }
@@ -143,7 +171,8 @@
 .detail { overflow-y: auto; max-height: calc(100vh - 72px); }
 @media (max-width: 1100px) { .flow-browser { grid-template-columns: 190px minmax(360px,1fr); } .flow-inspector { padding: 24px; } }
 @media (max-width: 940px) { .graph-surface { height: 620px; } .detail { max-height: none; } }
-@media (max-width: 650px) { .graph-surface { height: 560px; } .flow-browser { display: block; } .flow-catalog { border-right: 0; border-bottom: 1px solid var(--line); } .flow-inspector { padding: 20px; } }
+@media (max-width: 650px) { .graph-surface { height: 560px; } .flow-browser { display: block; } .flow-catalog { border-right: 0; border-bottom: 1px solid var(--line); } .flow-inspector, .risk-browser { padding: 20px; } .risk-list-heading { display: block; } .risk-list-heading p { margin-top: 8px; } .risk-list { grid-template-columns: 1fr; } }
+
 
 
 
