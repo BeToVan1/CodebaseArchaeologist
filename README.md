@@ -17,6 +17,11 @@ Start the analyzer API in one terminal:
 pnpm run dev:api
 ```
 
+To enable the optional AI interpretation panel, set `OPENAI_API_KEY` before starting the API.
+You may override its default model with `OPENAI_MODEL`. The API sends only the selected symbol's
+evidence packet and a source excerpt capped at 12,000 characters. Generated claims are always
+labelled as interpretations and are rejected if they cite evidence outside that packet.
+
 Start the web application in another terminal:
 
 ```powershell
