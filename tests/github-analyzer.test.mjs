@@ -6,6 +6,50 @@ import { inventoryStatus, inventoryUnavailable } from "../app/analysis-status.ts
 const commitSha = "a".repeat(40);
 const treeSha = "b".repeat(40);
 
+test("runtime diagnostics use fixed labels without leaking exception details", async (t) => {
+  const logs = [];
+  t.mock.method(console, "error", (...args) => logs.push(args));
+  const secret = "sensitive-token-and-source";
+  const response = await handleAnalyzeRequest(new Request("https://site.test/api/analyze", {
+    method: "POST", body: JSON.stringify({ repositoryUrl: "https://github.com/example/project" }),
+  }), async () => { throw new TypeError(`Illegal invocation https://example.test/${secret}`); });
+  assert.equal(response.status, 502);
+  assert.deepEqual(logs[0], ["hosted-analysis-failure", { stage: "repository", operation: "fetch", name: "TypeError", category: "invocation" }]);
+  assert.ok(!JSON.stringify(logs).includes(secret));
+  assert.ok(!(await response.text()).includes(secret));
+});
+
+test("metadata redirects are rejected without following their destination", async () => {
+  for (const status of [301, 302, 303, 307, 308]) {
+    let calls = 0;
+    const response = await handleAnalyzeRequest(new Request("https://site.test/api/analyze", {
+      method: "POST", body: JSON.stringify({ repositoryUrl: "https://github.com/example/project" }),
+    }), async (url, options) => {
+      calls++;
+      assert.equal(String(url), "https://api.github.com/repos/example/project");
+      assert.equal(options.redirect, "manual");
+      return new Response(null, { status, headers: { Location: "https://untrusted.test/" } });
+    });
+    assert.equal(calls, 1);
+    assert.equal(response.status, 502);
+    assert.match((await response.json()).detail, /current public GitHub URL/);
+  }
+});
+
+test("source redirects become explicit source failures without following Location", async () => {
+  const graph = await analyzePublicGithubRepository("https://github.com/example/project", async (url, options) => {
+    assert.equal(options.redirect, "manual");
+    if (String(url).startsWith("https://raw.githubusercontent.com/")) {
+      return new Response(null, { status: 302, headers: { Location: "https://untrusted.test/" } });
+    }
+    assert.ok(String(url).startsWith("https://api.github.com/"));
+    return fixtureFetch(url);
+  });
+  assert.equal(graph.coverage.source_failures, 3);
+  assert.ok(graph.nodes.every((node) => node.source_error && node.source === ""));
+  assert.equal(graph.edges.length, 0);
+});
+
 function fixtureFetch(url) {
   const value = String(url);
   if (value === "https://api.github.com/repos/example/project") {
@@ -55,7 +99,7 @@ function repositoryFixture(sources, { truncated = false, failed = [], invalidTre
   const fetcher = async (url, options) => {
     const value = String(url);
     calls.push({ url: value, options });
-    assert.equal(options.redirect, "error");
+    assert.equal(options.redirect, "manual");
     assert.ok(options.signal instanceof AbortSignal);
     if (value.endsWith("/project")) return Response.json({ default_branch: "main" });
     if (value.endsWith("/commits/main")) return Response.json({ sha: commitSha, commit: { tree: { sha: treeSha } } });
