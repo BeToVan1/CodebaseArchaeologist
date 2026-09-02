@@ -32,6 +32,10 @@ pnpm run dev
 
 Open `http://localhost:3000`, enter a public GitHub URL, and select **Analyze repository**.
 
+Development defaults to the full local API at `http://127.0.0.1:8000`; production defaults to
+the same-origin hosted inventory endpoint. Set `NEXT_PUBLIC_ANALYZER_API_URL` to override this
+choice (an empty value selects the same-origin worker in development too).
+
 Each completed analysis records the repository's full commit SHA. Repository and file links in
 the explorer are pinned to that immutable snapshot, so the displayed evidence cannot silently
 move when the repository's default branch changes.
@@ -89,6 +93,22 @@ active so a partial hosted result cannot be mistaken for a complete analysis.
 
 The full AST and framework-aware API remains local-only. The hosted worker provides the bounded
 inventory tier; deploying deep analysis still requires an isolated Python analysis service.
+
+### Hosted inventory limits and trust boundary
+
+- At most 40 Python files are inventoried, sorted by repository path. Symlinks are excluded.
+- Source reads are capped at 200,000 **bytes**, even if the upstream server ignores the Range
+  header. A 30-second deadline applies to GitHub analysis requests; metadata and incoming JSON
+  bodies are also bounded. No repository code is executed.
+- Import candidates come from a lightweight lexical scan, not the Python AST analyzer. They are
+  always labeled **heuristic**, with rule-based (not statistically calibrated) confidence.
+  Comments and strings are ignored; basic `src/` and relative imports are supported. Multiline
+  imports, dynamic imports, custom module roots, and ambiguous paths may remain unmatched.
+- The interface reports omitted files, incomplete GitHub trees, unreadable or truncated source,
+  and unmatched import references. File totals from truncated trees are lower bounds.
+- Symbols, flows, patterns, risks, and remediation say **not analyzed** in inventory mode. Empty
+  results must not be interpreted as a clean bill of health. File details do not invent AST facts
+  or architectural intent from an inventory-only response.
 
 
 

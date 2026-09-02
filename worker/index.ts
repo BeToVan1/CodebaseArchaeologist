@@ -2,7 +2,7 @@ import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } fr
 import handler from "vinext/server/app-router-entry";
 import { handleAnalyzeRequest } from "./github-analyzer";
 
-interface Env { ASSETS: Fetcher; IMAGES: { input(stream: ReadableStream): { transform(options: Record<string, unknown>): { output(options: { format: string; quality: number }): Promise<{ response(): Response }> } } } }
+interface Env { ASSETS: { fetch(request: Request): Promise<Response> }; IMAGES: { input(stream: ReadableStream): { transform(options: Record<string, unknown>): { output(options: { format: string; quality: number }): Promise<{ response(): Response }> } } } }
 interface ExecutionContext { waitUntil(promise: Promise<unknown>): void; passThroughOnException(): void }
 
 export default {
