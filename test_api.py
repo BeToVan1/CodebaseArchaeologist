@@ -28,6 +28,7 @@ def evidence_packet() -> dict[str, object]:
         "related_edge_ids": ["edge:1"],
         "flow_ids": [],
         "finding_ids": [],
+        "pattern_ids": [],
         "claims": [{**statement, "id": "claim:1", "evidence_refs": ["symbol:example.py:run"]}],
     }
 

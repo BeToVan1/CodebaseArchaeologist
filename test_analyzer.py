@@ -232,6 +232,7 @@ def bootstrap() -> Service:
         "high_risk_findings": 0,
         "medium_risk_findings": 0,
         "evidence_packets": 4,
+        "architecture_patterns": 0,
         "call_sites": 2,
         "resolved_calls": 2,
         "candidate_calls": 0,
@@ -399,7 +400,7 @@ def create_item_route(
     }
     route = symbols["api.create_item_route"]
 
-    assert graph["schema_version"] == "0.8"
+    assert graph["schema_version"] == "0.9"
     assert route["entrypoint"] == {
         "framework": "fastapi",
         "kind": "route",
@@ -422,6 +423,11 @@ def create_item_route(
     assert graph["coverage"]["unresolved_dependencies"] == 1
     assert graph["coverage"]["representative_flows"] == 2
     assert len(graph["flows"]) == 2
+    patterns = {pattern["pattern_id"]: pattern for pattern in graph["patterns"]}
+    assert patterns["fastapi-boundary"]["classification"] == "fact"
+    assert patterns["fastapi-boundary"]["metrics"]["route_handlers"] == 1
+    assert dependency_edge["id"] in patterns["dependency-injection"]["evidence_refs"]
+    assert graph["coverage"]["architecture_patterns"] == len(graph["patterns"])
 
     service_flow = next(
         flow for flow in graph["flows"]
@@ -526,6 +532,11 @@ async def rename(session):
     assert graph["coverage"]["sqlalchemy_relationships"] == 1
     assert graph["coverage"]["sqlalchemy_reads"] == 3
     assert graph["coverage"]["sqlalchemy_writes"] == 2
+    patterns = {pattern["pattern_id"]: pattern for pattern in graph["patterns"]}
+    assert patterns["data-mapper"]["classification"] == "fact"
+    assert patterns["data-mapper"]["metrics"] == {"models": 1, "reads": 3, "writes": 2}
+    assert patterns["repository-boundary"]["classification"] == "heuristic"
+    assert patterns["repository-boundary"]["metrics"]["persistence_relationships"] == 5
 
 
 def test_fastapi_flow_reaches_a_sqlalchemy_model(tmp_path: Path) -> None:
@@ -607,6 +618,9 @@ def list_items_route():
         "end_line": 8,
     }
     assert graph["coverage"]["evidence_packets"] == graph["coverage"]["symbol_nodes"]
+    assert "pattern:fastapi-boundary" in route_packet["pattern_ids"]
+    assert "pattern:data-mapper" in repository_packet["pattern_ids"]
+    assert "pattern:data-mapper" in model_packet["pattern_ids"]
 
 
 def test_evidence_packet_uses_a_symbol_docstring_as_grounded_summary(tmp_path: Path) -> None:
