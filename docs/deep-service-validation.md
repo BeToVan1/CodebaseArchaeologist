@@ -11,15 +11,20 @@ From this repository's root:
 & .\scripts\Test-DeepService.ps1
 ```
 
-The script builds a disposable validation image, runs the Python regression suite
+The script copies 21 explicitly named source/test files into a fresh temporary
+build context; it does not enumerate the repository's caches, `.git`, dependencies,
+or private files. This avoids Docker traversing inaccessible Windows cache folders.
+It builds a disposable validation image, runs the Python regression suite
 with networking disabled, then makes one real public GitHub analysis request inside
 a second disposable container. It checks authorization, invalid-input handling,
 deep symbols and commit pinning. No port is published, host directory mounted,
 Docker socket mounted, host token forwarded, or live site updated. A short-lived
 service token is generated inside the smoke-test container and never printed.
 Use `-SkipLiveGithub` to omit the live request; that is not full rollout validation.
-The script removes only its uniquely named test container/image; shared Docker
-build caches may remain. It never deletes project files.
+The script removes only its uniquely named test container/image and its verified
+temporary build context; shared Docker build caches may remain. It never deletes
+project files or changes their permissions. Update the explicit input list when
+adding files needed by this Docker image.
 
 If PowerShell blocks script execution, do not disable system policy. Ask your
 administrator or run the individual reviewed Docker commands from the script.
