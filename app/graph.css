@@ -1,4 +1,13 @@
 .nav-item.muted { color: #9ba39d; }
+.report-controls { display: flex; flex-direction: column; gap: 7px; margin-bottom: 18px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; }
+.report-controls strong { color: var(--ink); font-size: 11px; }
+.report-controls button { padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--moss); font-size: 10px; text-align: left; cursor: pointer; }
+.report-controls button:disabled { opacity: .55; cursor: default; }
+.report-controls button:focus-visible { outline: 2px solid var(--moss); outline-offset: 2px; }
+.report-controls small, .report-controls details { color: var(--muted); font-size: 10px; line-height: 1.5; }
+.report-controls summary { cursor: pointer; }
+.report-controls code { display: block; white-space: normal; overflow-wrap: anywhere; }
+.imported-report p { overflow-wrap: anywhere; }
 .nav-item.warning { background: #fbf0df; color: #79551f; font-weight: 700; }
 .repository-form { display: flex; flex-direction: column; gap: 7px; margin: 0 0 18px; }
 .repository-form label { color: #68736b; font-size: 9px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }

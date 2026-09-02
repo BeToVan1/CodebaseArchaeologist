@@ -94,6 +94,33 @@ active so a partial hosted result cannot be mistaken for a complete analysis.
 The full AST and framework-aware API remains local-only. The hosted worker provides the bounded
 inventory tier; deploying deep analysis still requires an isolated Python analysis service.
 
+### Explore and share full analysis reports
+
+Generate a report with the Python analyzer:
+
+```powershell
+python analyzer.py https://github.com/cosmicpython/code --output graph.json
+```
+
+Choose **Open report JSON** in the web app. The file is read in your browser tab, not uploaded.
+The map can display the report's symbols, source, execution flows, architectural patterns,
+risk findings, and remediation. **Download report (includes source)** saves the current graph;
+your coworker can open that JSON in their own browser. **Restore Cosmic Python example** returns
+to the bundled example. Reloading discards an imported report; there is no cloud report storage.
+
+Reports must use schema v1.1 and fit within 10 MiB, 500 files, 10,000 nodes and 30,000 edges.
+Malformed records, unsafe links, dangling evidence references and unsupported versions are
+rejected without replacing the current map. Imported claims and commit metadata are supplied
+by the report, not independently attested by the site; the imported-report notice remains visible.
+AI requests are disabled for imported reports, including when a local API is configured.
+
+Reports contain source code and may include local directory paths. Review them for sensitive
+information before sharing. Importing an inventory report does not upgrade it to deep analysis.
+This is a portable-report workflow, not hosted execution of the Python analyzer.
+
+The JavaScript tests include a Python-to-browser report contract check; `python` must be on PATH
+or `PYTHON` must name its executable. Repository fixture code is parsed, never executed.
+
 ### Hosted inventory limits and trust boundary
 
 - At most 40 Python files are inventoried, sorted by repository path. Symlinks are excluded.
