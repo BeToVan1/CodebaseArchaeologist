@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "python_files_total_found": 37,
   "python_files_analyzed": 37,
   "python_files_truncated": false,
@@ -24364,6 +24364,13 @@
       }
     }
   ],
+  "analysis": {
+    "tier": "deep",
+    "engine": "python-static-analyzer",
+    "limitations": [
+      "Static analysis can miss runtime dispatch, generated code, and dynamically assembled dependencies."
+    ]
+  },
   "coverage": {
     "python_files": 37,
     "symbol_nodes": 159,
