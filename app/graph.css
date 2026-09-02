@@ -184,6 +184,25 @@
 .risk-list button > strong { display: block; margin-top: 14px; font: 500 18px Georgia,serif; }
 .risk-list button > p { margin: 8px 0 12px; color: #566159; font-size: 10px; line-height: 1.55; }
 .risk-list button > small { display: block; color: #7b837d; font: 8px/1.45 ui-monospace,monospace; overflow-wrap: anywhere; }
+.remediation-panel { margin-top: 22px; padding: 22px; border: 1px solid #dbc9ad; border-radius: 12px; background: #fffdf8; box-shadow: 0 8px 24px rgba(55,49,38,.06); }
+.remediation-panel > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding-bottom: 15px; border-bottom: 1px solid var(--line); }
+.remediation-panel > header span, .remediation-panel h4 { color: #8a6b43; font-size: 8px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.remediation-panel > header h3 { margin: 5px 0 0; font: 500 21px Georgia,serif; }
+.remediation-panel > header > strong { color: #7c684d; font-size: 8px; text-transform: uppercase; }
+.remediation-caveat { margin: 14px 0 18px; padding: 10px 12px; border-left: 3px solid #c79853; background: #fbf5e9; color: #66563f; font-size: 9px; line-height: 1.5; }
+.remediation-panel section { margin-top: 18px; }
+.remediation-panel section > p { margin: 7px 0 0; color: #4f5b53; font-size: 10px; line-height: 1.6; }
+.remediation-actions { display: grid; grid-template-columns: repeat(2,minmax(220px,1fr)); gap: 10px; margin: 9px 0 0; padding: 0; list-style: none; }
+.remediation-actions li { padding: 13px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.remediation-actions li > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.remediation-actions li > div strong { font-size: 10px; }
+.remediation-actions li > div span { flex: none; padding: 3px 5px; border-radius: 4px; background: #edf1eb; color: #657066; font-size: 7px; font-weight: 800; text-transform: uppercase; }
+.remediation-actions p { margin: 7px 0; color: #566159; font-size: 9px; line-height: 1.55; }
+.remediation-actions small { color: #838a84; font-size: 7px; }
+.remediation-validation { margin: 8px 0 0; padding-left: 18px; color: #566159; font-size: 9px; line-height: 1.65; }
+.remediation-panel > footer { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.remediation-panel > footer span { color: #858c86; font: 7px/1.4 ui-monospace,monospace; }
+.remediation-panel > footer button { flex: none; padding: 8px 10px; border: 1px solid #a88658; border-radius: 6px; background: #fff; color: #6f512d; font-size: 8px; font-weight: 800; cursor: pointer; }
 .node-risks { margin-top: 26px; padding-top: 22px; border-top: 1px solid var(--line); }
 .node-risk { margin-bottom: 10px; padding: 12px; border-left: 3px solid #c79853; border-radius: 6px; background: #fff9ef; }
 .node-risk.high { border-left-color: #b85c44; background: #fff4f1; }
@@ -212,7 +231,7 @@
 .detail { overflow-y: auto; max-height: calc(100vh - 72px); }
 @media (max-width: 1100px) { .flow-browser { grid-template-columns: 190px minmax(360px,1fr); } .flow-inspector { padding: 24px; } }
 @media (max-width: 940px) { .graph-surface { height: 620px; } .detail { max-height: none; } }
-@media (max-width: 650px) { .graph-surface { height: 560px; } .flow-browser { display: block; } .flow-catalog { border-right: 0; border-bottom: 1px solid var(--line); } .flow-inspector, .risk-browser, .pattern-browser { padding: 20px; } .risk-list-heading, .pattern-list-heading { display: block; } .risk-list-heading p, .pattern-list-heading p { margin-top: 8px; } .risk-list, .pattern-list { grid-template-columns: 1fr; } }
+@media (max-width: 650px) { .graph-surface { height: 560px; } .flow-browser { display: block; } .flow-catalog { border-right: 0; border-bottom: 1px solid var(--line); } .flow-inspector, .risk-browser, .pattern-browser { padding: 20px; } .risk-list-heading, .pattern-list-heading, .remediation-panel > header, .remediation-panel > footer { display: block; } .risk-list-heading p, .pattern-list-heading p, .remediation-panel > header > strong, .remediation-panel > footer button { margin-top: 8px; } .risk-list, .pattern-list, .remediation-actions { grid-template-columns: 1fr; } }
 
 
 

@@ -115,6 +115,23 @@ type RiskFinding = {
   provenance: string;
   evidence: { path: string; line: number; end_line?: number; expression?: string };
   metrics: Record<string, number>;
+  remediation: {
+    classification: "heuristic";
+    confidence: number;
+    provenance: string;
+    why_it_matters: string;
+    actions: Array<{
+      id: string;
+      title: string;
+      description: string;
+      priority: number;
+      effort: "small" | "medium" | "large";
+      classification: "heuristic";
+      confidence: number;
+      evidence_refs: string[];
+    }>;
+    validation_steps: string[];
+  };
 };
 type ArchitecturePattern = {
   id: string;
@@ -855,6 +872,25 @@ export default function Home() {
                     <small>{finding.evidence.path}:{finding.evidence.line}{finding.evidence.end_line ? `–${finding.evidence.end_line}` : ""} · {finding.provenance}</small>
                   </button>)}
                 </div>
+                {selectedRisk && <article className="remediation-panel" aria-label={`Suggested response for ${selectedRisk.title}`}>
+                  <header>
+                    <div><span>Suggested response</span><h3>{selectedRisk.title}</h3></div>
+                    <strong>{selectedRisk.remediation.classification} · {Math.round(selectedRisk.remediation.confidence * 100)}%</strong>
+                  </header>
+                  <p className="remediation-caveat">This is a review prompt, not a proven defect or an automatic refactor.</p>
+                  <section><h4>Why it may matter</h4><p>{selectedRisk.remediation.why_it_matters}</p></section>
+                  <section><h4>Recommended actions</h4><ol className="remediation-actions">
+                    {selectedRisk.remediation.actions.map((action) => <li key={action.id}>
+                      <div><strong>{action.title}</strong><span>{action.effort} effort</span></div>
+                      <p>{action.description}</p>
+                      <small>{action.classification} · {Math.round(action.confidence * 100)}% · {action.evidence_refs.length} evidence references</small>
+                    </li>)}
+                  </ol></section>
+                  <section><h4>Validate after changing code</h4><ul className="remediation-validation">
+                    {selectedRisk.remediation.validation_steps.map((step) => <li key={step}>{step}</li>)}
+                  </ul></section>
+                  <footer><span>{selectedRisk.remediation.provenance}</span><button type="button" onClick={() => selectRisk(selectedRisk)}>Open source evidence</button></footer>
+                </article>}
               </div>
             ) : (
               <div className="state-card"><strong>No structural risks detected</strong><p>No analyzed symbol crossed the bounded size or relationship thresholds, and no circular import component was found.</p></div>

@@ -400,7 +400,7 @@ def create_item_route(
     }
     route = symbols["api.create_item_route"]
 
-    assert graph["schema_version"] == "0.9"
+    assert graph["schema_version"] == "1.0"
     assert route["entrypoint"] == {
         "framework": "fastapi",
         "kind": "route",
@@ -705,6 +705,22 @@ def test_risk_findings_are_bounded_and_evidence_backed() -> None:
     assert all(0 < finding["confidence"] <= 1 for finding in findings)
     assert all(finding["provenance"] for finding in findings)
     assert all(finding["evidence"]["path"] in {"a.py", "b.py"} for finding in findings)
+    assert all(finding["remediation"]["classification"] == "heuristic" for finding in findings)
+    assert all(
+        finding["remediation"]["confidence"] <= finding["confidence"]
+        for finding in findings
+    )
+    assert all(finding["remediation"]["actions"] for finding in findings)
+    assert all(finding["remediation"]["validation_steps"] for finding in findings)
+    assert all(
+        finding["id"] in action["evidence_refs"]
+        and finding["node_id"] in action["evidence_refs"]
+        and action["classification"] == "heuristic"
+        and action["priority"] > 0
+        and action["effort"] in {"small", "medium", "large"}
+        for finding in findings
+        for action in finding["remediation"]["actions"]
+    )
     cycle = next(finding for finding in findings if finding["rule_id"] == "import-cycle")
     assert cycle["node_id"] == "file:a.py"
     assert cycle["related_node_ids"] == ["file:b.py"]

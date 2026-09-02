@@ -74,6 +74,11 @@ persistence, repository boundaries, and Unit of Work boundaries when their bound
 pattern retains a fact-or-heuristic classification, confidence, provenance, metrics, and exact
 node and edge references. Pattern IDs are also attached to participating symbol evidence packets.
 
+Graph schema v1.0 adds deterministic remediation guidance to every structural risk finding. Each
+plan explains why the heuristic matters, proposes ordered actions with effort and confidence, and
+lists concrete validation checks. Guidance cites both the finding and its source nodes, remains
+classified as heuristic, and never raises confidence above the underlying static finding.
+
 The API is intentionally local-only for this milestone. The hosted site continues to use the committed Cosmic Python fixture until repository analysis runs in an isolated worker service.
 
 

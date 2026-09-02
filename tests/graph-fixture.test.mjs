@@ -10,7 +10,7 @@ test("Cosmic Python fixture follows the frontend graph contract", async () => {
   const fileNodes = graph.nodes.filter((node) => node.kind === "file");
   const symbolNodes = graph.nodes.filter((node) => node.kind !== "file");
 
-  assert.equal(graph.schema_version, "0.9");
+  assert.equal(graph.schema_version, "1.0");
   assert.equal(graph.repository.name, "cosmicpython/code");
   assert.equal(graph.repository.url, "https://github.com/cosmicpython/code");
   assert.match(graph.snapshot.commit_sha, /^[0-9a-f]{40}$/);
@@ -32,6 +32,15 @@ test("Cosmic Python fixture follows the frontend graph contract", async () => {
     && ["fact", "heuristic", "interpretation"].includes(finding.classification)
     && finding.evidence.path
     && finding.provenance
+    && finding.remediation.classification === "heuristic"
+    && finding.remediation.confidence <= finding.confidence
+    && finding.remediation.actions.length > 0
+    && finding.remediation.validation_steps.length > 0
+    && finding.remediation.actions.every((action) =>
+      action.classification === "heuristic"
+      && action.evidence_refs.includes(finding.id)
+      && action.evidence_refs.includes(finding.node_id)
+    )
   ));
   assert.ok(graph.patterns.length >= 2);
   assert.ok(graph.patterns.every((pattern) =>
