@@ -58,6 +58,9 @@
 .analysis-label { background: #e7eef7 !important; color: #31557b !important; }
 .explanation-block { margin: 0 0 14px; }
 .explanation-block h4, .claims h4 { margin: 0 0 5px; color: #6e7971; font-size: 9px; font-weight: 780; letter-spacing: .09em; text-transform: uppercase; }
+.grounding-label { display: block; margin-top: 7px; color: #56705d; font-size: 8px; line-height: 1.45; }
+.grounding-label.heuristic { color: #806126; }
+.grounding-label.interpretation { color: #66558b; }
 .explanation-block p { margin: 0; color: #303b34; font-size: 11px; line-height: 1.55; }
 .claims { margin-top: 20px; }
 .claim { margin: 0 0 9px; padding: 10px; border: 1px solid var(--line); border-left-width: 3px; border-radius: 7px; background: #fafbf9; }
@@ -172,6 +175,7 @@
 @media (max-width: 1100px) { .flow-browser { grid-template-columns: 190px minmax(360px,1fr); } .flow-inspector { padding: 24px; } }
 @media (max-width: 940px) { .graph-surface { height: 620px; } .detail { max-height: none; } }
 @media (max-width: 650px) { .graph-surface { height: 560px; } .flow-browser { display: block; } .flow-catalog { border-right: 0; border-bottom: 1px solid var(--line); } .flow-inspector, .risk-browser { padding: 20px; } .risk-list-heading { display: block; } .risk-list-heading p { margin-top: 8px; } .risk-list { grid-template-columns: 1fr; } }
+
 
 
 
