@@ -82,6 +82,20 @@ type ExecutionFlow = {
   completeness: "complete" | "partial";
   unresolved_steps: UnresolvedStep[];
 };
+type RiskFinding = {
+  id: string;
+  rule_id: "large-symbol" | "high-fan-in" | "high-fan-out" | "import-cycle";
+  node_id: string;
+  related_node_ids: string[];
+  title: string;
+  severity: "low" | "medium" | "high";
+  classification: "fact" | "heuristic" | "interpretation";
+  confidence: number;
+  summary: string;
+  provenance: string;
+  evidence: { path: string; line: number; end_line?: number; expression?: string };
+  metrics: Record<string, number>;
+};
 type Graph = {
   schema_version: string;
   repository?: RepositoryMetadata;
@@ -91,6 +105,7 @@ type Graph = {
   nodes: GraphNode[];
   edges: GraphEdge[];
   flows?: ExecutionFlow[];
+  findings?: RiskFinding[];
 };
 type Claim = {
   classification: "fact" | "heuristic" | "interpretation";
@@ -343,6 +358,34 @@ function validateGraph(value: unknown): Graph {
       }
     }
   }
+  if (value.findings !== undefined) {
+    if (!Array.isArray(value.findings)) throw new Error("Invalid graph: findings must be an array.");
+    for (const [index, finding] of value.findings.entries()) {
+      if (
+        !isRecord(finding)
+        || typeof finding.id !== "string"
+        || typeof finding.rule_id !== "string"
+        || typeof finding.node_id !== "string"
+        || !nodeIds.has(finding.node_id)
+        || !Array.isArray(finding.related_node_ids)
+        || !finding.related_node_ids.every((id) => typeof id === "string" && nodeIds.has(id))
+        || typeof finding.title !== "string"
+        || !["low", "medium", "high"].includes(String(finding.severity))
+        || !["fact", "heuristic", "interpretation"].includes(String(finding.classification))
+        || typeof finding.confidence !== "number"
+        || finding.confidence < 0
+        || finding.confidence > 1
+        || typeof finding.summary !== "string"
+        || typeof finding.provenance !== "string"
+        || !isRecord(finding.evidence)
+        || typeof finding.evidence.path !== "string"
+        || !Number.isInteger(finding.evidence.line)
+        || !isRecord(finding.metrics)
+      ) {
+        throw new Error(`Invalid graph: finding ${index + 1} has invalid evidence or classification.`);
+      }
+    }
+  }
   return value as Graph;
 }
 
@@ -370,8 +413,9 @@ export default function Home() {
   const [selectedSymbolId, setSelectedSymbolId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<"production" | "all">("production");
-  const [mapMode, setMapMode] = useState<"architecture" | "flows">("architecture");
+  const [mapMode, setMapMode] = useState<"architecture" | "flows" | "risks">("architecture");
   const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
+  const [selectedRiskId, setSelectedRiskId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submittedUrl, setSubmittedUrl] = useState("https://github.com/cosmicpython/code");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -389,6 +433,7 @@ export default function Home() {
         setSelectedId(primaryNodeId(validated));
         setSelectedSymbolId(null);
         setSelectedFlowId(validated.flows?.[0]?.id ?? null);
+        setSelectedRiskId(validated.findings?.[0]?.id ?? null);
       })
       .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Could not load graph data"));
   }, []);
@@ -413,6 +458,7 @@ export default function Home() {
       setSelectedId(primaryNodeId(validated));
       setSelectedSymbolId(null);
       setSelectedFlowId(validated.flows?.[0]?.id ?? null);
+      setSelectedRiskId(validated.findings?.[0]?.id ?? null);
       setMapMode("architecture");
       setQuery("");
       setScope("production");
@@ -485,6 +531,24 @@ export default function Home() {
   const flows = graph?.flows ?? [];
   const selectedFlow = flows.find((flow) => flow.id === selectedFlowId) ?? flows[0] ?? null;
   const flowEdge = (index: number) => graph?.edges.find((edge) => edge.id === selectedFlow?.ordered_edge_ids[index]);
+  const allFindings = graph?.findings ?? [];
+  const findings = allFindings.filter((finding) =>
+    (scope === "all" || !finding.evidence.path.startsWith("tests/"))
+    && finding.evidence.path.toLowerCase().includes(query.toLowerCase()),
+  );
+  const selectedRisk = findings.find((finding) => finding.id === selectedRiskId) ?? findings[0] ?? null;
+  const selectRisk = (finding: RiskFinding) => {
+    setSelectedRiskId(finding.id);
+    const node = graph?.nodes.find((candidate) => candidate.id === finding.node_id);
+    if (!node) return;
+    if (node.kind === "file") selectFileNode(node.id);
+    else selectSymbolNode(node.id);
+  };
+  const selectedNodeFindings = findings.filter((finding) => {
+    const selectedNodeId = selectedSymbolId ?? selectedId;
+    return selectedNodeId !== null
+      && (finding.node_id === selectedNodeId || finding.related_node_ids.includes(selectedNodeId));
+  });
   const displayedSource = selected?.source?.slice(0, MAX_SOURCE_CHARACTERS);
   const fileSourceLines = displayedSource?.split("\n") ?? [];
   const sourceStartLine = selectedSymbol?.start_line ?? 1;
@@ -509,7 +573,8 @@ export default function Home() {
   const fileCount = graph?.nodes.filter((node) => node.kind === "file").length ?? 0;
   const symbolCount = graph?.nodes.filter((node) => node.kind !== "file").length ?? 0;
   const relationshipCount = graph?.edges.filter((edge) => ["calls", "extends", "may-dispatch-to", "depends-on", "reads", "writes"].includes(edge.kind)).length ?? 0;
-  const riskCount = graph?.nodes.filter((node) => node.source_error).length ?? 0;
+  const riskCount = findings.length;
+  const highRiskCount = findings.filter((finding) => finding.severity === "high").length;
 
   return (
     <main className="shell">
@@ -541,24 +606,38 @@ export default function Home() {
           <nav aria-label="Graph summary">
             <button className={`nav-item${mapMode === "architecture" ? " active" : ""}`} onClick={() => setMapMode("architecture")}><span>Architecture map</span><strong>{fileCount}</strong></button>
             <button className={`nav-item${mapMode === "flows" ? " active" : ""}`} onClick={() => setMapMode("flows")}><span>Execution flows</span><strong>{flows.length}</strong></button>
+            <button className={`nav-item${mapMode === "risks" ? " active warning" : riskCount ? " warning" : " muted"}`} onClick={() => setMapMode("risks")}><span>Risk findings</span><strong>{riskCount}</strong></button>
             <div className="nav-item"><span>Symbols</span><strong>{symbolCount}</strong></div>
             <div className="nav-item"><span>Dependencies</span><strong>{graph?.edges.filter((edge) => edge.kind === "imports").length ?? 0}</strong></div>
             <div className="nav-item"><span>Symbol relationships</span><strong>{relationshipCount}</strong></div>
-            <div className={riskCount ? "nav-item warning" : "nav-item muted"}><span>Read warnings</span><strong>{riskCount}</strong></div>
           </nav>
           <div className="contract"><span>Graph contract</span><code>schema v{graph?.schema_version ?? "0.1"}</code></div>
         </aside>
 
         <section className="canvas" aria-label="Repository dependency graph">
-          <div className="canvas-head"><div><div className="eyebrow">{mapMode === "architecture" ? "Architecture map" : "Flow discovery"}</div><h2>{mapMode === "architecture" ? "Python imports" : "Representative execution paths"}</h2><p className="relationship-help">{mapMode === "architecture" ? "A → B means file A imports file B." : "Paths begin at proven framework entrypoints and preserve uncertain or unresolved steps."}</p></div>{mapMode === "architecture" ? <div className="legend"><span /> Selected <i /> Imports →</div> : <div className="legend flow-legend"><span /> Proven <i /> Candidate</div>}</div>
+          <div className="canvas-head"><div><div className="eyebrow">{mapMode === "architecture" ? "Architecture map" : mapMode === "flows" ? "Flow discovery" : "Risk analysis"}</div><h2>{mapMode === "architecture" ? "Python imports" : mapMode === "flows" ? "Representative execution paths" : "Evidence-backed findings"}</h2><p className="relationship-help">{mapMode === "architecture" ? "A → B means file A imports file B." : mapMode === "flows" ? "Paths begin at proven framework entrypoints and preserve uncertain or unresolved steps." : "Deterministic heuristics identify structural hotspots; each finding links to exact source evidence."}</p></div>{mapMode === "architecture" ? <div className="legend"><span /> Selected <i /> Imports →</div> : mapMode === "flows" ? <div className="legend flow-legend"><span /> Proven <i /> Candidate</div> : <div className="risk-summary"><strong>{highRiskCount}</strong> high · <strong>{riskCount - highRiskCount}</strong> medium/low</div>}</div>
           {mapMode === "architecture" && <div className="layer-guide" aria-hidden="true">
             {(scope === "all" ? ["Tests"] : []).concat(["Entry points", "Application", "Domain", "Infrastructure", "Support"]).map((layer) => <span key={layer}>{layer}</span>)}
           </div>}
-          <div className={`graph-surface${mapMode === "flows" ? " flow-surface" : ""}`}>
+          <div className={`graph-surface${mapMode !== "architecture" ? " flow-surface" : ""}`}>
             {error ? <div className="state-card error-state"><strong>Graph could not be loaded</strong><p>{error}</p></div> : !graph ? (
               <div className="state-card loading-state"><span aria-hidden="true" /><strong>Loading repository graph</strong><p>Validating nodes and dependencies…</p></div>
             ) : graph.nodes.length === 0 ? (
               <div className="state-card"><strong>No Python files found</strong><p>This repository does not contain any analyzable .py files.</p></div>
+            ) : mapMode === "risks" ? findings.length ? (
+              <div className="risk-browser">
+                <div className="risk-list-heading"><div><span>Ranked findings</span><h3>{findings.length} structural hotspot{findings.length === 1 ? "" : "s"}</h3></div><p>Severity ranks urgency; confidence reports how strongly the static evidence supports the heuristic.</p></div>
+                <div className="risk-list" aria-label="Risk findings">
+                  {findings.map((finding) => <button className={finding.id === selectedRisk?.id ? `active ${finding.severity}` : finding.severity} key={finding.id} onClick={() => selectRisk(finding)}>
+                    <div><span className={`risk-severity ${finding.severity}`}>{finding.severity}</span><span className="risk-classification">{finding.classification} · {Math.round(finding.confidence * 100)}%</span></div>
+                    <strong>{finding.title}</strong>
+                    <p>{finding.summary}</p>
+                    <small>{finding.evidence.path}:{finding.evidence.line}{finding.evidence.end_line ? `–${finding.evidence.end_line}` : ""} · {finding.provenance}</small>
+                  </button>)}
+                </div>
+              </div>
+            ) : (
+              <div className="state-card"><strong>No structural risks detected</strong><p>No analyzed symbol crossed the bounded size or relationship thresholds, and no circular import component was found.</p></div>
             ) : mapMode === "flows" ? flows.length && selectedFlow ? (
               <div className="flow-browser">
                 <div className="flow-catalog" aria-label="Representative execution flows">
@@ -627,6 +706,14 @@ export default function Home() {
                 </button>)}
               </div> : <p className="no-symbols">No class or function definitions found.</p>}
             </section>
+            {selectedNodeFindings.length > 0 && <section className="node-risks">
+              <div className="section-heading"><h3>Risk evidence</h3><span>{selectedNodeFindings.length}</span></div>
+              {selectedNodeFindings.map((finding) => <article className={`node-risk ${finding.severity}`} key={finding.id}>
+                <div><span>{finding.severity}</span><strong>{finding.title}</strong></div>
+                <p>{finding.summary}</p>
+                <small>{finding.classification} · {Math.round(finding.confidence * 100)}% confidence · {finding.provenance}</small>
+              </article>)}
+            </section>}
             {explanation && <section className="explanation-section">
               <div className="section-heading"><h3>Understanding</h3><span className="analysis-label">Static analysis</span></div>
               <div className="explanation-block"><h4>What it does</h4><p>{explanation.summary}</p></div>
@@ -678,6 +765,7 @@ export default function Home() {
     </main>
   );
 }
+
 
 
 

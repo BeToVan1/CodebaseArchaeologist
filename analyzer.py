@@ -43,6 +43,9 @@ MAX_FLOW_DEPTH = 8
 MAX_REPRESENTATIVE_FLOWS = 3
 MAX_FLOW_CANDIDATES_PER_ENTRYPOINT = 12
 MAX_FLOW_CANDIDATES = 500
+LARGE_SYMBOL_LINES = 80
+HIGH_SYMBOL_FAN_IN = 8
+HIGH_SYMBOL_FAN_OUT = 8
 FASTAPI_ROUTE_METHODS = {
     "get", "post", "put", "patch", "delete", "options", "head", "websocket"
 }
@@ -1329,6 +1332,187 @@ def discover_representative_flows(
     return representatives
 
 
+def import_cycle_components(
+    file_nodes: list[dict[str, Any]],
+    import_edges: list[dict[str, Any]],
+) -> list[list[str]]:
+    """Return deterministic strongly connected file components with real cycles."""
+    adjacency = {node["id"]: [] for node in file_nodes}
+    for edge in import_edges:
+        adjacency.setdefault(edge["source"], []).append(edge["target"])
+    for targets in adjacency.values():
+        targets.sort()
+
+    index = 0
+    indices: dict[str, int] = {}
+    lowlinks: dict[str, int] = {}
+    stack: list[str] = []
+    on_stack: set[str] = set()
+    components: list[list[str]] = []
+
+    def visit(node_id: str) -> None:
+        nonlocal index
+        indices[node_id] = index
+        lowlinks[node_id] = index
+        index += 1
+        stack.append(node_id)
+        on_stack.add(node_id)
+        for target_id in adjacency.get(node_id, []):
+            if target_id not in indices:
+                visit(target_id)
+                lowlinks[node_id] = min(lowlinks[node_id], lowlinks[target_id])
+            elif target_id in on_stack:
+                lowlinks[node_id] = min(lowlinks[node_id], indices[target_id])
+        if lowlinks[node_id] != indices[node_id]:
+            return
+        component: list[str] = []
+        while stack:
+            member = stack.pop()
+            on_stack.remove(member)
+            component.append(member)
+            if member == node_id:
+                break
+        if len(component) > 1:
+            components.append(sorted(component))
+
+    for node_id in sorted(adjacency):
+        if node_id not in indices:
+            visit(node_id)
+    return sorted(components, key=lambda component: component[0])
+
+
+def detect_risk_findings(
+    file_nodes: list[dict[str, Any]],
+    symbol_nodes: list[dict[str, Any]],
+    import_edges: list[dict[str, Any]],
+    relationship_edges: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Produce bounded, evidence-backed structural risk heuristics."""
+    findings: list[dict[str, Any]] = []
+    file_index = {node["id"]: node for node in file_nodes}
+    incoming_counts: dict[str, int] = {}
+    outgoing_counts: dict[str, int] = {}
+    structural_kinds = {"calls", "depends-on", "may-dispatch-to", "reads", "writes"}
+    for edge in relationship_edges:
+        if edge["kind"] not in structural_kinds:
+            continue
+        outgoing_counts[edge["source"]] = outgoing_counts.get(edge["source"], 0) + 1
+        incoming_counts[edge["target"]] = incoming_counts.get(edge["target"], 0) + 1
+
+    for symbol in sorted(symbol_nodes, key=lambda node: node["id"]):
+        line_span = symbol["end_line"] - symbol["definition_line"] + 1
+        if symbol["kind"] in {"function", "method"} and line_span >= LARGE_SYMBOL_LINES:
+            findings.append(
+                {
+                    "id": f"risk:large-symbol:{symbol['id']}",
+                    "rule_id": "large-symbol",
+                    "node_id": symbol["id"],
+                    "related_node_ids": [],
+                    "title": "Large callable",
+                    "severity": "high" if line_span >= LARGE_SYMBOL_LINES * 2 else "medium",
+                    "classification": "heuristic",
+                    "confidence": 0.9,
+                    "summary": (
+                        f"{symbol['qualified_name']} spans {line_span} lines, which can make "
+                        "behavior harder to isolate, review, and test."
+                    ),
+                    "provenance": "Python AST source range",
+                    "evidence": {
+                        "path": symbol["path"],
+                        "line": symbol["definition_line"],
+                        "end_line": symbol["end_line"],
+                        "expression": symbol["qualified_name"],
+                    },
+                    "metrics": {"line_span": line_span, "threshold": LARGE_SYMBOL_LINES},
+                }
+            )
+        fan_in = incoming_counts.get(symbol["id"], 0)
+        if fan_in >= HIGH_SYMBOL_FAN_IN:
+            findings.append(
+                {
+                    "id": f"risk:high-fan-in:{symbol['id']}",
+                    "rule_id": "high-fan-in",
+                    "node_id": symbol["id"],
+                    "related_node_ids": [],
+                    "title": "Change-amplification hotspot",
+                    "severity": "high" if fan_in >= HIGH_SYMBOL_FAN_IN * 2 else "medium",
+                    "classification": "heuristic",
+                    "confidence": 0.88,
+                    "summary": (
+                        f"{symbol['qualified_name']} has {fan_in} incoming execution relationships; "
+                        "changes here may affect many callers."
+                    ),
+                    "provenance": "Resolved symbol relationship graph",
+                    "evidence": {
+                        "path": symbol["path"],
+                        "line": symbol["definition_line"],
+                        "end_line": symbol["end_line"],
+                        "expression": symbol["qualified_name"],
+                    },
+                    "metrics": {"fan_in": fan_in, "threshold": HIGH_SYMBOL_FAN_IN},
+                }
+            )
+        fan_out = outgoing_counts.get(symbol["id"], 0)
+        if fan_out >= HIGH_SYMBOL_FAN_OUT:
+            findings.append(
+                {
+                    "id": f"risk:high-fan-out:{symbol['id']}",
+                    "rule_id": "high-fan-out",
+                    "node_id": symbol["id"],
+                    "related_node_ids": [],
+                    "title": "Coordination hotspot",
+                    "severity": "high" if fan_out >= HIGH_SYMBOL_FAN_OUT * 2 else "medium",
+                    "classification": "heuristic",
+                    "confidence": 0.88,
+                    "summary": (
+                        f"{symbol['qualified_name']} has {fan_out} outgoing execution relationships; "
+                        "it coordinates many collaborators and may carry several responsibilities."
+                    ),
+                    "provenance": "Resolved symbol relationship graph",
+                    "evidence": {
+                        "path": symbol["path"],
+                        "line": symbol["definition_line"],
+                        "end_line": symbol["end_line"],
+                        "expression": symbol["qualified_name"],
+                    },
+                    "metrics": {"fan_out": fan_out, "threshold": HIGH_SYMBOL_FAN_OUT},
+                }
+            )
+
+    for component in import_cycle_components(file_nodes, import_edges):
+        anchor = file_index[component[0]]
+        paths = [file_index[node_id]["path"] for node_id in component]
+        findings.append(
+            {
+                "id": f"risk:import-cycle:{'|'.join(component)}",
+                "rule_id": "import-cycle",
+                "node_id": component[0],
+                "related_node_ids": component[1:],
+                "title": "Circular import component",
+                "severity": "high" if len(component) >= 4 else "medium",
+                "classification": "heuristic",
+                "confidence": 0.98,
+                "summary": (
+                    f"{len(component)} files form a closed import cycle: {', '.join(paths)}. "
+                    "This can make initialization order and module boundaries fragile."
+                ),
+                "provenance": "Strongly connected component in the resolved Python import graph",
+                "evidence": {
+                    "path": anchor["path"],
+                    "line": 1,
+                    "expression": " -> ".join(paths),
+                },
+                "metrics": {"component_size": len(component), "threshold": 2},
+            }
+        )
+
+    severity_order = {"high": 0, "medium": 1, "low": 2}
+    return sorted(
+        findings,
+        key=lambda finding: (severity_order[finding["severity"]], finding["evidence"]["path"], finding["id"]),
+    )
+
+
 # --------------------------------------------------------------------------
 # Edge extraction
 # --------------------------------------------------------------------------
@@ -1414,9 +1598,12 @@ def analyze_repository(repo_root: Path) -> dict[str, Any]:
     flows = discover_representative_flows(
         symbol_nodes, relationship_edges, unresolved_sites
     )
+    findings = detect_risk_findings(
+        file_nodes, symbol_nodes, import_edges, relationship_edges
+    )
 
     return {
-        "schema_version": "0.6",
+        "schema_version": "0.7",
         "repo_root": str(repo_root),
         "python_files_total_found": total_files_found,
         "python_files_analyzed": len(python_files),
@@ -1424,11 +1611,15 @@ def analyze_repository(repo_root: Path) -> dict[str, Any]:
         "nodes": [*file_nodes, *symbol_nodes],
         "edges": [*import_edges, *containment_edges, *relationship_edges],
         "flows": flows,
+        "findings": findings,
         "coverage": {
             "python_files": len(python_files),
             "symbol_nodes": len(symbol_nodes),
             "symbol_parse_failures": symbol_parse_failures,
             "representative_flows": len(flows),
+            "risk_findings": len(findings),
+            "high_risk_findings": sum(finding["severity"] == "high" for finding in findings),
+            "medium_risk_findings": sum(finding["severity"] == "medium" for finding in findings),
             **relationship_coverage,
             **sqlalchemy_coverage,
             **sqlalchemy_access_coverage,
@@ -1439,7 +1630,8 @@ def analyze_repository(repo_root: Path) -> dict[str, Any]:
 def write_graph(graph: dict[str, Any], output_path: Path) -> None:
     """Write graph JSON, creating the output directory when needed."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(graph, indent=2) + "\n", encoding="utf-8")
+    with output_path.open("w", encoding="utf-8", newline="\n") as graph_file:
+        graph_file.write(json.dumps(graph, indent=2) + "\n")
 
 
 def parse_args() -> argparse.Namespace:
@@ -1478,6 +1670,7 @@ def main() -> None:
 
         try:
             graph = analyze_repository(repo_path)
+            graph.pop("repo_root", None)
             owner, repository = validate_github_url(args.repo)
             graph["repository"] = {
                 "name": f"{owner}/{repository}",
@@ -1500,6 +1693,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 

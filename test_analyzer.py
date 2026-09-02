@@ -228,6 +228,9 @@ def bootstrap() -> Service:
         "symbol_nodes": 4,
         "symbol_parse_failures": 0,
         "representative_flows": 0,
+        "risk_findings": 0,
+        "high_risk_findings": 0,
+        "medium_risk_findings": 0,
         "call_sites": 2,
         "resolved_calls": 2,
         "candidate_calls": 0,
@@ -395,7 +398,7 @@ def create_item_route(
     }
     route = symbols["api.create_item_route"]
 
-    assert graph["schema_version"] == "0.6"
+    assert graph["schema_version"] == "0.7"
     assert route["entrypoint"] == {
         "framework": "fastapi",
         "kind": "route",
@@ -583,6 +586,70 @@ def list_items_route():
     assert persistence_edge["confidence"] == 0.98
 
 
+def test_risk_findings_are_bounded_and_evidence_backed() -> None:
+    files = [
+        {"id": "file:a.py", "path": "a.py"},
+        {"id": "file:b.py", "path": "b.py"},
+    ]
+    central = {
+        "id": "symbol:a.py:central",
+        "kind": "function",
+        "path": "a.py",
+        "qualified_name": "a.central",
+        "definition_line": 10,
+        "end_line": 99,
+    }
+    collaborators = [
+        {
+            "id": f"symbol:b.py:helper_{index}",
+            "kind": "function",
+            "path": "b.py",
+            "qualified_name": f"b.helper_{index}",
+            "definition_line": index + 1,
+            "end_line": index + 2,
+        }
+        for index in range(8)
+    ]
+    import_edges = [
+        {"source": "file:a.py", "target": "file:b.py", "kind": "imports"},
+        {"source": "file:b.py", "target": "file:a.py", "kind": "imports"},
+    ]
+    relationship_edges = [
+        {
+            "source": helper["id"],
+            "target": central["id"],
+            "kind": "calls",
+        }
+        for helper in collaborators
+    ] + [
+        {
+            "source": central["id"],
+            "target": helper["id"],
+            "kind": "calls",
+        }
+        for helper in collaborators
+    ]
+
+    findings = analyzer.detect_risk_findings(
+        files, [central, *collaborators], import_edges, relationship_edges
+    )
+
+    assert {finding["rule_id"] for finding in findings} == {
+        "large-symbol",
+        "high-fan-in",
+        "high-fan-out",
+        "import-cycle",
+    }
+    assert all(finding["classification"] == "heuristic" for finding in findings)
+    assert all(0 < finding["confidence"] <= 1 for finding in findings)
+    assert all(finding["provenance"] for finding in findings)
+    assert all(finding["evidence"]["path"] in {"a.py", "b.py"} for finding in findings)
+    cycle = next(finding for finding in findings if finding["rule_id"] == "import-cycle")
+    assert cycle["node_id"] == "file:a.py"
+    assert cycle["related_node_ids"] == ["file:b.py"]
+    assert cycle["metrics"] == {"component_size": 2, "threshold": 2}
+
+
 def test_flow_discovery_marks_the_bounded_depth_as_an_explicit_gap() -> None:
     symbols = [
         {
@@ -613,5 +680,6 @@ def test_flow_discovery_marks_the_bounded_depth_as_an_explicit_gap() -> None:
     assert len(flow["ordered_edge_ids"]) == analyzer.MAX_FLOW_DEPTH
     assert flow["completeness"] == "partial"
     assert flow["unresolved_steps"][-1]["reason"] == "maximum-flow-depth-reached"
+
 
 

@@ -50,7 +50,14 @@ to proven model classes for common `select`, `get`, `add`, `merge`, `delete`, mu
 statement operations. These edges retain source evidence and confidence, extend representative
 FastAPI flows into persistence, and appear alongside mapping metadata in the symbol inspector.
 
+Graph schema v0.7 adds deterministic structural risk findings for large callables, high fan-in,
+high fan-out, and circular import components. Every finding records severity, classification,
+confidence, the rule threshold, exact source evidence, and provenance. The Risk findings view
+ranks these hotspots and opens the relevant file or symbol without presenting the heuristic as a
+proven defect.
+
 The API is intentionally local-only for this milestone. The hosted site continues to use the committed Cosmic Python fixture until repository analysis runs in an isolated worker service.
+
 
 
 
