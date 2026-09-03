@@ -1717,7 +1717,7 @@ def build_symbol_evidence_packets(
     for symbol in symbol_nodes:
         symbol_incoming = incoming.get(symbol["id"], [])
         symbol_outgoing = outgoing.get(symbol["id"], [])
-        layer, layer_role, layer_rationale = evidence_layer(symbol["path"])
+        layer = evidence_layer(symbol["path"])[0]
         model = symbol.get("sqlalchemy", {}).get("kind") == "model"
         route = symbol.get("entrypoint", {}).get("kind") == "route"
         symbol_flows = sorted(flow_ids.get(symbol["id"], []))
@@ -1743,16 +1743,27 @@ def build_symbol_evidence_packets(
         if route:
             role_text = f"Receives {symbol['entrypoint']['label']} and begins an HTTP execution flow."
             role_provenance = "Resolved FastAPI decorator"
-            rationale_text = "Keeping HTTP routing at a boundary lets application and domain code remain independent of request delivery details."
         elif model:
             table = symbol["sqlalchemy"].get("table_name") or "a database table"
             role_text = f"Maps application state to {table} through SQLAlchemy."
             role_provenance = "Resolved SQLAlchemy declarative model"
-            rationale_text = "A dedicated mapping type makes persistence structure explicit while callers can refer to a stable application concept."
         else:
-            role_text = layer_role
-            role_provenance = f"Path convention and symbol placement: {symbol['path']}"
-            rationale_text = layer_rationale
+            path_roles = {
+                "test": "Its path suggests verification code.",
+                "entrypoint": "Its path suggests delivery or startup boundary code.",
+                "application service": "Its path suggests application use-case orchestration.",
+                "domain behavior": "Its path suggests domain behavior or business vocabulary.",
+                "infrastructure adapter": "Its path suggests infrastructure integration.",
+            }
+            role_text = path_roles.get(layer,
+                "The symbol's execution role is not established. Its path alone does not identify configuration, infrastructure, or business logic.")
+            role_provenance = (f"Path convention only: {symbol['path']}; not runtime evidence"
+                if layer in path_roles else "No recognized framework role or architectural path convention")
+        role_confidence = 0.98 if route or model else (0.0 if layer == "supporting code" else 0.6)
+        rationale_text = (
+            "The author's reason for this symbol's placement is not established by these static facts. "
+            "Inspect its relationships and project documentation before drawing an architectural conclusion."
+        )
 
         claims: list[dict[str, Any]] = [
             {
@@ -1827,7 +1838,7 @@ def build_symbol_evidence_packets(
                 "id": f"claim:{symbol['id']}:role",
                 "classification": "heuristic" if not (route or model) else "fact",
                 "text": role_text,
-                "confidence": 0.9 if not (route or model) else 0.98,
+                "confidence": role_confidence,
                 "provenance": role_provenance,
                 "evidence_refs": [symbol["id"]],
             }
@@ -1850,14 +1861,14 @@ def build_symbol_evidence_packets(
             "execution_role": {
                 "text": role_text,
                 "classification": "fact" if route or model else "heuristic",
-                "confidence": 0.98 if route or model else 0.9,
+                "confidence": role_confidence,
                 "provenance": role_provenance,
             },
             "structural_rationale": {
                 "text": rationale_text,
                 "classification": "interpretation",
-                "confidence": 0.72,
-                "provenance": f"Architectural pattern interpretation for the {layer} layer",
+                "confidence": 0.0,
+                "provenance": "Intent not established; no author rationale inferred",
             },
             "related_edge_ids": [edge["id"] for edge in [*symbol_outgoing, *symbol_incoming]],
             "flow_ids": symbol_flows,
@@ -1875,6 +1886,12 @@ def detect_architecture_patterns(
     """Detect bounded architectural patterns while retaining their evidence."""
     production_symbols = [node for node in symbol_nodes if not node["path"].startswith("tests/")]
     node_index = {node["id"]: node for node in production_symbols}
+    # Pattern claims describe production architecture. Keep test-only and
+    # test-to-production relationships in the graph, but not in these claims.
+    relationship_edges = [
+        edge for edge in relationship_edges
+        if edge["source"] in node_index and edge["target"] in node_index
+    ]
 
     def layer_for(node: dict[str, Any]) -> str:
         if node.get("entrypoint", {}).get("kind") == "route":
@@ -1999,7 +2016,7 @@ def detect_architecture_patterns(
         for edge in relationship_edges
         if edge["source"] in repository_ids or edge["target"] in repository_ids
     ]
-    if repository_nodes and (repository_boundary_edges or len(repository_nodes) >= 2):
+    if repository_nodes and repository_boundary_edges:
         node_ids = [node["id"] for node in repository_nodes[:24]]
         patterns.append(
             {
@@ -2037,7 +2054,7 @@ def detect_architecture_patterns(
         for edge in relationship_edges
         if edge["source"] in unit_of_work_ids or edge["target"] in unit_of_work_ids
     ]
-    if unit_of_work_nodes and (unit_of_work_edges or len(unit_of_work_nodes) >= 2):
+    if unit_of_work_nodes and unit_of_work_edges:
         node_ids = [node["id"] for node in unit_of_work_nodes[:24]]
         patterns.append(
             {

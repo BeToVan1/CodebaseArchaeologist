@@ -25,7 +25,7 @@ $contextFiles = @(
     'Dockerfile.deep-service', 'Dockerfile.deep-service.dockerignore',
     'requirements-service.txt', 'requirements.txt', 'requirements-dev.txt',
     'analyzer.py', 'repository_loader.py', 'deep_analysis_worker.py', 'deep_service.py', 'deep_quota.py', 'test_deep_quota.py',
-    'api.py', 'interpretation.py', 'test_analyzer.py', 'test_repository_loader.py',
+    'api.py', 'interpretation.py', 'test_analyzer.py', 'test_architecture_acceptance.py', 'test_repository_loader.py',
     'test_api.py', 'test_interpretation.py', 'test_deep_worker.py', 'test_deep_service.py',
     'tests/fixtures/portable-report/api.py', 'tests/fixtures/portable-report/models.py',
     'tests/fixtures/portable-report/repository.py', 'scripts/container_smoke.py',

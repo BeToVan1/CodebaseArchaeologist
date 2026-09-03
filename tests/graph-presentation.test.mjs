@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { selectionMetadata, evidenceLocation, currentReportLabel, explainFile } from "../app/graph-presentation.ts";
+import { changedFileSelection, selectionMetadata, evidenceLocation, currentReportLabel, explainFile } from "../app/graph-presentation.ts";
+
+test("keyboard selection updates the inspector only for visible selected files", () => {
+  const visible = new Set(["file:a.py", "file:b.py"]);
+  assert.equal(changedFileSelection([{id:"file:a.py",type:"select",selected:false},{id:"file:b.py",type:"select",selected:true}], visible), "file:b.py");
+  assert.equal(changedFileSelection([{id:"file:hidden.py",type:"select",selected:true}], visible), null);
+  assert.equal(changedFileSelection([{id:"file:a.py",type:"position",position:{x:1,y:2}},{id:"file:a.py",type:"select",selected:false}], visible), null);
+  assert.equal(changedFileSelection([], visible), null);
+});
 
 const file = {id:"file:models.py",kind:"file",path:"models.py",source:"class Item: pass"};
 const model = {id:"symbol:models.py:Item:1",kind:"class",path:"models.py",qualified_name:"models.Item",start_line:1,end_line:3,sqlalchemy:{kind:"model",table_name:"items",columns:[],relationships:[],is_abstract:false}};

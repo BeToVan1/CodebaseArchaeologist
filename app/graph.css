@@ -250,6 +250,29 @@
 .current-report strong { display: block; font-size: 14px; }
 .current-report p { margin: 6px 0; overflow-wrap: anywhere; }
 .current-report small { display: block; font-size: 13px; line-height: 1.5; }
+.react-flow__node.flow-node:focus-visible { outline: 3px solid #315b3d; outline-offset: 4px; }
+@media (min-width: 651px) and (max-width: 1000px) {
+  .workspace { grid-template-columns: 190px minmax(0, 1fr); }
+  .detail { grid-column: 1 / -1; max-height: none; }
+}
+@media (max-width: 650px) {
+  .topbar { height: auto; min-height: 72px; padding: 16px; flex-wrap: wrap; gap: 12px; }
+  .brand, .brand > div, .snapshot { min-width: 0; }
+  .repo-name, .snapshot code { overflow-wrap: anywhere; }
+  .rail, .detail { padding: 24px 18px; }
+  .rail-copy, .explanation-block p, .claim p { font-size: 16px; }
+  .repository-form input, .repository-form select { font-size: 16px; min-height: 44px; }
+  .repository-form label, .repository-form small, .report-controls small,
+  .report-controls details, .grounding-label, .claim small, .symbol-list small,
+  .relationship-help, .full-path, .origin span { font-size: 12px; }
+  .repository-form button, .report-controls button, .scope-switch button,
+  .nav-item, .symbol-list button, .source-link { min-height: 44px; font-size: 14px; }
+  .report-controls strong, .symbol-list strong, .origin a, .origin strong,
+  .explanation-block h4, .claims h4, .detail dt, .detail dd { font-size: 14px; }
+  .symbol-list button { flex-wrap: wrap; }
+  .symbol-list strong { white-space: normal; overflow-wrap: anywhere; }
+  .canvas-head { flex-wrap: wrap; gap: 12px; }
+}
 @media (max-width: 1100px) { .flow-browser { grid-template-columns: 190px minmax(360px,1fr); } .flow-inspector { padding: 24px; } }
 @media (max-width: 940px) { .graph-surface { height: 620px; } .detail { max-height: none; } }
 @media (max-width: 650px) { .graph-surface { height: 560px; } .flow-browser { display: block; } .flow-catalog { border-right: 0; border-bottom: 1px solid var(--line); } .flow-inspector, .risk-browser, .pattern-browser { padding: 20px; } .risk-list-heading, .pattern-list-heading, .remediation-panel > header, .remediation-panel > footer { display: block; } .risk-list-heading p, .pattern-list-heading p, .remediation-panel > header > strong, .remediation-panel > footer button { margin-top: 8px; } .risk-list, .pattern-list, .remediation-actions { grid-template-columns: 1fr; } }

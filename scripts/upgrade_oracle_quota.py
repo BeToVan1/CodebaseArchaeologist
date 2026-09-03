@@ -225,9 +225,9 @@ INSPECT = '''{"image":{{json .Image}},"running":{{json .State.Running}},
 "security":{{json .HostConfig.SecurityOpt}},"restarts":{{json .RestartCount}}}'''
 
 
-def runtime(new):
+def runtime(new, *, image=None):
     info = json.loads(run('/usr/bin/docker', 'inspect', '--type=container', '--format', INSPECT, CONTAINER))
-    expected = {'image': NEW_IMAGE if new else OLD_IMAGE, 'running': True, 'oom': False,
+    expected = {'image': image or (NEW_IMAGE if new else OLD_IMAGE), 'running': True, 'oom': False,
         'memory': 384 * 1024 * 1024, 'swap': 384 * 1024 * 1024, 'cpus': 1000000000,
         'pids': 64, 'readonly': True, 'user': '10001:10001', 'caps': ['ALL'], 'restarts': 0}
     require(all(info.get(k) == v for k, v in expected.items()), 'Runtime identity/state or limits differ.')

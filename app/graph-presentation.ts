@@ -1,4 +1,13 @@
 import type { Claim, EvidenceStatement, GraphEdge, GraphNode } from "./graph-types.ts";
+import type { NodeChange } from "@xyflow/react";
+
+export function changedFileSelection(changes: NodeChange[], visibleIds: Set<string>): string | null {
+  for (let index = changes.length - 1; index >= 0; index--) {
+    const change = changes[index];
+    if (change.type === "select" && change.selected && visibleIds.has(change.id)) return change.id;
+  }
+  return null;
+}
 
 export type Explanation = {
   summary: string; role: string; rationale: string; claims: Claim[];

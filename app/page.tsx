@@ -19,7 +19,7 @@ import type { Graph, GraphNode, GraphEdge, EvidenceStatement, Claim, ExecutionFl
 import { isRecord, validateGraph } from "./graph-validation";
 import { canonicalGithubUrl, readReportFile, reportFilename, serializeReport } from "./graph-report";
 
-import { explainFile, selectionMetadata, evidenceLocation, currentReportLabel, type Explanation, type ReportOrigin } from "./graph-presentation";
+import { changedFileSelection, explainFile, selectionMetadata, evidenceLocation, currentReportLabel, type Explanation, type ReportOrigin } from "./graph-presentation";
 type AIInterpretationSection = {
   text: string;
   classification: "interpretation";
@@ -347,6 +347,7 @@ export default function Home() {
       targetPosition: Position.Left,
       data: { label: <div className="node-label"><strong>{filename(node.path)}</strong><small>{folder(node.path)}</small></div>, path: node.path },
       className: selectedId === node.id ? "flow-node selected" : "flow-node",
+      selected: selectedId === node.id,
       ariaLabel: `Open ${node.path}`,
     })),
     [positions, selectedId, visibleGraphNodes],
@@ -641,6 +642,10 @@ export default function Home() {
                 nodes={flowNodes}
                 edges={flowEdges}
                 onNodeClick={(_, node) => { setSelectedId(node.id); setSelectedSymbolId(null); }}
+                onNodesChange={(changes) => {
+                  const id = changedFileSelection(changes, visibleIds);
+                  if (id) selectFileNode(id);
+                }}
                 fitView
                 fitViewOptions={{ padding: 0.24 }}
                 minZoom={0.35}
