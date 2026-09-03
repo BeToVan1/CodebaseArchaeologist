@@ -14,6 +14,7 @@ import "@xyflow/react/dist/style.css";
 import "./graph.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { inventoryStatus, inventoryUnavailable } from "./analysis-status";
+import { submitAnalysis, type AnalysisMode } from "./analysis-client";
 import type { Graph, GraphNode, GraphEdge, EvidenceStatement, Claim, ExecutionFlow, RiskFinding, ArchitecturePattern } from "./graph-types";
 import { isRecord, validateGraph } from "./graph-validation";
 import { canonicalGithubUrl, readReportFile, reportFilename, serializeReport } from "./graph-report";
@@ -260,6 +261,9 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [submittedUrl, setSubmittedUrl] = useState("https://github.com/cosmicpython/code");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisMode, setAnalysisMode] = useState<AnalysisMode>(ANALYZER_API_URL ? "local" : "inventory");
+  const [deepAvailable, setDeepAvailable] = useState(false);
+  const analysisController = useRef<AbortController | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [aiInterpretation, setAIInterpretation] = useState<AIInterpretation | null>(null);
   const [isInterpreting, setIsInterpreting] = useState(false);
@@ -313,7 +317,10 @@ export default function Home() {
 
   useEffect(() => {
     void loadExample();
-    return () => { graphRequest.current++; interpretationRequest.current++; };
+    const controller = new AbortController();
+    void fetch("/api/analysis-capabilities", { signal: controller.signal })
+      .then(async (response) => { if (response.ok) setDeepAvailable((await response.json()).deep === true); }).catch(() => {});
+    return () => { graphRequest.current++; interpretationRequest.current++; controller.abort(); analysisController.current?.abort(); };
   }, []);
 
   async function openReport(file: File) {
@@ -357,22 +364,17 @@ export default function Home() {
     const requestId = ++graphRequest.current;
     setIsAnalyzing(true);
     setAnalysisError(null);
+    const controller = new AbortController();
+    analysisController.current = controller;
+    const timer = setTimeout(() => controller.abort(new DOMException("Analysis timed out", "TimeoutError")), 90_000);
     try {
-      const response = await fetch(`${ANALYZER_API_URL}/api/analyze`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ repositoryUrl: submittedUrl }),
-      });
-      const data: unknown = await response.json();
-      if (!response.ok) {
-        const detail = isRecord(data) && typeof data.detail === "string" ? data.detail : `Analysis failed (${response.status})`;
-        throw new Error(detail);
-      }
-      const validated = validateGraph(data);
+      const validated = await submitAnalysis(analysisMode, submittedUrl, ANALYZER_API_URL, controller.signal);
       if (requestId === graphRequest.current) installGraph(validated);
     } catch (cause: unknown) {
       if (requestId === graphRequest.current) setAnalysisError(cause instanceof Error ? cause.message : "Repository analysis failed");
     } finally {
+      clearTimeout(timer);
+      if (analysisController.current === controller) analysisController.current = null;
       if (requestId === graphRequest.current) setIsAnalyzing(false);
     }
   }
@@ -545,9 +547,20 @@ export default function Home() {
           <form className="repository-form" onSubmit={analyzeSubmittedRepository}>
             <label htmlFor="repository-url">Public GitHub URL</label>
             <input id="repository-url" type="url" value={submittedUrl} onChange={(event) => setSubmittedUrl(event.target.value)} required pattern="https://github\.com/.+/.+" disabled={isBusy} />
+            <label htmlFor="analysis-mode">Analysis mode</label>
+            <select id="analysis-mode" value={analysisMode} disabled={isBusy} onChange={(event) => setAnalysisMode(event.target.value as AnalysisMode)}>
+              <option value="inventory">Inventory · files and candidate imports</option>
+              <option value="deep" disabled={!deepAvailable}>Deep analysis{deepAvailable ? " · symbols, flows and risks" : " · not configured"}</option>
+              {ANALYZER_API_URL && <option value="local">Local Python analyzer</option>}
+            </select>
             <button type="submit" disabled={isBusy}>{isAnalyzing ? "Analyzing…" : "Analyze repository"}</button>
-            <small>{ANALYZER_API_URL ? "Full analyzer service" : "Hosted inventory"} · public Python repositories only</small>
-            {analysisError && <p className="analysis-error" role="alert">{analysisError}</p>}
+            {isAnalyzing && <button type="button" onClick={() => {
+              analysisController.current?.abort(); graphRequest.current++; setIsAnalyzing(false);
+              setAnalysisError("Analysis cancelled. Your current map is unchanged.");
+            }}>Cancel analysis</button>}
+            <small>{analysisMode === "deep" ? "Bounded Python AST analysis · no repository code is executed. 3 attempts per network / 10 minutes; 30 total / hour. Failed attempts count. No automatic fallback." : analysisMode === "local" ? "Local Python analyzer" : "Inventory only: symbols, flows, patterns and risks are not analyzed."} Public Python repositories only.</small>
+            {!deepAvailable && <small>Hosted deep analysis is not configured. Inventory and local reports remain available.</small>}
+            {analysisError && <p className="analysis-error" role="alert">{analysisError}{graph && " Your existing map has not been replaced."}</p>}
           </form>
           <section className="report-controls" aria-label="Portable analysis reports">
             <strong>Analysis reports</strong>

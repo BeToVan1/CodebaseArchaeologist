@@ -30,6 +30,40 @@ If PowerShell blocks script execution, do not disable system policy. Ask your
 administrator or run the individual reviewed Docker commands from the script.
 Copy the test summary and any failing test/error back to the project task.
 
+## Oracle Micro: build on Windows, not on the 1 GB VM
+
+In regular Windows PowerShell with Docker Desktop running, use:
+
+```powershell
+& .\scripts\Test-DeepService.ps1 -MemoryMiB 384 -ExportOracleBundle
+```
+
+This stages the same explicit files and forces linux/amd64. It runs the offline
+suite and live GitHub test at 384 MiB, no swap, one CPU, 64 PIDs and 128 MiB /tmp.
+It then builds the runtime target and repeats the live test against that exact
+image using a stdlib script over stdin (no bind mounts, host tokens or open ports).
+Export is forbidden with skipped live tests or the 1 GiB profile.
+
+Only after successful tests, a unique ignored `artifacts/oracle-<run-id>/` folder
+receives `deep-service.tar` (runtime and validation images), `container_smoke.py`,
+and `bundle.json` with image tags, source hashes, limits and the archive SHA256.
+The manifest is written last; an incomplete folder is not a valid bundle.
+Existing bundles are never overwritten. Local temporary images and the staged
+context are removed; the export and shared Docker build cache remain.
+
+Do not upload the source checkout, .env files or SSH key to Oracle. Transfer the
+completed bundle via verified SSH/SCP, compare the archive SHA256 and load it with
+Docker. Repeat tests sequentially at the same limits on the actual VM before
+serving traffic. Local CPU behavior does not reproduce Oracle's shared/burst CPU;
+passing locally does not prove the VM meets the 60-second analysis deadline.
+Do not run simultaneous test/service containers on the Micro instance.
+No automated transfer, remote launch, TLS setup or Sites change is performed here.
+
+The 384 MiB profile is a candidate for small-repository testing, not a measured
+worst-case capacity guarantee. Its /tmp usage shares the container memory budget.
+If tests fail, report the error rather than increasing memory on the 954 MiB VM
+or disabling timeout, memory or process protections.
+
 ## Implemented boundaries
 
 - Dedicated FastAPI entry point: `uvicorn deep_service:create_app --factory`.

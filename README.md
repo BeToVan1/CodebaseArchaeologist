@@ -100,6 +100,16 @@ limits. It is **not connected to the public site or production-approved**. See
 [deep service validation](docs/deep-service-validation.md) for the PowerShell container test
 script, exact limits and remaining deployment requirements.
 
+The next website integration is implemented locally behind an explicit Deep
+analysis option and server-side enable flag. It is **not deployed or configured**:
+database migration generation and secure Sites token configuration are pending.
+See [hosted deep integration](docs/hosted-deep-integration.md) for the request flow,
+durable network/global quotas, test evidence and release gates.
+
+The current local deep-analysis candidate keeps its quota ledger in SQLite on
+the existing Oracle VM, not Sites D1. It requires a new validated backend image
+and persistent mount before deployment; the public site has not been updated.
+
 ### Explore and share full analysis reports
 
 Generate a report with the Python analyzer:

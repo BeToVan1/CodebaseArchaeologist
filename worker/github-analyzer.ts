@@ -31,15 +31,19 @@ function jsonResponse(value: unknown, status = 200) {
 }
 
 /** Bound memory even if the origin ignores Range or Content-Length. */
-export async function readBoundedBody(body: ReadableStream<Uint8Array> | null, limit: number) {
+export async function readBoundedBody(body: ReadableStream<Uint8Array> | null, limit: number, signal?: AbortSignal) {
   if (!body) return { text: "", bytes: 0, truncated: false };
   const reader = body.getReader();
+  const cancel = () => { void reader.cancel().catch(() => {}); };
+  signal?.addEventListener("abort", cancel, { once: true });
   const buffer = new Uint8Array(limit);
   let bytes = 0;
   let truncated = false;
   try {
+    signal?.throwIfAborted();
     while (true) {
       const { value, done } = await reader.read();
+      signal?.throwIfAborted();
       if (done) break;
       const remaining = limit - bytes;
       const retained = value.subarray(0, remaining);
@@ -48,6 +52,7 @@ export async function readBoundedBody(body: ReadableStream<Uint8Array> | null, l
       if (value.byteLength > remaining) { truncated = true; break; }
     }
   } finally {
+    signal?.removeEventListener("abort", cancel);
     await reader.cancel().catch(() => {});
     reader.releaseLock();
   }

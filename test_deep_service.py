@@ -12,9 +12,18 @@ import pytest
 from fastapi.testclient import TestClient
 
 import deep_service as service
+from deep_quota import initialize
 
 TOKEN = "test-only-not-a-production-secret-123456"
-HEADERS = {"Authorization": f"Bearer {TOKEN}"}
+HEADERS = {"Authorization": f"Bearer {TOKEN}", "X-Archaeologist-Client-Key": "a" * 64}
+@pytest.fixture(autouse=True)
+def quota_storage(tmp_path, monkeypatch):
+    path = tmp_path / "quota.sqlite3"
+    initialize(path)
+    monkeypatch.setenv("ARCHAEOLOGIST_QUOTA_PATH", str(path))
+    return path
+
+
 URL = "https://github.com/example/project"
 GRAPH = {"schema_version": "1.1", "analysis": {"tier": "deep"}, "nodes": [], "edges": []}
 
@@ -106,7 +115,7 @@ def test_disconnect_cancels_job_and_frees_slot():
         app = service.create_app(TOKEN)
         scope = {"type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1", "method": "POST", "scheme": "http",
                  "path": "/api/analyze", "raw_path": b"/api/analyze", "query_string": b"", "root_path": "",
-                 "server": ("test", 80), "client": ("test", 1), "headers": [(b"authorization", HEADERS["Authorization"].encode())]}
+                 "server": ("test", 80), "client": ("test", 1), "headers": [(key.lower().encode(), value.encode()) for key, value in HEADERS.items()]}
         with patch.object(service, "run_job", side_effect=job):
             await asyncio.wait_for(app(scope, receive, send), 3)
         assert cleaned.is_set()
@@ -226,3 +235,48 @@ def test_real_linux_timeout_stops_git_like_descendant(tmp_path, monkeypatch):
                 await asyncio.sleep(0.05)
         pytest.fail("descendant remained running after job timeout")
     asyncio.run(scenario())
+
+@pytest.mark.parametrize("endpoint", ["/api/analyze", "/api/analyze/quota-v1"])
+def test_quota_denial_precedes_job_and_survives_app_recreation(endpoint):
+    with patch.object(service, "run_job", new_callable=AsyncMock, return_value=json.dumps(GRAPH).encode()) as job:
+        for _ in range(3):
+            assert TestClient(service.create_app(TOKEN)).post(endpoint, headers=HEADERS, json={"repositoryUrl": URL}).status_code == 200
+        denied = TestClient(service.create_app(TOKEN)).post(endpoint, headers=HEADERS, json={"repositoryUrl": URL})
+        assert denied.status_code == 429
+        assert denied.headers["retry-after"] == "3600"
+        assert denied.headers["x-archaeologist-limit"] == "quota"
+        assert job.await_count == 3
+
+
+def test_missing_storage_and_network_key_fail_closed(tmp_path):
+    client = TestClient(service.create_app(TOKEN, str(tmp_path / "absent.sqlite3")))
+    with patch.object(service, "run_job", new_callable=AsyncMock) as job:
+        assert client.post("/api/analyze/quota-v1", headers=HEADERS, json={"repositoryUrl": URL}).status_code == 503
+        for value in ("", "raw-ip", "a" * 65):
+            headers = {**HEADERS, "X-Archaeologist-Client-Key": value}
+            assert client.post("/api/analyze/quota-v1", headers=headers, json={"repositoryUrl": URL}).status_code == 400
+        job.assert_not_called()
+    assert not (tmp_path / "absent.sqlite3").exists()
+
+
+def test_invalid_auth_body_and_duplicate_key_never_consume_quota(quota_storage):
+    import sqlite3
+    from contextlib import closing
+    client = TestClient(service.create_app(TOKEN))
+    with patch.object(service, "run_job", new_callable=AsyncMock) as job:
+        assert client.post("/api/analyze/quota-v1", json={"repositoryUrl": URL}).status_code == 401
+        assert client.post("/api/analyze/quota-v1", headers=HEADERS, json={}).status_code == 400
+        duplicate = [(key, value) for key, value in HEADERS.items()] + [("X-Archaeologist-Client-Key", "b" * 64)]
+        assert client.post("/api/analyze/quota-v1", headers=duplicate, json={"repositoryUrl": URL}).status_code == 400
+        job.assert_not_called()
+    with closing(sqlite3.connect(quota_storage)) as db:
+        assert db.execute("SELECT count(*) FROM deep_admissions").fetchone()[0] == 0
+
+
+def test_failed_admissions_count_and_routes_share_one_ledger():
+    client = TestClient(service.create_app(TOKEN))
+    with patch.object(service, "run_job", new_callable=AsyncMock, side_effect=RuntimeError("secret")) as job:
+        for route in ("/api/analyze", "/api/analyze/quota-v1", "/api/analyze"):
+            assert client.post(route, headers=HEADERS, json={"repositoryUrl": URL}).status_code == 502
+        assert client.post("/api/analyze/quota-v1", headers=HEADERS, json={"repositoryUrl": URL}).status_code == 429
+        assert job.await_count == 3

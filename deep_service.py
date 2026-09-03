@@ -12,6 +12,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from starlette.requests import ClientDisconnect
+from deep_quota import CLIENT_KEY, QuotaUnavailable, reserve
 
 from repository_loader import RepositoryLoadError, validate_github_url, public_git_environment
 
@@ -106,11 +107,12 @@ async def run_job(repository_url: str) -> bytes:
             await finish_cleanup(process)
 
 
-def create_app(token: str | None = None) -> FastAPI:
+def create_app(token: str | None = None, quota_path: str | None = None) -> FastAPI:
     token = token if token is not None else os.environ.get("ARCHAEOLOGIST_SERVICE_TOKEN", "")
     if len(token) < 32 or not token.isascii() or any(char.isspace() for char in token):
         raise RuntimeError("Set ARCHAEOLOGIST_SERVICE_TOKEN to a secret of at least 32 non-whitespace ASCII characters.")
     app = FastAPI(title="Private deep analysis service", docs_url=None, redoc_url=None, openapi_url=None)
+    quota_path = quota_path if quota_path is not None else os.environ.get("ARCHAEOLOGIST_QUOTA_PATH", "")
     active = False
 
     @app.get("/health")
@@ -118,6 +120,7 @@ def create_app(token: str | None = None) -> FastAPI:
         return {"status": "ok"}
 
     @app.post("/api/analyze")
+    @app.post("/api/analyze/quota-v1")
     async def analyze(request: Request):
         nonlocal active
         authorization = request.headers.get("authorization", "")
@@ -148,6 +151,16 @@ def create_app(token: str | None = None) -> FastAPI:
                 owner, repo = validate_github_url(url)
             except RepositoryLoadError as exc:
                 raise HTTPException(400, "Enter a public GitHub repository URL.") from exc
+            keys = request.headers.getlist("x-archaeologist-client-key")
+            if len(keys) != 1 or not CLIENT_KEY.fullmatch(keys[0]):
+                raise HTTPException(400, "A valid server-derived network key is required.")
+            try:
+                allowed = reserve(quota_path, keys[0])
+            except QuotaUnavailable:
+                raise HTTPException(503, "Deep-analysis usage storage is unavailable.") from None
+            if not allowed:
+                raise HTTPException(429, "Deep-analysis allowance reached.",
+                                    headers={"Retry-After": "3600", "X-Archaeologist-Limit": "quota"})
             # Poll disconnect while the job runs, rather than letting an abandoned
             # browser request occupy the only slot until the full deadline.
             task = asyncio.create_task(run_job(f"https://github.com/{owner}/{repo}"))
