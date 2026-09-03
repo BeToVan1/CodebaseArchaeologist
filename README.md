@@ -1,8 +1,12 @@
 # Codebase Archaeologist
 
-The hosted build ingests public Python repositories into a bounded file/import inventory. Local
-development can additionally use the full FastAPI analyzer for AST symbols, execution flows,
-architecture patterns, risks, remediation guidance, and optional LLM interpretation.
+The public website supports both a bounded file/import inventory and explicit **Deep analysis**
+for public Python repositories. Deep analysis uses the isolated Oracle Python service for AST
+symbols, supported execution flows, architectural patterns, risks and remediation guidance.
+Optional LLM interpretation remains available through the local FastAPI API only; it is not
+enabled on the public website. This is an early beta, not a complete runtime understanding of
+arbitrary Python programs. See [acceptance results](docs/acceptance-testing.md) for verified
+workflows, known issues and remaining release checks.
 
 ## Local development
 
@@ -91,24 +95,19 @@ service. This hosted inventory deliberately makes no symbol, flow, pattern, or r
 full Python analyzer continues to produce the deep tier, and the interface shows which tier is
 active so a partial hosted result cannot be mistaken for a complete analysis.
 
-The full AST and framework-aware API remains local-only. The hosted worker provides the bounded
-inventory tier; deploying deep analysis still requires an isolated Python analysis service.
+As of 2026-09-03, hosted deep analysis is enabled on the public site. Select it
+explicitly in the analysis-mode menu; inventory remains a separate mode with no
+automatic fallback. The website forwards bounded requests to the authenticated
+Oracle service without exposing its token to the browser. Repository code is
+parsed, never executed.
 
-The new private Linux service scaffold (`deep_service:create_app`) is separate from the existing
-local API. It adds token authentication, bounded jobs, process-group cleanup and Linux resource
-limits. It is **not connected to the public site or production-approved**. See
-[deep service validation](docs/deep-service-validation.md) for the PowerShell container test
-script, exact limits and remaining deployment requirements.
-
-The next website integration is implemented locally behind an explicit Deep
-analysis option and server-side enable flag. It is **not deployed or configured**:
-database migration generation and secure Sites token configuration are pending.
-See [hosted deep integration](docs/hosted-deep-integration.md) for the request flow,
-durable network/global quotas, test evidence and release gates.
-
-The current local deep-analysis candidate keeps its quota ledger in SQLite on
-the existing Oracle VM, not Sites D1. It requires a new validated backend image
-and persistent mount before deployment; the public site has not been updated.
+The service permits one active analysis, with a persistent SQLite ledger on the
+existing Oracle disk enforcing 3 admitted attempts per network per 10 minutes and
+30 total per hour. Failed/cancelled admitted attempts count. No Sites D1 resource
+is required. Network limits are not authenticated user identity or bot protection.
+See [hosted deep integration](docs/hosted-deep-integration.md) and
+[deep service validation](docs/deep-service-validation.md) for the trust boundaries,
+resource limits and historical backend validation.
 
 ### Explore and share full analysis reports
 

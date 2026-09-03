@@ -3,11 +3,18 @@
 Status (2026-09-03): owner reports the quota backend is installed, HTTPS analysis
 passed, and the real ledger persisted across a service restart. Keep the old
 image and `/etc/codebase-archaeologist/pre-quota-v1.service` for rollback.
-The owner has now approved public website deployment and integration.
-Deep activation remains gated on the actual Sites connecting-IP checks below.
+The owner approved public website deployment and integration. Public Sites
+version 15 is deployed with deep analysis enabled (environment revision 3).
+The actual Sites path passed repeated-network and spoofed-header checks, and
+the owner reported a distinct proof on cellular data with Wi-Fi off. These are
+bounded observations, not a guarantee covering every future forwarding path.
+The temporary network-probe setting was removed; that endpoint returns 404.
+One HTTP end-to-end analysis passed (159 nodes/298 edges in 3.213 seconds),
+followed by a separate successful browser-form analysis during acceptance testing.
+See [acceptance-testing.md](acceptance-testing.md) for current outstanding issues.
 See [oracle-quota-upgrade.md](oracle-quota-upgrade.md) for the pinned updater.
 
-### Controlled website rollout
+### Completed controlled website rollout (historical procedure)
 
 The first rollout keeps `ARCHAEOLOGIST_DEEP_ENABLED` false/unset. A temporary
 `/api/network-probe` checks Sites forwarding without sending Oracle requests.

@@ -19,13 +19,7 @@ import type { Graph, GraphNode, GraphEdge, EvidenceStatement, Claim, ExecutionFl
 import { isRecord, validateGraph } from "./graph-validation";
 import { canonicalGithubUrl, readReportFile, reportFilename, serializeReport } from "./graph-report";
 
-type Explanation = {
-  summary: string;
-  role: string;
-  rationale: string;
-  claims: Claim[];
-  grounding?: { summary: EvidenceStatement; role: EvidenceStatement; rationale: EvidenceStatement };
-};
+import { explainFile, selectionMetadata, evidenceLocation, currentReportLabel, type Explanation, type ReportOrigin } from "./graph-presentation";
 type AIInterpretationSection = {
   text: string;
   classification: "interpretation";
@@ -74,12 +68,7 @@ function formatBytes(bytes: number | undefined) {
   return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
 }
 
-function symbolsIn(source: string | undefined) {
-  if (!source) return [];
-  return [...source.matchAll(/^(?:async\s+)?(?:class|def)\s+([A-Za-z_]\w*)/gm)].map((match) => match[1]).slice(0, 5);
-}
-
-function explainNode(node: GraphNode, incoming: GraphEdge[], outgoing: GraphEdge[], inventory = false): Explanation {
+function explainNode(node: GraphNode, incoming: GraphEdge[], outgoing: GraphEdge[], inventory = false, symbols: GraphNode[] = []): Explanation {
   if (inventory) return {
     summary: node.source_error ? "The snapshot lists this Python file, but its source could not be read." : `The snapshot lists this Python file. ${node.source_truncated ? "Only a bounded source excerpt is available." : "Its source is available below."}`,
     role: "Execution behavior is not analyzed by the hosted inventory scanner.",
@@ -89,52 +78,7 @@ function explainNode(node: GraphNode, incoming: GraphEdge[], outgoing: GraphEdge
       { classification: "heuristic", text: `${outgoing.length} outgoing and ${incoming.length} incoming candidate import connections in this bounded inventory. These are not runtime or AST-verified dependencies.`, confidence: 0.75, provenance: "Lexical scan and snapshot module-path matching; not Python AST", evidence_refs: [...new Set([node.id, ...incoming.map((edge) => edge.id), ...outgoing.map((edge) => edge.id)])] },
     ],
   };
-  const layer = layerFor(node.path);
-  const symbols = symbolsIn(node.source);
-  const roles: Record<string, string> = {
-    entrypoints: "Boundary code that starts or receives an execution flow and delegates work inward.",
-    services: "Application orchestration that coordinates use cases across domain and infrastructure code.",
-    domain: "Core business behavior and vocabulary, kept separate from delivery and persistence concerns.",
-    adapters: "Infrastructure integration that translates between the application and external systems.",
-    tests: "Verification code that exercises production behavior and documents expected outcomes.",
-    support: "Supporting configuration or package setup used by multiple architectural layers.",
-  };
-  const rationales: Record<string, string> = {
-    entrypoints: "Keeping boundary concerns here prevents HTTP, messaging, or startup details from leaking into business rules.",
-    services: "A service layer provides one place to coordinate a use case without coupling domain objects to infrastructure.",
-    domain: "This placement suggests the project is protecting business logic from framework and database dependencies.",
-    adapters: "The adapter boundary makes external technology replaceable behind application-facing interfaces.",
-    tests: "The test hierarchy mirrors the type of confidence each test provides: unit, integration, or end-to-end.",
-    support: "Cross-cutting setup is separated so feature modules can remain focused on their primary responsibility.",
-  };
-  const summary = symbols.length
-    ? `Defines ${symbols.join(", ")}${symbols.length === 5 ? ", and other symbols" : ""}.`
-    : node.source_error ? "The file could not be read, so behavior could not be determined." : "Contains package setup or module-level behavior with no top-level class or function definitions.";
-  return {
-    summary,
-    role: roles[layer.key],
-    rationale: rationales[layer.key],
-    claims: [
-      {
-        classification: "fact",
-        text: `${outgoing.length} internal import${outgoing.length === 1 ? "" : "s"} out; ${incoming.length} internal importer${incoming.length === 1 ? "" : "s"} in.`,
-        confidence: 1,
-        provenance: "Python AST import statements and resolved repository paths",
-      },
-      {
-        classification: "heuristic",
-        text: `Likely belongs to the ${layer.label.toLowerCase()} layer.`,
-        confidence: 0.9,
-        provenance: `Path convention: ${node.path}`,
-      },
-      {
-        classification: "interpretation",
-        text: rationales[layer.key],
-        confidence: 0.72,
-        provenance: "Layered Python architecture pattern inferred from path and dependency direction",
-      },
-    ],
-  };
+  return explainFile(node, symbols, incoming, outgoing, layerFor(node.path));
 }
 
 function explainSymbol(symbol: GraphNode, incoming: GraphEdge[], outgoing: GraphEdge[]): Explanation {
@@ -269,6 +213,7 @@ export default function Home() {
   const [isInterpreting, setIsInterpreting] = useState(false);
   const [interpretationError, setInterpretationError] = useState<string | null>(null);
   const [importedReport, setImportedReport] = useState<string | null>(null);
+  const [reportOrigin, setReportOrigin] = useState<ReportOrigin>("example");
   const [isLoadingReport, setIsLoadingReport] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
   const graphRequest = useRef(0);
@@ -276,13 +221,14 @@ export default function Home() {
   const reportInput = useRef<HTMLInputElement>(null);
   const isBusy = isAnalyzing || isLoadingReport;
 
-  function installGraph(validated: Graph, reportName: string | null = null) {
+  function installGraph(validated: Graph, reportName: string | null = null, origin: ReportOrigin = "analysis") {
     interpretationRequest.current++;
     setAIInterpretation(null);
     setInterpretationError(null);
     setIsInterpreting(false);
     setGraph(validated);
     setImportedReport(reportName);
+    setReportOrigin(reportName ? "imported" : origin);
     setError(null);
     setAnalysisError(null);
     setReportError(null);
@@ -303,7 +249,7 @@ export default function Home() {
       const response = await fetch("/graph.json");
       if (!response.ok) throw new Error(`Example request failed (${response.status})`);
       const validated = validateGraph(await response.json());
-      if (requestId === graphRequest.current) installGraph(validated);
+      if (requestId === graphRequest.current) installGraph(validated, null, "example");
     } catch (cause) {
       if (requestId === graphRequest.current) {
         const message = cause instanceof Error ? cause.message : "Could not load the example report.";
@@ -431,7 +377,8 @@ export default function Home() {
   const inventory = graph?.analysis?.tier === "inventory";
   const coverageStatus = inventoryStatus(graph?.coverage);
   const unavailable = inventory && mapMode !== "architecture" ? inventoryUnavailable(mapMode) : null;
-  const explanation = selectedSymbol ? explainSymbol(selectedSymbol, symbolIncoming, symbolOutgoing) : selected ? explainNode(selected, incoming, outgoing, inventory) : null;
+  const explanation = selectedSymbol ? explainSymbol(selectedSymbol, symbolIncoming, symbolOutgoing) : selected ? explainNode(selected, incoming, outgoing, inventory, symbolsForSelected) : null;
+  const metadata = selected ? selectionMetadata(selected, selectedSymbol) : null;
   const nodePath = (id: string) => graph?.nodes.find((node) => node.id === id)?.path ?? id;
   const nodeName = (id: string) => graph?.nodes.find((node) => node.id === id)?.qualified_name ?? nodePath(id);
   const selectFileNode = (id: string) => { setSelectedId(id); setSelectedSymbolId(null); };
@@ -544,10 +491,11 @@ export default function Home() {
         <aside className="rail">
           <div className="eyebrow">Repository</div><h1>Dependency map</h1>
           <p className="rail-copy">Explore files, source, and internal imports from the analyzed repository.</p>
+          <section className="current-report" aria-label="Current report"><strong>{graph ? currentReportLabel(reportOrigin, graph.analysis?.tier ?? "unknown") : "No report loaded"}</strong>{graph && <p>{repositoryName}</p>}<small>The controls below configure the next analysis; they do not change the current report.</small></section>
           <form className="repository-form" onSubmit={analyzeSubmittedRepository}>
             <label htmlFor="repository-url">Public GitHub URL</label>
             <input id="repository-url" type="url" value={submittedUrl} onChange={(event) => setSubmittedUrl(event.target.value)} required pattern="https://github\.com/.+/.+" disabled={isBusy} />
-            <label htmlFor="analysis-mode">Analysis mode</label>
+            <label htmlFor="analysis-mode">Next analysis mode</label>
             <select id="analysis-mode" value={analysisMode} disabled={isBusy} onChange={(event) => setAnalysisMode(event.target.value as AnalysisMode)}>
               <option value="inventory">Inventory · files and candidate imports</option>
               <option value="deep" disabled={!deepAvailable}>Deep analysis{deepAvailable ? " · symbols, flows and risks" : " · not configured"}</option>
@@ -674,7 +622,7 @@ export default function Home() {
                       return <li key={`${selectedFlow.id}:${nodeId}:${index}`}>
                         {edge && <span className={`flow-edge-kind ${edge.kind === "may-dispatch-to" ? "candidate" : ["reads", "writes"].includes(edge.kind) ? "persistence" : ""}`}>{edge.kind.replaceAll("-", " ")} · {Math.round((edge.confidence ?? 1) * 100)}%</span>}
                         <button onClick={() => selectSymbolNode(nodeId)}>
-                          <strong>{nodeName(nodeId)}</strong><small>{nodePath(nodeId)}{edge?.evidence?.line ? ` · evidence line ${edge.evidence.line}` : ""}</small>
+                          <strong>{nodeName(nodeId)}</strong><small>Destination: {nodePath(nodeId)}</small>{edge && <small>Evidence: {evidenceLocation(edge)}</small>}
                         </button>
                       </li>;
                     })}
@@ -714,7 +662,7 @@ export default function Home() {
           {selected ? <>
             <div className="detail-icon">PY</div><h2>{filename(selected.path)}</h2><p className="full-path">{selected.path}</p>
             <div className="divider" />
-            <dl><div><dt>Kind</dt><dd>Python file</dd></div><div><dt>Size</dt><dd>{formatBytes(selected.size_bytes)}</dd></div><div><dt>Node ID</dt><dd><code>{selected.id}</code></dd></div><div><dt>Folder</dt><dd>{folder(selected.path)}</dd></div></dl>
+            <dl aria-label="Selected node metadata"><div><dt>Kind</dt><dd>{metadata?.kind}</dd></div>{selectedSymbol && <div><dt>Symbol</dt><dd>{metadata?.name}</dd></div>}{metadata?.range && <div><dt>Source lines</dt><dd>{metadata.range}</dd></div>}<div><dt>Node ID</dt><dd><code>{metadata?.id}</code></dd></div><div><dt>Containing file</dt><dd>{selected.path}</dd></div><div><dt>File size</dt><dd>{formatBytes(selected.size_bytes)}</dd></div><div><dt>Folder</dt><dd>{folder(selected.path)}</dd></div></dl>
             <section className="symbols-section">
               <div className="section-heading"><h3>Symbols</h3><span>{symbolsForSelected.length}</span></div>
               {symbolsForSelected.length ? <div className="symbol-list">
