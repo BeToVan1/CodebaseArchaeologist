@@ -5,6 +5,9 @@ import { submitAnalysis } from "../app/analysis-client.ts";
 import { handleDeepRequest } from "../worker/deep-proxy.ts";
 
 const graph = JSON.parse(await readFile(new URL("../public/graph.json", import.meta.url), "utf8"));
+const graphResponse = value => Response.json(value, { headers: {
+  "X-Archaeologist-Report-Id": "R".repeat(43), "X-Archaeologist-Report-TTL": "900",
+} });
 const secret = "offline-only-test-token-" + "x".repeat(40);
 // In-memory transport: no network, credentials, quota ledger or repository jobs.
 function transport(upstream) {
@@ -30,7 +33,7 @@ for (const [name, status, headers, message] of [
     let calls = 0;
     const fetcher = transport(async () => {
       calls++;
-      return calls === 1 ? new Response(secret, { status, headers }) : Response.json(graph);
+      return calls === 1 ? new Response(secret, { status, headers }) : graphResponse(graph);
     });
     await assert.rejects(submitAnalysis("deep", graph.repository.url, "", new AbortController().signal, fetcher), (error) => {
       assert.match(error.message, message);
@@ -47,7 +50,7 @@ test("client/proxy reject malformed, wrong-repository and wrong-tier success res
   for (const value of [{}, { ...graph, repository: { ...graph.repository, url: "https://github.com/wrong/repo" } }, { ...graph, analysis: { ...graph.analysis, tier: "inventory" } }]) {
     let calls = 0;
     await assert.rejects(submitAnalysis("deep", graph.repository.url, "", new AbortController().signal,
-      transport(async () => { calls++; return Response.json(value); })), /invalid or unavailable report/i);
+      transport(async () => { calls++; return graphResponse(value); })), /invalid or unavailable report/i);
     assert.equal(calls, 1);
   }
 });

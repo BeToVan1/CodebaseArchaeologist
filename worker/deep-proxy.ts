@@ -5,6 +5,8 @@ import { networkKey } from "./deep-limits.ts";
 // Credentials can only be sent to the owner-approved backend, never a request URL.
 // Versioned route prevents dispatch to the older, unmetered Oracle service.
 export const DEEP_ENDPOINT = "https://codebase-archaeologist.duckdns.org/api/analyze/quota-v1";
+export const REPORT_ID_HEADER = "X-Archaeologist-Report-Id";
+export const REPORT_TTL_HEADER = "X-Archaeologist-Report-TTL";
 export interface DeepEnv {
   ARCHAEOLOGIST_DEEP_ENABLED?: string;
   ARCHAEOLOGIST_SERVICE_TOKEN?: string;
@@ -83,7 +85,13 @@ export async function handleDeepRequest(request: Request, env: DeepEnv, fetcher:
           || !graph.snapshot?.commit_sha || graph.repository.pinned_url !== `${graph.repository.url}/tree/${graph.snapshot.commit_sha}`) {
         throw new Error("Unexpected report identity or tier");
       }
-      return Response.json(graph, { headers: { "Cache-Control": "no-store" } });
+      const reportId = response.headers.get(REPORT_ID_HEADER) ?? "";
+      const reportTtl = response.headers.get(REPORT_TTL_HEADER) ?? "";
+      if (!/^[A-Za-z0-9_-]{43}$/.test(reportId) || reportTtl !== "900")
+        throw new Error("Missing trusted evidence reference");
+      return Response.json(graph, { headers: {
+        "Cache-Control": "no-store", [REPORT_ID_HEADER]: reportId, [REPORT_TTL_HEADER]: reportTtl,
+      } });
     });
   } catch {
     if (request.signal.aborted) return reply("Analysis cancelled.", 499);
