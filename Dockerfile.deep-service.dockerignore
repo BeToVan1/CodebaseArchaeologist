@@ -1,0 +1,24 @@
+# Allowlist the build context: never send .git, .env, host credentials or reports.
+**
+!Dockerfile.deep-service
+!Dockerfile.deep-service.dockerignore
+!requirements*.txt
+!analyzer.py
+!project_discovery.py
+!repository_loader.py
+!snapshot_capture.py
+!evidence_store.py
+!interpretation_evidence.py
+!deep_analysis_worker.py
+!deep_service.py
+!deep_quota.py
+!api.py
+!interpretation.py
+!test_*.py
+!tests/
+!tests/fixtures/
+!tests/fixtures/portable-report/
+!tests/fixtures/portable-report/*.py
+!scripts/
+!scripts/container_smoke.py
+!scripts/container_quota_check.py

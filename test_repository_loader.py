@@ -77,8 +77,13 @@ def test_load_repository_returns_directory_on_success() -> None:
         try:
             assert path.is_dir()
             called_args = mock_run.call_args.args[0]
-            assert called_args[:4] == ["git", "clone", "--depth", "1"]
-            assert called_args[4] == "https://github.com/cosmicpython/code"
+            assert called_args[0] == "git"
+            clone_index = called_args.index("clone")
+            assert called_args[clone_index:clone_index + 3] == ["clone", "--depth", "1"]
+            assert called_args[-2] == "https://github.com/cosmicpython/code"
+            assert "--template=" in called_args
+            assert "credential.helper=" in called_args
+            assert "http.followRedirects=false" in called_args
         finally:
             cleanup_repository(path)
 

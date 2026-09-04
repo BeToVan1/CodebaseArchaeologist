@@ -1,10 +1,41 @@
 # Codebase Archaeologist
 
-The hosted build ingests public Python repositories into a bounded file/import inventory. Local
-development can additionally use the full FastAPI analyzer for AST symbols, execution flows,
-architecture patterns, risks, remediation guidance, and optional LLM interpretation.
+The public website supports both a bounded file/import inventory and explicit **Deep analysis**
+for public Python repositories. Deep analysis uses the isolated Oracle Python service for AST
+symbols, supported execution flows, architectural patterns, risks and remediation guidance.
+Optional LLM interpretation remains available through the local FastAPI API only; it is not
+enabled on the public website. This is an early beta, not a complete runtime understanding of
+arbitrary Python programs. See [acceptance results](docs/acceptance-testing.md) for verified
+workflows, known issues and remaining release checks.
 
 ## Local development
+
+Local JSON reports also include a bounded `test_proximity` index of recorded
+test-associated symbol calls and module imports. Links reference existing graph
+edges for source evidence. These are path-based heuristics, not execution or
+coverage results; absent links do not mean untested code. The explorer's
+Test evidence section displays these links for the selected file or symbol,
+with buttons to open source and separate module-import context. This feature
+is deployed on Oracle and published on the website. Use a fresh Deep report;
+older reports and the bundled example are not retroactively enriched.
+
+Local analyzer reports now include optional `project_discovery` metadata from
+the root `pyproject.toml`: standard project name/version, Python requirement,
+dependencies/optional groups, scripts, GUI scripts, and build-system declarations.
+These are literal declarations, not verified installed versions or resolved CLI
+flows. Dynamic fields stay unresolved. No backend, setup hook, dependency install,
+or referenced URL is executed. Missing/invalid/skipped manifests are distinguished
+and do not prevent the Python graph from being analyzed.
+
+This first discovery slice is deployed on Oracle and the public website; it is
+available in new Deep analysis JSON reports and the explorer's expandable **Project details**
+panel. The panel distinguishes unavailable metadata from missing manifests and
+labels imported declarations as unverified. Older public reports remain supported.
+Older reports and the bundled example are not retroactively enriched. Nested project discovery,
+tool-specific/legacy metadata, lockfiles, and exact manifest line spans remain
+future work. Limits: 256 KiB manifest, 128 records, 128 list items, 512 characters
+per value, and 64 KiB declaration output. Fields containing direct dependency
+references are omitted with a warning; this is not a comprehensive secret scanner.
 
 Install both dependency sets:
 
@@ -19,12 +50,90 @@ Start the analyzer API in one terminal:
 pnpm run dev:api
 ```
 
-To enable the optional AI interpretation panel, set `OPENAI_API_KEY` before starting the API.
-You may override its default model with `OPENAI_MODEL`. The API sends only the selected symbol's
-evidence packet and a source excerpt capped at 12,000 characters. Generated claims are always
-labelled as interpretations and are rejected if they cite evidence outside that packet.
+The older `/api/interpret` prototype can read `OPENAI_API_KEY` and `OPENAI_MODEL`, but it accepts
+caller-provided evidence and must not be exposed publicly. New work uses the authenticated,
+reference-only route described below. It sends only the selected symbol's server-retained evidence
+packet and a source excerpt capped at 12,000 characters. Generated claims are labelled as
+interpretations and rejected if they cite evidence outside that packet.
 
-Start the web application in another terminal:
+### Explanation-quality evaluation
+
+The offline [evaluation workflow](docs/interpretation-evaluation.md) provides six
+synthetic code cases and a review rubric for behavior, execution, rationale,
+evidence, uncertainty, and source-instruction handling. Run
+`python interpretation_evaluation.py assess` to see coverage; missing outputs or
+reviews remain pending. It makes no model calls and does not claim measured
+model accuracy. Valid citation IDs alone do not establish a true explanation.
+
+### Local authenticated evidence preview (LLM disabled by default)
+
+An opt-in developer API connects commit-verified source capture to the expiring
+report store. It is not connected to the website's AI panel or to `/api/interpret`.
+Enable `ARCHAEOLOGIST_LOCAL_EVIDENCE_ENABLED=true` before starting `api:app` and
+configure a separate cryptographically random `ARCHAEOLOGIST_LOCAL_EVIDENCE_TOKEN`
+of 32–256 printable ASCII characters (no spaces). Bind to `127.0.0.1`, use one
+worker, and keep the token in local process configuration—not browser code,
+public environment variables, source control, or pasted logs. Do not reuse the
+Oracle service token. No token is generated or configured automatically.
+
+Use a local HTTP client with `Authorization: Bearer <local token>` and JSON:
+
+- `POST /api/evidence/analyze` accepts only `{"repositoryUrl":"https://github.com/owner/repo"}`
+  and returns `graph`, `reportId`, and `expiresInSeconds`.
+- `POST /api/evidence/prepare` accepts only `{"reportId":"<returned reference>","nodeId":"<selected symbol ID>"}`
+  and returns the pinned `commitSha`, `evidencePacket`, `sourceExcerpt`, and
+  `modelCalled: false`. It does not accept source text, claims, or an owner ID.
+- `POST /api/evidence/interpret` accepts the same reference-only selection and
+  returns `reportId`, `nodeId`, and a citation-checked `interpretation` when
+  explicitly configured. The normal `api:app` startup leaves this route disabled
+  (503), even if the legacy `OPENAI_API_KEY` is present.
+
+Developer wiring only: `create_local_evidence_app(interpretation_runtime=...)`
+accepts a server-owned `LocalInterpretationRuntime` containing an execution
+policy, a separately initialized budget ledger path, an SDK client, and explicit
+`enabled=True`. The caller must manage the client's lifetime. No request can set
+these fields, create the ledger, select a model, or supply replacement evidence.
+No live pricing, real key, or paid budget has been configured. The OpenAI execution prototype
+is retained only for offline compatibility tests; it is not the selected public provider.
+
+The selected hosted direction is Cloudflare Workers AI on the Free plan. The first adapter uses
+`@cf/meta/llama-3.3-70b-instruct-fp8-fast` because it supports JSON Mode and remains available on
+the free plan. It is not connected to a route or AI binding yet. It sends one bounded request,
+does not stream or retry, treats source as untrusted data, and validates every returned section,
+confidence and evidence reference. Free-allocation enforcement is owned by Cloudflare, not this
+adapter; production must remain disabled until the account is verified as Workers Free.
+
+The private deep-analysis service now has the server side of the public trust boundary locally:
+its isolated worker captures the exact commit-verified Python bytes used for analysis, passes them
+to a bounded in-memory store, and returns an opaque 15-minute report reference in response headers.
+`POST /api/evidence/prepare` accepts only that reference and a selected symbol ID, requires the
+service token and the same server-derived network owner key, and returns the retained packet and
+source excerpt. It never accepts a client packet, source range, source text, or owner identity.
+These changes have not been deployed to Oracle, exposed by the Sites Worker, or connected to the
+model adapter.
+Provider/grounding failures get a sanitized 502; exhausted budget gets 429;
+unavailable execution policy, capacity, storage, or incomplete output gets 503.
+None causes an automatic retry or refund. Repeating a valid request is a new
+reservation and can incur another provider call; there is no idempotency cache.
+
+Requests require a loopback transport peer and no browser `Origin` header.
+This is a single-local-operator credential, **not public multi-user authentication**.
+Rotating it prevents the new token from accessing the old token's references.
+Restarting loses all references; they otherwise expire after 15 minutes. Existing
+storage limits apply (including 4 MiB per report), and concurrent analysis gets
+429. Oversized bodies get 413; unavailable storage gets 503; missing, expired,
+or wrong-owner references get 404. The routes are absent when disabled at startup.
+
+The legacy local `/api/interpret` still accepts caller-supplied evidence and can
+call the provider when configured; this preview does not secure or replace it.
+Do not expose either local development API publicly. Public LLM integration
+still needs the Sites Worker proxy/model route, Workers Free account verification, explicit
+activation approval, frontend integration, and semantic review. Body-read timeout handling here
+does not cancel an already-running synchronous analysis job.
+
+### Start the web application
+
+In another terminal:
 
 ```powershell
 pnpm run dev
@@ -91,8 +200,19 @@ service. This hosted inventory deliberately makes no symbol, flow, pattern, or r
 full Python analyzer continues to produce the deep tier, and the interface shows which tier is
 active so a partial hosted result cannot be mistaken for a complete analysis.
 
-The full AST and framework-aware API remains local-only. The hosted worker provides the bounded
-inventory tier; deploying deep analysis still requires an isolated Python analysis service.
+As of 2026-09-03, hosted deep analysis is enabled on the public site. Select it
+explicitly in the analysis-mode menu; inventory remains a separate mode with no
+automatic fallback. The website forwards bounded requests to the authenticated
+Oracle service without exposing its token to the browser. Repository code is
+parsed, never executed.
+
+The service permits one active analysis, with a persistent SQLite ledger on the
+existing Oracle disk enforcing 3 admitted attempts per network per 10 minutes and
+30 total per hour. Failed/cancelled admitted attempts count. No Sites D1 resource
+is required. Network limits are not authenticated user identity or bot protection.
+See [hosted deep integration](docs/hosted-deep-integration.md) and
+[deep service validation](docs/deep-service-validation.md) for the trust boundaries,
+resource limits and historical backend validation.
 
 ### Explore and share full analysis reports
 

@@ -4,6 +4,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from pydantic import ValidationError
 
 from interpretation import (
     EvidencePacket,
@@ -86,3 +87,25 @@ def test_interpretation_input_contains_only_packet_and_bounded_source() -> None:
     assert set(payload) == {"evidence_packet", "source_excerpt"}
     assert payload["evidence_packet"]["node_id"] == "symbol:example.py:run"
     assert len(payload["source_excerpt"]) == 12_000
+
+
+def test_mutated_packet_is_revalidated_before_provider_call() -> None:
+    data = packet()
+    data.summary.text = "x" * 70_000
+    responses = FakeResponses(generated())
+    with pytest.raises(ValidationError, match="64 KiB"):
+        generate_interpretation(data, "pass", client=SimpleNamespace(responses=responses))
+    assert responses.arguments == {}
+
+
+def test_packet_budget_counts_utf8_bytes_not_characters() -> None:
+    data = packet().model_dump()
+    data["summary"]["text"] = "界" * 23_000
+    with pytest.raises(ValidationError, match="64 KiB"):
+        EvidencePacket.model_validate(data)
+
+
+def test_missing_structured_output_is_rejected_without_retry() -> None:
+    responses = FakeResponses(None)
+    with pytest.raises(InterpretationGroundingError, match="structured interpretation"):
+        generate_interpretation(packet(), "pass", client=SimpleNamespace(responses=responses))

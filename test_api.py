@@ -110,3 +110,30 @@ def test_interpret_rejects_oversized_source_excerpt() -> None:
     assert response.status_code == 422
 
 
+def test_interpret_rejects_unbounded_packet_before_model_call() -> None:
+    data = evidence_packet()
+    data["summary"]["text"] = "x" * 70_000
+    with patch.object(api, "generate_interpretation") as generate:
+        response = client.post("/api/interpret", json={"evidencePacket": data, "sourceExcerpt": "pass"})
+    assert response.status_code == 422
+    generate.assert_not_called()
+
+
+def test_interpret_rejects_reversed_source_range_before_model_call() -> None:
+    data = evidence_packet()
+    data["source_range"] = {"path": "example.py", "start_line": 20, "end_line": 1}
+    with patch.object(api, "generate_interpretation") as generate:
+        response = client.post("/api/interpret", json={"evidencePacket": data, "sourceExcerpt": "pass"})
+    assert response.status_code == 422
+    generate.assert_not_called()
+
+
+def test_interpret_rejects_unknown_packet_version_before_model_call() -> None:
+    data = evidence_packet()
+    data["version"] = "999"
+    with patch.object(api, "generate_interpretation") as generate:
+        response = client.post("/api/interpret", json={"evidencePacket": data, "sourceExcerpt": "pass"})
+    assert response.status_code == 422
+    generate.assert_not_called()
+
+
