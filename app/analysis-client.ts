@@ -1,6 +1,10 @@
 import { MAX_REPORT_BYTES, validateReport } from "./graph-report.ts";
 
 export type AnalysisMode = "inventory" | "deep" | "local";
+export type EvidenceReference = { reportId: string; expiresAt: number };
+export type AnalysisResult = { graph: ReturnType<typeof validateReport>; evidenceReference: EvidenceReference | null };
+const REPORT_ID_HEADER = "X-Archaeologist-Report-Id";
+const REPORT_TTL_HEADER = "X-Archaeologist-Report-TTL";
 export function analysisEndpoint(mode: AnalysisMode, localUrl = "") {
   if (mode === "deep") return "/api/analyze/deep";
   if (mode === "local") {
@@ -9,7 +13,7 @@ export function analysisEndpoint(mode: AnalysisMode, localUrl = "") {
   }
   return "/api/analyze";
 }
-export async function submitAnalysis(mode: AnalysisMode, repositoryUrl: string, localUrl: string, signal: AbortSignal, fetcher: typeof fetch = fetch) {
+export async function submitAnalysisResult(mode: AnalysisMode, repositoryUrl: string, localUrl: string, signal: AbortSignal, fetcher: typeof fetch = fetch): Promise<AnalysisResult> {
   const response = await fetcher(analysisEndpoint(mode, localUrl), {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ repositoryUrl }), signal,
@@ -36,5 +40,18 @@ export async function submitAnalysis(mode: AnalysisMode, repositoryUrl: string, 
   if (!response.ok) throw new Error(typeof data?.detail === "string" ? data.detail : `Analysis failed (${response.status}).`);
   const graph = validateReport(data);
   if (mode === "deep" && graph.analysis?.tier !== "deep") throw new Error("The server did not return deep analysis. Your current map is unchanged.");
-  return graph;
+  let evidenceReference: EvidenceReference | null = null;
+  if (mode === "deep") {
+    const reportId = response.headers.get(REPORT_ID_HEADER) ?? "";
+    const ttl = Number(response.headers.get(REPORT_TTL_HEADER));
+    if (!/^[A-Za-z0-9_-]{43}$/.test(reportId) || !Number.isSafeInteger(ttl) || ttl < 1 || ttl > 900)
+      throw new Error("Deep analysis did not provide a trusted evidence reference. Your current map is unchanged.");
+    evidenceReference = { reportId, expiresAt: Date.now() + ttl * 1000 };
+  }
+  return { graph, evidenceReference };
+}
+
+/** Backward-compatible graph-only API for callers that do not need hosted interpretation. */
+export async function submitAnalysis(mode: AnalysisMode, repositoryUrl: string, localUrl: string, signal: AbortSignal, fetcher: typeof fetch = fetch) {
+  return (await submitAnalysisResult(mode, repositoryUrl, localUrl, signal, fetcher)).graph;
 }
