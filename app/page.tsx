@@ -18,6 +18,7 @@ import { submitAnalysis, type AnalysisMode } from "./analysis-client";
 import type { Graph, GraphNode, GraphEdge, EvidenceStatement, Claim, ExecutionFlow, RiskFinding, ArchitecturePattern } from "./graph-types";
 import { isRecord, validateGraph } from "./graph-validation";
 import { canonicalGithubUrl, readReportFile, reportFilename, serializeReport } from "./graph-report";
+import { ProjectDetails } from "./project-details";
 
 import { changedFileSelection, explainFile, selectionMetadata, evidenceLocation, currentReportLabel, type Explanation, type ReportOrigin } from "./graph-presentation";
 type AIInterpretationSection = {
@@ -527,6 +528,7 @@ export default function Home() {
           </section>
           {importedReport && <div className="analysis-tier-notice imported-report" role="status"><strong>Imported report · {graph?.analysis?.tier}</strong><p>{importedReport}</p><small>Claims and commit metadata are supplied by this file, not independently verified by this site. AI requests are disabled for imported reports. Reloading clears the imported report.</small><details><summary>Reported analysis limitations</summary><ul>{graph?.analysis?.limitations.map((message, index) => <li key={index}>{message}</li>)}</ul></details></div>}
           {graph && <div className="origin"><span>{repositorySource === "github" ? "Pinned GitHub snapshot" : "Local directory"}</span>{pinnedRepositoryUrl ? <a href={pinnedRepositoryUrl} target="_blank" rel="noreferrer">{commitSha ? `${commitSha.slice(0, 12)} ↗` : "Open repository ↗"}</a> : <strong>{repositoryName}</strong>}</div>}
+          <ProjectDetails graph={graph} imported={reportOrigin === "imported"} />
           {inventory && <div className="analysis-tier-notice" role="status"><strong>{coverageStatus.partial ? "Partial inventory" : "Inventory analysis"}</strong><p>{coverageStatus.summary}</p><small>Import edges are heuristics. Symbols, flows, patterns, and risks were not analyzed.</small><details><summary>Coverage and limitations</summary><ul>{[...coverageStatus.warnings, ...(graph?.analysis?.limitations ?? [])].map((message) => <li key={message}>{message}</li>)}</ul></details></div>}
           <label className="search"><span aria-hidden="true">⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter files" aria-label="Filter files" /></label>
           <div className="scope-switch" aria-label="Graph scope">

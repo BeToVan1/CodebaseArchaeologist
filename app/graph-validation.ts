@@ -21,6 +21,23 @@ export function validateGraph(value: unknown): Graph {
   if (!Array.isArray(value.nodes) || !Array.isArray(value.edges)) {
     throw new Error("Invalid graph: nodes and edges must be arrays.");
   }
+  if (value.project_discovery !== undefined) {
+    const p = value.project_discovery;
+    const text = (v: unknown): v is string => typeof v === "string" && v.length > 0 && v.length <= 1024 && !/[\u0000-\u001f]/.test(v);
+    const list = (v: unknown, max: number) => Array.isArray(v) && v.length <= max && v.every(text);
+    if (!isRecord(p) || p.version !== "1" || p.scope !== "root-pyproject-only" || p.path !== "pyproject.toml"
+      || !["missing", "skipped", "unreadable", "invalid", "parsed"].includes(String(p.status))
+      || !(p.sha256 === null || typeof p.sha256 === "string" && /^[a-f0-9]{64}$/.test(p.sha256))
+      || (["parsed", "invalid"].includes(String(p.status)) && p.sha256 === null)
+      || !list(p.warnings, 12) || !list(p.limitations, 12)
+      || !Array.isArray(p.declarations) || p.declarations.length > 128
+      || (p.status !== "parsed" && p.declarations.length !== 0)
+      || !p.declarations.every(d => isRecord(d) && list(d.key, 3) && (d.key as string[]).length >= 2
+        && (text(d.value) || list(d.value, 128)) && d.classification === "fact" && d.confidence === 1 && text(d.provenance))
+      || new TextEncoder().encode(JSON.stringify(p)).length > 128 * 1024) {
+      throw new Error("Invalid graph: project discovery metadata is malformed or exceeds limits.");
+    }
+  }
 
   const nodes = value.nodes as unknown[];
   const edges = value.edges as unknown[];

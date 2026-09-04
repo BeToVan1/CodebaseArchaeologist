@@ -292,6 +292,18 @@
   .canvas-head { flex-wrap: wrap; gap: 12px; }
 }
 @media (max-width: 1100px) { .flow-browser { grid-template-columns: 190px minmax(360px,1fr); } .flow-inspector { padding: 24px; } }
+.project-details { margin: 16px 0; padding: 12px; border: 1px solid var(--line); border-radius: 10px; overflow-wrap: anywhere; }
+.project-details summary { cursor: pointer; font-size: 14px; line-height: 1.5; padding: 10px 0; }
+.project-details summary:focus-visible { outline: 3px solid #64834b; outline-offset: 3px; }
+.project-details p, .project-details li { font-size: 16px; line-height: 1.5; }
+.project-details p { margin: 10px 0; }
+.project-details h2 { font-size: 14px; margin: 14px 0 8px; }
+.project-details ul { padding-left: 20px; margin: 10px 0; }
+.project-details li + li { margin-top: 8px; }
+.project-details code { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
+.project-details small { display: block; font-size: 14px; line-height: 1.5; margin-bottom: 10px; }
+.project-declarations > details, .project-source { border-top: 1px solid var(--line); }
+.project-details-trust { padding: 10px; background: #f2ecd9; border-radius: 6px; color: #51462b; }
 @media (max-width: 940px) { .graph-surface { height: 620px; } .detail { max-height: none; } }
 @media (max-width: 650px) { .graph-surface { height: 560px; } .flow-browser { display: block; } .flow-catalog { border-right: 0; border-bottom: 1px solid var(--line); } .flow-inspector, .risk-browser, .pattern-browser { padding: 20px; } .risk-list-heading, .pattern-list-heading, .remediation-panel > header, .remediation-panel > footer { display: block; } .risk-list-heading p, .pattern-list-heading p, .remediation-panel > header > strong, .remediation-panel > footer button { margin-top: 8px; } .risk-list, .pattern-list, .remediation-actions { grid-template-columns: 1fr; } }
 

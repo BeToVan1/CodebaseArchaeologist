@@ -134,6 +134,16 @@ export type ArchitecturePattern = {
   metrics: Record<string, number>;
 };
 export type Graph = {
+  project_discovery?: {
+    version: "1";
+    scope: "root-pyproject-only";
+    status: "missing" | "skipped" | "unreadable" | "invalid" | "parsed";
+    path: "pyproject.toml";
+    sha256: string | null;
+    declarations: { key: string[]; value: string | string[]; classification: "fact"; confidence: 1; provenance: string }[];
+    warnings: string[];
+    limitations: string[];
+  };
   schema_version: string;
   repository?: RepositoryMetadata;
   snapshot?: SnapshotMetadata;
