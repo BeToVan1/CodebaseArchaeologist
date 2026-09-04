@@ -20,6 +20,8 @@ import { isRecord, validateGraph } from "./graph-validation";
 import { canonicalGithubUrl, readReportFile, reportFilename, serializeReport } from "./graph-report";
 import { ProjectDetails } from "./project-details";
 import { TestEvidence } from "./test-evidence";
+import { isTestPath } from "./test-proximity";
+import { pathMatchesScope, revealedNodeSelection } from "./graph-presentation";
 
 import { changedFileSelection, explainFile, selectionMetadata, evidenceLocation, currentReportLabel, type Explanation, type ReportOrigin } from "./graph-presentation";
 type AIInterpretationSection = {
@@ -45,7 +47,7 @@ const ANALYZER_API_URL = process.env.NEXT_PUBLIC_ANALYZER_API_URL ?? (process.en
 const LOCAL_INTERPRETATION_ENABLED = Boolean(ANALYZER_API_URL);
 
 const layerFor = (path: string) => {
-  if (path.startsWith("tests/")) return { key: "tests", label: "Tests", order: 0 };
+  if (isTestPath(path)) return { key: "tests", label: "Tests", order: 0 };
   if (path.includes("/entrypoints/") || path.endsWith("bootstrap.py") || path.endsWith("views.py")) return { key: "entrypoints", label: "Entry points", order: 1 };
   if (path.includes("/service_layer/")) return { key: "services", label: "Application", order: 2 };
   if (path.includes("/domain/")) return { key: "domain", label: "Domain", order: 3 };
@@ -189,7 +191,7 @@ function primaryNodeId(graph: Graph) {
     degree.set(edge.target, (degree.get(edge.target) ?? 0) + 1);
   });
   return graph.nodes
-    .filter((node) => node.kind === "file" && !node.path.startsWith("tests/"))
+    .filter((node) => node.kind === "file" && !isTestPath(node.path))
     .sort((a, b) => (degree.get(b.id) ?? 0) - (degree.get(a.id) ?? 0))[0]?.id
     ?? graph.nodes[0]?.id
     ?? null;
@@ -330,8 +332,7 @@ export default function Home() {
   const visibleGraphNodes = useMemo(
     () => graph?.nodes.filter((node) =>
       node.kind === "file"
-      && (scope === "all" || !node.path.startsWith("tests/"))
-      && node.path.toLowerCase().includes(query.toLowerCase()),
+      && pathMatchesScope(node.path, scope, query),
     ) ?? [],
     [graph, query, scope],
   );
@@ -339,7 +340,10 @@ export default function Home() {
   const positions = useMemo(() => layeredPositions(visibleGraphNodes), [visibleGraphNodes]);
 
   useEffect(() => {
-    if (selectedId && !visibleIds.has(selectedId)) setSelectedId(visibleGraphNodes[0]?.id ?? null);
+    if (selectedId && !visibleIds.has(selectedId)) {
+      setSelectedId(visibleGraphNodes[0]?.id ?? null);
+      setSelectedSymbolId(null);
+    }
   }, [selectedId, visibleGraphNodes, visibleIds]);
   const flowNodes = useMemo<Node[]>(
     () => visibleGraphNodes.map((node, index) => ({
@@ -384,13 +388,16 @@ export default function Home() {
   const metadata = selected ? selectionMetadata(selected, selectedSymbol) : null;
   const nodePath = (id: string) => graph?.nodes.find((node) => node.id === id)?.path ?? id;
   const nodeName = (id: string) => graph?.nodes.find((node) => node.id === id)?.qualified_name ?? nodePath(id);
-  const selectFileNode = (id: string) => { setSelectedId(id); setSelectedSymbolId(null); };
-  const selectSymbolNode = (id: string) => {
-    const symbol = graph?.nodes.find((node) => node.id === id && node.kind !== "file");
-    if (!symbol) return;
-    setSelectedId(`file:${symbol.path}`);
-    setSelectedSymbolId(id);
+  const revealNode = (id: string) => {
+    const selection = revealedNodeSelection(graph?.nodes ?? [], id, scope, query);
+    if (!selection) return;
+    setScope(selection.scope);
+    setQuery(selection.query);
+    setSelectedId(selection.fileId);
+    setSelectedSymbolId(selection.symbolId);
   };
+  const selectFileNode = revealNode;
+  const selectSymbolNode = revealNode;
   const relationshipLabel = (edge: GraphEdge) => `${edge.kind.replaceAll("-", " ")} · ${Math.round((edge.confidence ?? 1) * 100)}%`;
   const flows = graph?.flows ?? [];
   const selectedFlow = flows.find((flow) => flow.id === selectedFlowId) ?? flows[0] ?? null;
@@ -398,8 +405,7 @@ export default function Home() {
   const allFindings = graph?.findings ?? [];
   const patterns = graph?.patterns ?? [];
   const findings = allFindings.filter((finding) =>
-    (scope === "all" || !finding.evidence.path.startsWith("tests/"))
-    && finding.evidence.path.toLowerCase().includes(query.toLowerCase()),
+    pathMatchesScope(finding.evidence.path, scope, query),
   );
   const selectedRisk = findings.find((finding) => finding.id === selectedRiskId) ?? findings[0] ?? null;
   const selectRisk = (finding: RiskFinding) => {

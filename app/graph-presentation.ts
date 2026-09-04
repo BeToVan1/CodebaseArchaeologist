@@ -1,5 +1,22 @@
 import type { Claim, EvidenceStatement, GraphEdge, GraphNode } from "./graph-types.ts";
 import type { NodeChange } from "@xyflow/react";
+import { isTestPath } from "./test-proximity.ts";
+
+export function pathMatchesScope(path: string, scope: "production" | "all", query: string): boolean {
+  return (scope === "all" || !isTestPath(path)) && path.toLowerCase().includes(query.toLowerCase());
+}
+
+export function revealedNodeSelection(nodes: GraphNode[], id: string, scope: "production" | "all", query: string) {
+  const target = nodes.find(node => node.id === id);
+  if (!target) return null;
+  const file = target.kind === "file" ? target : nodes.find(node => node.kind === "file" && node.path === target.path);
+  if (!file) return null;
+  return {
+    fileId: file.id, symbolId: target.kind === "file" ? null : target.id,
+    scope: isTestPath(file.path) ? "all" as const : scope,
+    query: file.path.toLowerCase().includes(query.toLowerCase()) ? query : "",
+  };
+}
 
 export function changedFileSelection(changes: NodeChange[], visibleIds: Set<string>): string | null {
   for (let index = changes.length - 1; index >= 0; index--) {
