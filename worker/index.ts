@@ -3,17 +3,20 @@ import handler from "vinext/server/app-router-entry";
 import { handleAnalyzeRequest } from "./github-analyzer";
 import { deepConfigured, handleDeepRequest, type DeepEnv } from "./deep-proxy";
 import { handleNetworkProbe, type NetworkProbeEnv } from "./network-probe";
+import { handleInterpretationRequest, interpretationConfigured, type HostedInterpretationEnv } from "./interpretation-route";
 
 interface Env { ASSETS: { fetch(request: Request): Promise<Response> }; IMAGES: { input(stream: ReadableStream): { transform(options: Record<string, unknown>): { output(options: { format: string; quality: number }): Promise<{ response(): Response }> } } } }
 interface ExecutionContext { waitUntil(promise: Promise<unknown>): void; passThroughOnException(): void }
 
 export default {
-  async fetch(request: Request, env: Env & DeepEnv & NetworkProbeEnv, ctx: ExecutionContext): Promise<Response> {
+  async fetch(request: Request, env: Env & DeepEnv & NetworkProbeEnv & HostedInterpretationEnv, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/api/network-probe") return handleNetworkProbe(request, env);
     if (url.pathname === "/api/analyze/deep") return handleDeepRequest(request, env);
+    if (url.pathname === "/api/interpret/deep") return handleInterpretationRequest(request, env);
     if (url.pathname === "/api/analysis-capabilities") return Response.json(
-      { deep: deepConfigured(env) }, { headers: { "Cache-Control": "no-store" } });
+      { deep: deepConfigured(env), interpretation: interpretationConfigured(env) },
+      { headers: { "Cache-Control": "no-store" } });
     if (url.pathname === "/api/analyze") return handleAnalyzeRequest(request);
     if (url.pathname === "/_vinext/image") {
       return handleImageOptimization(request, {

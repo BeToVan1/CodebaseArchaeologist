@@ -98,7 +98,8 @@ is retained only for offline compatibility tests; it is not the selected public 
 
 The selected hosted direction is Cloudflare Workers AI on the Free plan. The first adapter uses
 `@cf/meta/llama-3.3-70b-instruct-fp8-fast` because it supports JSON Mode and remains available on
-the free plan. It is not connected to a route or AI binding yet. It sends one bounded request,
+the free plan. A same-origin Worker route is implemented but remains disabled without both an
+explicit enable flag and a supported AI binding. It sends one bounded request,
 does not stream or retry, treats source as untrusted data, and validates every returned section,
 confidence and evidence reference. Free-allocation enforcement is owned by Cloudflare, not this
 adapter; production must remain disabled until the account is verified as Workers Free.
@@ -109,8 +110,8 @@ to a bounded in-memory store, and returns an opaque 15-minute report reference i
 `POST /api/evidence/prepare` accepts only that reference and a selected symbol ID, requires the
 service token and the same server-derived network owner key, and returns the retained packet and
 source excerpt. It never accepts a client packet, source range, source text, or owner identity.
-These changes have not been deployed to Oracle, exposed by the Sites Worker, or connected to the
-model adapter.
+The evidence-capable image is deployed on Oracle. The Sites Worker route is implemented locally
+but has not been published, enabled, or connected to a hosted AI binding.
 Provider/grounding failures get a sanitized 502; exhausted budget gets 429;
 unavailable execution policy, capacity, storage, or incomplete output gets 503.
 None causes an automatic retry or refund. Repeating a valid request is a new
@@ -127,7 +128,7 @@ or wrong-owner references get 404. The routes are absent when disabled at startu
 The legacy local `/api/interpret` still accepts caller-supplied evidence and can
 call the provider when configured; this preview does not secure or replace it.
 Do not expose either local development API publicly. Public LLM integration
-still needs the Sites Worker proxy/model route, Workers Free account verification, explicit
+still needs a supported hosted Workers AI binding, Workers Free account verification, explicit
 activation approval, frontend integration, and semantic review. Body-read timeout handling here
 does not cancel an already-running synchronous analysis job.
 

@@ -10,6 +10,8 @@ import { readBoundedBody } from "../worker/github-analyzer.ts";
 const graph = JSON.parse(await readFile(new URL("../public/graph.json", import.meta.url), "utf8"));
 const token = "private-service-token-" + "x".repeat(40);
 const environment = () => ({ ARCHAEOLOGIST_DEEP_ENABLED: "true", ARCHAEOLOGIST_SERVICE_TOKEN: token });
+const evidenceHeaders = { "X-Archaeologist-Report-Id": "R".repeat(43), "X-Archaeologist-Report-TTL": "900" };
+const graphResponse = value => Response.json(value, { headers: evidenceHeaders });
 const request = (options = {}) => new Request("https://site.test/api/analyze/deep", {
   method: "POST", headers: { "Content-Type": "application/json", Origin: "https://site.test", "CF-Connecting-IP": "192.0.2.1", ...options.headers },
   body: JSON.stringify({ repositoryUrl: graph.repository.url }), ...Object.fromEntries(Object.entries(options).filter(([key]) => key !== "headers")),
@@ -43,10 +45,11 @@ test("forwards only canonical URL and server token to fixed HTTPS endpoint", asy
     assert.ok(url.endsWith("/api/analyze/quota-v1"));
     assert.deepEqual(options.headers, { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "X-Archaeologist-Client-Key": await networkKey("192.0.2.1", token) });
     assert.deepEqual(JSON.parse(options.body), { repositoryUrl: graph.repository.url });
-    return Response.json(graph);
+    return graphResponse(graph);
   });
   assert.equal(calls, 1); assert.equal(response.status, 200);
   assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.equal(response.headers.get("x-archaeologist-report-id"), "R".repeat(43));
   assert.deepEqual(await response.json(), graph);
 });
 test("Oracle quota denial is distinct from busy and sanitized", async () => {
@@ -72,8 +75,9 @@ test("upstream errors and redirects are sanitized and never retried", async () =
 });
 test("invalid graph or wrong repository cannot replace the map", async () => {
   for (const value of [{}, { ...graph, nodes: [] }, { ...graph, analysis: { ...graph.analysis, tier: "inventory" } }, { ...graph, snapshot: undefined }, { ...graph, repository: { ...graph.repository, url: "https://github.com/wrong/repo" } }]) {
-    assert.equal((await handleDeepRequest(request(), environment(), async () => Response.json(value))).status, 502);
+    assert.equal((await handleDeepRequest(request(), environment(), async () => graphResponse(value))).status, 502);
   }
+  assert.equal((await handleDeepRequest(request(), environment(), async () => Response.json(graph))).status, 502);
 });
 test("oversized upstream output is rejected", async () => {
   const response = await handleDeepRequest(request(), environment(), async () => new Response("x".repeat(10 * 1024 * 1024 + 1)));
@@ -107,7 +111,7 @@ test("browser uses same-origin deep route even when a local API URL exists", asy
   let browserOptions;
   const result = await submitAnalysis("deep", graph.repository.url, "http://localhost:8000", new AbortController().signal, async (url, options) => {
     browserOptions = options;
-    return handleDeepRequest(new Request("https://site.test" + url, { ...options, headers: { ...options.headers, Origin: "https://site.test", "CF-Connecting-IP": "192.0.2.1" } }), environment(), async () => Response.json(graph));
+    return handleDeepRequest(new Request("https://site.test" + url, { ...options, headers: { ...options.headers, Origin: "https://site.test", "CF-Connecting-IP": "192.0.2.1" } }), environment(), async () => graphResponse(graph));
   });
   assert.equal(browserOptions.headers.Authorization, undefined);
   assert.deepEqual(result, graph);
