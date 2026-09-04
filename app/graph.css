@@ -245,7 +245,25 @@
 .flow-gaps li span, .flow-gaps p { color: #806b4a; font-size: 8px; text-align: right; }
 .flow-gaps p { margin: 0; text-align: left; }
 .flow-gaps .flow-more-gaps { margin-top: 9px; padding-top: 9px; border-top: 1px solid #efe1ca; font-weight: 700; }
-.detail { overflow-y: auto; max-height: calc(100vh - 72px); }
+.example-report-banner { position: relative; z-index: 1; flex: none; margin-bottom: 18px; padding: 14px 16px; border: 1px solid #b5cbb8; border-left: 4px solid var(--moss); border-radius: 8px; background: #edf5ed; color: #24442d; }
+.example-report-banner strong { font-size: 16px; }
+.example-report-banner p { margin: 6px 0 0; font-size: 14px; line-height: 1.5; }
+.rail:focus-visible, .detail:focus-visible { outline: 3px solid var(--moss); outline-offset: -3px; }
+/* One viewport-sized desktop workspace, with symmetric sidebar scrolling.
+   Keep the header in layout so wrapping/zoom does not rely on a 72px offset. */
+@media (min-width: 1001px) {
+  .shell { height: 100vh; height: 100dvh; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .topbar { flex: none; height: auto; min-height: 72px; padding: 16px 28px; flex-wrap: wrap; gap: 12px; }
+  .workspace { flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr); overflow: hidden; }
+  .rail, .detail { min-width: 0; min-height: 0; height: 100%; max-height: none; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-gutter: stable; }
+  .canvas { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; }
+  .canvas-head, .layer-guide { flex: none; }
+  .graph-surface { flex: 1 0 300px; height: auto; min-height: 300px; }
+}
+/* Stacked sidebars participate in ordinary page scrolling on smaller screens. */
+@media (max-width: 1000px) {
+  .rail, .detail { height: auto; max-height: none; overflow: visible; }
+}
 .current-report { margin: 16px 0; padding: 12px; border: 1px solid var(--line); border-radius: 10px; }
 .current-report strong { display: block; font-size: 14px; }
 .current-report p { margin: 6px 0; overflow-wrap: anywhere; }

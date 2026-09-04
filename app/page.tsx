@@ -489,7 +489,7 @@ export default function Home() {
       </header>
 
       <section className="workspace">
-        <aside className="rail">
+        <aside className="rail" aria-label="Repository controls" tabIndex={0}>
           <div className="eyebrow">Repository</div><h1>Dependency map</h1>
           <p className="rail-copy">Explore files, source, and internal imports from the analyzed repository.</p>
           <section className="current-report" aria-label="Current report"><strong>{graph ? currentReportLabel(reportOrigin, graph.analysis?.tier ?? "unknown") : "No report loaded"}</strong>{graph && <p>{repositoryName}</p>}<small>The controls below configure the next analysis; they do not change the current report.</small></section>
@@ -546,6 +546,10 @@ export default function Home() {
         </aside>
 
         <section className="canvas" aria-label="Repository dependency graph">
+          {graph && reportOrigin === "example" && <section className="example-report-banner" aria-label="Example report" role="status">
+            <strong>Example report · Cosmic Python</strong>
+            <p>You’re exploring the preloaded cosmicpython/code example, not a repository you submitted. Enter your GitHub URL and choose Analyze repository to create your own map.</p>
+          </section>}
           <div className="canvas-head"><div><div className="eyebrow">{canvasCopy[0]}</div><h2>{canvasCopy[1]}</h2><p className="relationship-help">{canvasCopy[2]}</p></div>{unavailable ? <div className="risk-summary">Not analyzed</div> : mapMode === "architecture" ? <div className="legend"><span /> Selected <i /> {inventory ? "Candidate imports →" : "Imports →"}</div> : mapMode === "flows" ? <div className="legend flow-legend"><span /> Proven <i /> Candidate</div> : mapMode === "patterns" ? <div className="pattern-summary"><strong>{factPatternCount}</strong> facts · <strong>{patterns.length - factPatternCount}</strong> heuristics</div> : <div className="risk-summary"><strong>{highRiskCount}</strong> high · <strong>{riskCount - highRiskCount}</strong> medium/low</div>}</div>
           {mapMode === "architecture" && <div className="layer-guide" aria-hidden="true">
             {(scope === "all" ? ["Tests"] : []).concat(["Entry points", "Application", "Domain", "Infrastructure", "Support"]).map((layer) => <span key={layer}>{layer}</span>)}
@@ -662,7 +666,7 @@ export default function Home() {
           </div>
         </section>
 
-        <aside className="detail" aria-live="polite">
+        <aside className="detail" aria-label="Selected code details" aria-live="polite" tabIndex={0}>
           <div className="detail-top"><span className="pill">{selectedSymbol ? selectedSymbol.kind : "FILE"}</span><span className="connection-count">{selectedSymbol ? symbolIncoming.length + symbolOutgoing.length : incoming.length + outgoing.length} connections</span></div>
           {selected ? <>
             <div className="detail-icon">PY</div><h2>{filename(selected.path)}</h2><p className="full-path">{selected.path}</p>
