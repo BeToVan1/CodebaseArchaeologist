@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -13,6 +14,7 @@ MAX_OUTPUT_BYTES = 10 * 1024 * 1024
 MAX_INPUT_FILES = 500
 MAX_FILE_BYTES = 1024 * 1024
 MAX_INPUT_BYTES = 5 * 1024 * 1024
+MAX_EVIDENCE_FILES = 500
 
 
 class InputLimitError(ValueError):
@@ -53,6 +55,26 @@ def analyze_checkout(checkout: Path) -> dict:
     return graph
 
 
+def analyze_checkout_with_sources(checkout: Path) -> tuple[dict, dict[str, bytes], str]:
+    """Capture and analyze the exact committed bytes retained for interpretation."""
+    from analyzer import find_python_files
+    from snapshot_capture import analyze_verified_snapshot
+
+    files = find_python_files(checkout)
+    if len(files) > MAX_INPUT_FILES:
+        raise InputLimitError("Repository exceeds hosted deep-analysis limits.")
+    total = 0
+    for path in files:
+        size = path.stat().st_size
+        total += size
+        if size > MAX_FILE_BYTES or total > MAX_INPUT_BYTES:
+            raise InputLimitError("Repository exceeds hosted deep-analysis limits.")
+    graph, sources, sha = analyze_verified_snapshot(checkout)
+    if len(graph["nodes"]) > 10_000 or len(graph["edges"]) > 30_000:
+        raise InputLimitError("Graph exceeds hosted deep-analysis limits.")
+    return graph, sources, sha
+
+
 def analyze_public_repository(url: str) -> dict:
     from repository_loader import load_repository, resolve_commit_sha, validate_github_url, cleanup_repository
     owner, repository = validate_github_url(url)
@@ -65,6 +87,24 @@ def analyze_public_repository(url: str) -> dict:
                                  "pinned_url": f"{canonical}/tree/{sha}", "source": "github"},
                      snapshot={"commit_sha": sha}, source_url=canonical)
         return graph
+    finally:
+        cleanup_repository(checkout)
+
+
+def analyze_public_repository_with_sources(url: str) -> tuple[dict, dict[str, bytes], str]:
+    from repository_loader import load_repository, resolve_commit_sha, validate_github_url, cleanup_repository
+    owner, repository = validate_github_url(url)
+    canonical = f"https://github.com/{owner}/{repository}"
+    checkout = load_repository(canonical, timeout_seconds=30)
+    try:
+        sha = resolve_commit_sha(checkout)
+        graph, sources, captured_sha = analyze_checkout_with_sources(checkout)
+        if captured_sha != sha:
+            raise InputLimitError("Repository snapshot changed during analysis.")
+        graph.update(repository={"name": f"{owner}/{repository}", "url": canonical,
+                                 "pinned_url": f"{canonical}/tree/{sha}", "source": "github"},
+                     snapshot={"commit_sha": sha}, source_url=canonical)
+        return graph, sources, sha
     finally:
         cleanup_repository(checkout)
 
@@ -82,6 +122,26 @@ def write_result(graph: dict, output: Path) -> None:
             target.write(encoded)
 
 
+def write_evidence(sources: dict[str, bytes], commit_sha: str, output: Path) -> None:
+    """Write a private manifest plus exact bytes for the parent service only."""
+    if len(sources) > MAX_EVIDENCE_FILES:
+        raise InputLimitError("Evidence snapshot exceeds hosted limits.")
+    output.mkdir(mode=0o700)
+    manifest = {"commit_sha": commit_sha, "files": []}
+    for index, (path, raw) in enumerate(sorted(sources.items())):
+        if not isinstance(path, str) or not isinstance(raw, bytes):
+            raise InputLimitError("Evidence snapshot is invalid.")
+        name = f"{index:04d}.source"
+        target = output / name
+        with target.open("xb") as stream:
+            stream.write(raw)
+        os.chmod(target, 0o600)
+        manifest["files"].append({"path": path, "name": name, "size": len(raw)})
+    (output / "manifest.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
+    )
+
+
 def main() -> int:
     try:
         set_resource_limits()
@@ -91,8 +151,9 @@ def main() -> int:
         request = json.loads(payload)
         if not isinstance(request, dict) or not isinstance(request.get("repositoryUrl"), str):
             return 2
-        graph = analyze_public_repository(request["repositoryUrl"])
+        graph, sources, commit_sha = analyze_public_repository_with_sources(request["repositoryUrl"])
         write_result(graph, Path.cwd() / "result.json")
+        write_evidence(sources, commit_sha, Path.cwd() / "evidence")
         return 0
     except InputLimitError:
         return 3

@@ -4,7 +4,11 @@
 !Dockerfile.deep-service.dockerignore
 !requirements*.txt
 !analyzer.py
+!project_discovery.py
 !repository_loader.py
+!snapshot_capture.py
+!evidence_store.py
+!interpretation_evidence.py
 !deep_analysis_worker.py
 !deep_service.py
 !deep_quota.py

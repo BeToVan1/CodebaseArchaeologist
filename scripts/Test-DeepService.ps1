@@ -24,9 +24,9 @@ $contextPath = [IO.Path]::GetFullPath((Join-Path $tempRoot $contextName))
 $contextFiles = @(
     'Dockerfile.deep-service', 'Dockerfile.deep-service.dockerignore',
     'requirements-service.txt', 'requirements.txt', 'requirements-dev.txt',
-    'analyzer.py', 'repository_loader.py', 'deep_analysis_worker.py', 'deep_service.py', 'deep_quota.py', 'test_deep_quota.py',
-    'api.py', 'interpretation.py', 'test_analyzer.py', 'test_architecture_acceptance.py', 'test_repository_loader.py',
-    'test_api.py', 'test_interpretation.py', 'test_deep_worker.py', 'test_deep_service.py',
+    'analyzer.py', 'project_discovery.py', 'test_project_discovery.py', 'repository_loader.py', 'snapshot_capture.py', 'evidence_store.py', 'interpretation_evidence.py', 'deep_analysis_worker.py', 'deep_service.py', 'deep_quota.py', 'test_deep_quota.py',
+    'api.py', 'interpretation.py', 'test_analyzer.py', 'test_architecture_acceptance.py', 'test_test_proximity.py', 'test_repository_loader.py',
+    'test_api.py', 'test_interpretation.py', 'test_interpretation_evidence.py', 'test_evidence_store.py', 'test_snapshot_capture.py', 'test_deep_worker.py', 'test_deep_service.py',
     'tests/fixtures/portable-report/api.py', 'tests/fixtures/portable-report/models.py',
     'tests/fixtures/portable-report/repository.py', 'scripts/container_smoke.py',
     'scripts/Test-QuotaPersistence.ps1', 'scripts/container_quota_check.py', 'test_container_quota_probe.py'

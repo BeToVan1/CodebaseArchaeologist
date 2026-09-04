@@ -19,6 +19,121 @@ def analyze_sources(root: Path, sources: dict[str, str]) -> dict:
     return analyzer.analyze_repository(root)
 
 
+@pytest.mark.parametrize("path", ["test_api.py", "api_test.py", "tests.py", "conftest.py", "pkg/tests/helpers.py", "test/helpers.py", "src/pkg/tests/test_service.py"])
+def test_common_test_paths_have_heuristic_role(path):
+    assert analyzer.is_test_path(path)
+    assert analyzer.evidence_layer(path)[0] == "test"
+
+
+@pytest.mark.parametrize("path", ["latest.py", "contest.py", "testing.py", "testimony.py", "tests_support/helpers.py", "pkg/test_utils/service.py", "spec/service.py", "test_notes.md"])
+def test_similar_names_and_custom_layouts_are_not_guessed_as_tests(path):
+    assert not analyzer.is_test_path(path)
+    assert analyzer.evidence_layer(path)[0] != "test"
+
+
+def test_repeated_calls_do_not_create_many_caller_or_collaborator_hotspots(tmp_path):
+    graph = analyze_sources(tmp_path, {"app.py": "def helper():\n    pass\n\ndef caller():\n" + "    helper()\n" * 10})
+    assert len([edge for edge in graph["edges"] if edge["kind"] == "calls"]) == 10
+    assert not any(finding["rule_id"] in {"high-fan-in", "high-fan-out"} for finding in graph["findings"])
+
+
+@pytest.mark.parametrize("test_path", ["tests/test_app.py", "test_app.py", "package/tests/test_app.py", "app_test.py", "package/tests.py", "test/helpers.py", "conftest.py"])
+def test_test_callers_do_not_create_production_hotspot(tmp_path, test_path):
+    graph = analyze_sources(tmp_path, {
+        "app.py": "def helper():\n    pass\n",
+        test_path: "from app import helper\n" + "\n".join(
+            f"def test_case_{i}():\n    helper()\n" for i in range(10)),
+    })
+    assert len([edge for edge in graph["edges"] if edge["kind"] == "calls"]) == 10
+    assert not any(finding["rule_id"] == "high-fan-in" for finding in graph["findings"])
+
+
+def test_distinct_production_callers_still_create_hotspot(tmp_path):
+    graph = analyze_sources(tmp_path, {"app.py": "def helper():\n    pass\n" + "\n".join(
+        f"def caller_{i}():\n    helper()\n    helper()\n" for i in range(8))})
+    finding = next(item for item in graph["findings"] if item["rule_id"] == "high-fan-in")
+    assert finding["metrics"]["fan_in"] == 8
+    assert "distinct" in finding["summary"]
+    assert len(finding["related_node_ids"]) == 8
+
+
+def test_distinct_production_collaborators_still_create_hotspot(tmp_path):
+    graph = analyze_sources(tmp_path, {"app.py": "\n".join(
+        f"def helper_{i}():\n    pass\n" for i in range(8))
+        + "\ndef caller():\n" + "".join(f"    helper_{i}()\n    helper_{i}()\n" for i in range(8))})
+    finding = next(item for item in graph["findings"] if item["rule_id"] == "high-fan-out")
+    assert finding["metrics"]["fan_out"] == 8
+    assert len(finding["related_node_ids"]) == 8
+
+
+def test_mixed_test_and_production_callers_only_score_distinct_production(tmp_path):
+    graph = analyze_sources(tmp_path, {
+        "app.py": "def helper():\n    pass\n" + "\n".join(
+            f"def caller_{i}():\n    helper()\n" for i in range(8)),
+        "tests/test_app.py": "from app import helper\n" + "\n".join(
+            f"def test_case_{i}():\n    helper()\n" for i in range(10)),
+    })
+    finding = next(item for item in graph["findings"] if item["rule_id"] == "high-fan-in")
+    assert finding["metrics"]["fan_in"] == 8
+    assert finding["severity"] == "medium"
+    nodes = {node["id"]: node for node in graph["nodes"]}
+    assert all(nodes[node_id]["path"] == "app.py" for node_id in finding["related_node_ids"])
+    assert len([edge for edge in graph["edges"] if edge["kind"] == "calls"]) == 18
+
+
+def test_test_symbol_hotspots_remain_visible(tmp_path):
+    graph = analyze_sources(tmp_path, {"tests/test_app.py": "def helper():\n    pass\n" + "\n".join(
+        f"def test_case_{i}():\n    helper()\n" for i in range(8))})
+    finding = next(item for item in graph["findings"] if item["rule_id"] == "high-fan-in")
+    assert finding["metrics"]["fan_in"] == 8
+    assert "distinct repository caller symbols" in finding["summary"]
+
+
+def test_parameterized_base_retains_candidate_edge_and_original_evidence(tmp_path):
+    graph = analyze_sources(tmp_path, {
+        "base.py": "class Base:\n    pass\nclass Item:\n    pass\n",
+        "child.py": "from base import Base as Parent, Item\nclass Child(Parent[Item]):\n    pass\n",
+    })
+    nodes = {node["id"]: node for node in graph["nodes"]}
+    edges = [edge for edge in graph["edges"] if edge["kind"] == "extends"]
+    assert len(edges) == 1
+    edge = edges[0]
+    assert nodes[edge["source"]]["qualified_name"] == "child.Child"
+    assert nodes[edge["target"]]["qualified_name"] == "base.Base"
+    assert edge["confidence"] <= 0.85
+    assert edge["resolution_method"] == "ast-parameterized-base-candidate"
+    assert edge["evidence"]["expression"] == "Parent[Item]"
+    assert edge["evidence"]["line"] == 2
+    claim = next(claim for claim in nodes[edge["source"]]["evidence_packet"]["claims"]
+                 if claim["evidence_refs"] == [edge["id"]])
+    assert claim["classification"] == "heuristic"
+    assert claim["text"] == "Candidate relationship: extends base.Base."
+    assert claim["confidence"] == edge["confidence"]
+
+
+def test_direct_inheritance_claim_remains_fact(tmp_path):
+    graph = analyze_sources(tmp_path, {"base.py": "class Base:\n    pass\nclass Child(Base):\n    pass\n"})
+    child = next(node for node in graph["nodes"] if node.get("qualified_name") == "base.Child")
+    claim = next(claim for claim in child["evidence_packet"]["claims"] if ":edge:" in claim["id"])
+    assert claim["classification"] == "fact"
+    assert claim["text"] == "Extends base.Base."
+
+
+def test_unresolved_parameterized_base_does_not_guess_same_named_local_class(tmp_path):
+    graph = analyze_sources(tmp_path, {
+        "base.py": "class Base:\n    pass\n",
+        "child.py": "from external import Base\nclass Child(Base[int]):\n    pass\n",
+    })
+    assert not any(edge["kind"] == "extends" for edge in graph["edges"])
+
+
+def test_factory_base_is_not_inferred_as_inheritance(tmp_path):
+    graph = analyze_sources(tmp_path, {
+        "base.py": "class Base:\n    pass\nclass Child(Base()):\n    pass\n",
+    })
+    assert not any(edge["kind"] == "extends" for edge in graph["edges"])
+
+
 @pytest.mark.parametrize("filename,pattern", [
     ("repository.py", "repository-boundary"),
     ("unit_of_work.py", "unit-of-work"),
@@ -28,8 +143,9 @@ def test_names_without_relationships_do_not_establish_boundaries(tmp_path, filen
     assert not any(item["pattern_id"] == pattern for item in graph["patterns"])
 
 
-def test_test_only_dependency_injection_is_not_production_architecture(tmp_path):
-    graph = analyze_sources(tmp_path, {"tests/test_routes.py": """from fastapi import FastAPI, Depends
+@pytest.mark.parametrize("test_path", ["tests/test_routes.py", "test_routes.py", "package/tests/test_routes.py", "routes_test.py", "package/tests.py", "conftest.py"])
+def test_test_only_dependency_injection_is_not_production_architecture(tmp_path, test_path):
+    graph = analyze_sources(tmp_path, {test_path: """from fastapi import FastAPI, Depends
 app = FastAPI()
 def dependency():
     return 1

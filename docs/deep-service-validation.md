@@ -70,8 +70,9 @@ or disabling timeout, memory or process protections.
 - Startup requires `ARCHAEOLOGIST_SERVICE_TOKEN` (at least 32 non-whitespace ASCII
   characters; provision a cryptographically random value). Never use a browser
   `NEXT_PUBLIC_` variable for this secret.
-- Only unauthenticated liveness, `/health`; analysis requires a bearer token.
-  No interpretation endpoint, API documentation, or CORS is enabled.
+- Only unauthenticated liveness, `/health`; analysis and private evidence preparation
+  require a bearer token plus a server-derived owner key. No model endpoint, API
+  documentation, or CORS is enabled.
 - One active request per server process, including request reading and cleanup.
   Additional requests receive 429 instead of forming an unbounded queue.
   Run exactly one Uvicorn worker; scale/capacity must be controlled externally.
@@ -85,6 +86,10 @@ or disabling timeout, memory or process protections.
 - Input limits: 500 regular Python files, 1 MiB per Python file, 5 MiB Python source
   total; maximum 10,000 nodes, 30,000 edges, and 10 MiB serialized output. An
   over-limit job fails explicitly; it does not silently claim a complete result.
+- Successful jobs may retain at most 4 MiB of graph plus commit-verified Python source
+  in a bounded process-local store for 15 minutes. The response exposes only an opaque,
+  owner-bound reference; `/api/evidence/prepare` selects one symbol from that retained
+  snapshot and never accepts caller-provided source or evidence packets.
 - Public Git clone disables user/system config, credential helpers, hooks,
   redirects and non-HTTPS protocols. No repository dependencies are installed and
   repository code is parsed, not executed. Symlinked files/directories are skipped.

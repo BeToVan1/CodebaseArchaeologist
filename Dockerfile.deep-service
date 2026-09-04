@@ -5,7 +5,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends git ca-certific
 WORKDIR /app
 COPY requirements-service.txt /app/
 RUN pip install --no-cache-dir -r requirements-service.txt
-COPY analyzer.py repository_loader.py deep_analysis_worker.py deep_service.py deep_quota.py /app/
+COPY analyzer.py project_discovery.py repository_loader.py snapshot_capture.py evidence_store.py interpretation_evidence.py interpretation.py deep_analysis_worker.py deep_service.py deep_quota.py /app/
 RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin archaeologist
 USER 10001:10001
 EXPOSE 8000
@@ -15,7 +15,7 @@ FROM runtime AS validation
 USER root
 COPY requirements.txt requirements-dev.txt /app/
 RUN pip install --no-cache-dir -r requirements-dev.txt
-COPY api.py interpretation.py test_*.py /app/
+COPY api.py test_*.py /app/
 COPY tests/fixtures /app/tests/fixtures
 COPY scripts/container_smoke.py /app/scripts/container_smoke.py
 COPY scripts/container_quota_check.py /app/scripts/container_quota_check.py

@@ -6,9 +6,10 @@ import json
 import os
 from typing import Literal, Protocol
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 MAX_SOURCE_EXCERPT_CHARACTERS = 12_000
+MAX_EVIDENCE_PACKET_BYTES = 64 * 1024
 DEFAULT_INTERPRETATION_MODEL = "gpt-5.6"
 
 
@@ -29,9 +30,15 @@ class SourceRange(BaseModel):
     start_line: int = Field(ge=1)
     end_line: int = Field(ge=1)
 
+    @model_validator(mode="after")
+    def ordered_range(self):
+        if self.end_line < self.start_line:
+            raise ValueError("Source range must end at or after its start.")
+        return self
+
 
 class EvidencePacket(BaseModel):
-    version: str
+    version: Literal["1"]
     node_id: str
     source_range: SourceRange
     summary: EvidenceStatement
@@ -42,6 +49,15 @@ class EvidencePacket(BaseModel):
     finding_ids: list[str]
     pattern_ids: list[str] = Field(default_factory=list)
     claims: list[EvidenceClaim]
+
+    @model_validator(mode="after")
+    def bounded_packet(self):
+        # Budget the canonical JSON actually sent to the provider, including
+        # multibyte characters. Reject, rather than silently dropping evidence.
+        encoded = json.dumps(self.model_dump(mode="json"), sort_keys=True, ensure_ascii=False).encode("utf-8")
+        if len(encoded) > MAX_EVIDENCE_PACKET_BYTES:
+            raise ValueError("Evidence packet exceeds the 64 KiB interpretation limit.")
+        return self
 
 
 class InterpretRequest(BaseModel):
@@ -109,6 +125,7 @@ def known_evidence_refs(packet: EvidencePacket) -> set[str]:
 
 def build_interpretation_input(packet: EvidencePacket, source_excerpt: str) -> str:
     """Serialize only the bounded evidence packet and selected source excerpt."""
+    packet = EvidencePacket.model_validate(packet.model_dump(mode="json"))
     payload = {
         "evidence_packet": packet.model_dump(mode="json"),
         "source_excerpt": source_excerpt[:MAX_SOURCE_EXCERPT_CHARACTERS],
@@ -132,6 +149,7 @@ def generate_interpretation(
 ) -> InterpretationResponse:
     """Generate a structured interpretation without changing deterministic claims."""
     selected_model = model or os.getenv("OPENAI_MODEL", DEFAULT_INTERPRETATION_MODEL)
+    interpretation_input = build_interpretation_input(packet, source_excerpt)
     if client is None:
         if not os.getenv("OPENAI_API_KEY"):
             raise InterpretationUnavailable(
@@ -153,7 +171,7 @@ def generate_interpretation(
                     "when the evidence does not support a conclusion."
                 ),
             },
-            {"role": "user", "content": build_interpretation_input(packet, source_excerpt)},
+            {"role": "user", "content": interpretation_input},
         ],
         text_format=GeneratedInterpretation,
         store=False,

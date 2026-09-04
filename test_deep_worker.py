@@ -70,6 +70,29 @@ def test_framework_fixture_produces_deep_graph():
     assert any(node.get("sqlalchemy", {}).get("kind") == "model" for node in graph["nodes"])
 
 
+def test_public_worker_preserves_manifest_evidence_in_serialized_report(tmp_path):
+    import hashlib
+    manifest = b'[project]\nname = "itsdangerous"\nrequires-python = ">=3.11"\n'
+    (tmp_path / "pyproject.toml").write_bytes(manifest)
+    (tmp_path / "module.py").write_text("def hello(): return 1\n")
+    with patch.object(loader, "load_repository", return_value=tmp_path), patch.object(loader, "resolve_commit_sha", return_value="a" * 40), patch.object(loader, "cleanup_repository") as cleanup:
+        graph = worker.analyze_public_repository("https://github.com/pallets/itsdangerous")
+    cleanup.assert_called_once_with(tmp_path)
+    output = tmp_path / "report.json"
+    worker.write_result(graph, output)
+    restored = json.loads(output.read_text(encoding="utf-8"))
+    assert restored["project_discovery"]["sha256"] == hashlib.sha256(manifest).hexdigest()
+    assert restored["snapshot"]["commit_sha"] == "a" * 40
+    assert "repo_root" not in restored
+    from scripts.container_smoke import check_project_discovery
+    assert check_project_discovery(restored) == "root-pyproject-declarations-present"
+    for bad_metadata in (None, {**restored["project_discovery"], "status": "missing"},
+                         {**restored["project_discovery"], "sha256": "invalid"},
+                         {**restored["project_discovery"], "declarations": []}):
+        with pytest.raises(AssertionError):
+            check_project_discovery({**restored, "project_discovery": bad_metadata})
+
+
 @pytest.mark.parametrize("limit", ["MAX_FILE_BYTES", "MAX_INPUT_BYTES", "MAX_INPUT_FILES"])
 def test_input_limits_fail_before_analysis(tmp_path, limit):
     (tmp_path / "a.py").write_text("pass\n")
@@ -104,8 +127,19 @@ def test_worker_main_reports_fixed_error_codes(tmp_path, monkeypatch):
     monkeypatch.setattr(worker, "set_resource_limits", lambda: None)
     for failure, expected in [(worker.InputLimitError("secret"), 3), (RuntimeError("secret"), 2)]:
         monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(b'{"repositoryUrl":"https://github.com/a/b"}')))
-        with patch.object(worker, "analyze_public_repository", side_effect=failure):
+        with patch.object(worker, "analyze_public_repository_with_sources", side_effect=failure):
             assert worker.main() == expected
+
+
+def test_private_evidence_artifact_uses_opaque_file_names(tmp_path):
+    sources = {"package/secret_name.py": b"def run():\n    return 1\n"}
+    worker.write_evidence(sources, "a" * 40, tmp_path / "evidence")
+    manifest = json.loads((tmp_path / "evidence/manifest.json").read_text(encoding="utf-8"))
+    assert manifest == {"commit_sha": "a" * 40, "files": [
+        {"path": "package/secret_name.py", "name": "0000.source", "size": len(sources["package/secret_name.py"])}
+    ]}
+    assert (tmp_path / "evidence/0000.source").read_bytes() == sources["package/secret_name.py"]
+    assert not (tmp_path / "evidence/package").exists()
 
 
 @pytest.mark.skipif(sys.platform.startswith("linux"), reason="non-Linux guard")

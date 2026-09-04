@@ -16,6 +16,7 @@ from deep_quota import initialize
 
 TOKEN = "test-only-not-a-production-secret-123456"
 HEADERS = {"Authorization": f"Bearer {TOKEN}", "X-Archaeologist-Client-Key": "a" * 64}
+PIN = "c" * 40
 @pytest.fixture(autouse=True)
 def quota_storage(tmp_path, monkeypatch):
     path = tmp_path / "quota.sqlite3"
@@ -25,7 +26,12 @@ def quota_storage(tmp_path, monkeypatch):
 
 
 URL = "https://github.com/example/project"
-GRAPH = {"schema_version": "1.1", "analysis": {"tier": "deep"}, "nodes": [], "edges": []}
+GRAPH = {"schema_version": "1.1", "analysis": {"tier": "deep"}, "snapshot": {"commit_sha": PIN}, "nodes": [], "edges": []}
+
+
+def job_result(graph=GRAPH, sources=None):
+    payload = json.dumps(graph).encode()
+    return service.JobResult(payload, graph, {} if sources is None else sources, PIN)
 
 
 @pytest.mark.parametrize("token", ["", "short", "x" * 32 + " ", "é" * 40])
@@ -40,6 +46,7 @@ def test_health_only_and_auth_before_any_job():
         assert client.get("/health").status_code == 200
         assert client.get("/docs").status_code == 404
         assert client.post("/api/interpret", json={}).status_code == 404
+        assert client.post("/api/evidence/prepare", json={}).status_code == 401
         assert client.post("/api/analyze", json={"repositoryUrl": URL}).status_code == 401
         assert client.post("/api/analyze", headers={"Authorization": "Bearer wrong"}, content=b"{" * 3000).status_code == 401
         job.assert_not_called()
@@ -63,12 +70,41 @@ def test_success_and_safe_failures_release_slot():
             assert response.status_code == status
             assert "private-secret" not in response.text
         job.side_effect = None
-        job.return_value = payload
+        job.return_value = job_result()
         response = client.post("/api/analyze", headers=HEADERS, json={"repositoryUrl": URL + ".git"})
         assert response.status_code == 200
         assert response.json() == GRAPH
         assert response.headers["cache-control"] == "no-store"
+        assert len(response.headers["x-archaeologist-report-id"]) == 43
+        assert response.headers["x-archaeologist-report-ttl"] == "900"
         job.assert_awaited_with(URL)
+
+
+def test_prepare_uses_only_server_retained_evidence_and_owner_binding():
+    from evidence_store import EvidenceSnapshotStore
+    from test_interpretation_evidence import NODE, PIN as EVIDENCE_PIN, report
+
+    store = EvidenceSnapshotStore()
+    graph = report()
+    ref = store.register_trusted_snapshot(
+        owner_key="a" * 64, graph=graph,
+        source_files={"example.py": b"def run():\n    pass\n"}, commit_sha=EVIDENCE_PIN,
+    )
+    client = TestClient(service.create_app(TOKEN, evidence_store=store))
+    response = client.post("/api/evidence/prepare", headers=HEADERS,
+                           json={"reportId": ref.report_id, "nodeId": NODE})
+    assert response.status_code == 200
+    assert response.json()["sourceExcerpt"] == "def run():\n    pass"
+    assert response.json()["evidencePacket"]["node_id"] == NODE
+    assert response.json()["commitSha"] == EVIDENCE_PIN
+
+    wrong_owner = {**HEADERS, "X-Archaeologist-Client-Key": "b" * 64}
+    assert client.post("/api/evidence/prepare", headers=wrong_owner,
+                       json={"reportId": ref.report_id, "nodeId": NODE}).status_code == 404
+    assert client.post("/api/evidence/prepare", headers=HEADERS, json={
+        "reportId": ref.report_id, "nodeId": NODE,
+        "sourceExcerpt": "browser supplied", "evidencePacket": {},
+    }).status_code == 400
 
 
 def test_concurrent_request_is_rejected_without_queueing():
@@ -77,7 +113,7 @@ def test_concurrent_request_is_rejected_without_queueing():
         async def job(_):
             started.set()
             await release.wait()
-            return json.dumps(GRAPH).encode()
+            return job_result()
         app = service.create_app(TOKEN)
         with patch.object(service, "run_job", side_effect=job):
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
@@ -120,7 +156,7 @@ def test_disconnect_cancels_job_and_frees_slot():
             await asyncio.wait_for(app(scope, receive, send), 3)
         assert cleaned.is_set()
         assert next(m["status"] for m in sent if m["type"] == "http.response.start") == 499
-        with patch.object(service, "run_job", return_value=json.dumps(GRAPH).encode()):
+        with patch.object(service, "run_job", return_value=job_result()):
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
                 assert (await client.post("/api/analyze", headers=HEADERS, json={"repositoryUrl": URL})).status_code == 200
     asyncio.run(scenario())
@@ -141,6 +177,9 @@ def test_job_lifecycle_reaps_process_and_removes_directory(tmp_path, monkeypatch
             assert "ARCHAEOLOGIST_SERVICE_TOKEN" not in kwargs["env"]
             directories.append(Path(kwargs["cwd"]))
             (directories[-1] / "result.json").write_bytes(b"null" if mode == "invalid" else json.dumps(GRAPH).encode())
+            evidence = directories[-1] / "evidence"
+            evidence.mkdir()
+            (evidence / "manifest.json").write_text(json.dumps({"commit_sha": PIN, "files": []}))
             return process
         monkeypatch.setattr(service, "sys", SimpleNamespace(platform="linux", executable=sys.executable))
         monkeypatch.setattr(service, "JOB_TIMEOUT_SECONDS", 0.03)
@@ -157,7 +196,7 @@ def test_job_lifecycle_reaps_process_and_removes_directory(tmp_path, monkeypatch
                     await task
                 assert error.value.status == status
             else:
-                assert json.loads(await task) == GRAPH
+                assert (await task).graph == GRAPH
             cleanup.assert_awaited_once_with(process)
         assert directories and all(not path.exists() for path in directories)
     asyncio.run(scenario())
@@ -238,7 +277,7 @@ def test_real_linux_timeout_stops_git_like_descendant(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("endpoint", ["/api/analyze", "/api/analyze/quota-v1"])
 def test_quota_denial_precedes_job_and_survives_app_recreation(endpoint):
-    with patch.object(service, "run_job", new_callable=AsyncMock, return_value=json.dumps(GRAPH).encode()) as job:
+    with patch.object(service, "run_job", new_callable=AsyncMock, return_value=job_result()) as job:
         for _ in range(3):
             assert TestClient(service.create_app(TOKEN)).post(endpoint, headers=HEADERS, json={"repositoryUrl": URL}).status_code == 200
         denied = TestClient(service.create_app(TOKEN)).post(endpoint, headers=HEADERS, json={"repositoryUrl": URL})

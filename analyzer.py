@@ -9,6 +9,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Any, NamedTuple
+from project_discovery import discover_project
 
 from repository_loader import (
     RepositoryLoadError,
@@ -47,9 +48,26 @@ MAX_FLOW_CANDIDATES = 500
 LARGE_SYMBOL_LINES = 80
 HIGH_SYMBOL_FAN_IN = 8
 HIGH_SYMBOL_FAN_OUT = 8
+MAX_TEST_PROXIMITY_LINKS = 1000
+MAX_TEST_PROXIMITY_BYTES = 256 * 1024
 FASTAPI_ROUTE_METHODS = {
     "get", "post", "put", "patch", "delete", "options", "head", "websocket"
 }
+
+
+def is_test_path(path: str) -> bool:
+    """Common Python test layout heuristic, not collection or coverage proof.
+
+    Paths are repository-relative POSIX paths. Custom runner configuration is
+    not interpreted; conftest and helpers in test directories count as test code.
+    """
+    parts = path.split("/")
+    name = parts[-1]
+    return name.endswith(".py") and (
+        any(part in {"test", "tests"} for part in parts[:-1])
+        or name.startswith("test_") or name.endswith("_test.py")
+        or name in {"tests.py", "conftest.py"}
+    )
 
 
 def find_python_files(repo_root: Path) -> list[Path]:
@@ -1030,13 +1048,14 @@ def extract_symbol_relationship_edges(
 
             if isinstance(ast_node, ast.ClassDef):
                 for base in ast_node.bases:
-                    expression = dotted_expression(base)
+                    parameterized = isinstance(base, ast.Subscript)
+                    expression = dotted_expression(base.value if parameterized else base)
                     if not expression:
                         continue
                     target, method, confidence = exact_symbol_target(
                         expression, source_symbol, bindings, qualified_index
                     )
-                    if target is None:
+                    if target is None and not parameterized:
                         matches = [
                             item for item in simple_index.get(expression.rsplit(".", 1)[-1], [])
                             if item["kind"] == "class"
@@ -1045,6 +1064,12 @@ def extract_symbol_relationship_edges(
                             target, method, confidence = matches[0], "repo-unique-class-name", 0.7
                     if target is None or target["id"] == source_symbol["id"]:
                         continue
+                    if parameterized:
+                        if target["kind"] != "class":
+                            continue
+                        # __class_getitem__/__mro_entries__ can change the runtime
+                        # base. Preserve a qualified candidate, not a proven MRO.
+                        method, confidence = "ast-parameterized-base-candidate", min(confidence, 0.85)
                     edges.append(
                         {
                             "id": f"extends:{source_symbol['id']}->{target['id']}:{base.lineno}",
@@ -1389,6 +1414,55 @@ def import_cycle_components(
     return sorted(components, key=lambda component: component[0])
 
 
+def build_test_proximity(file_nodes, symbol_nodes, import_edges, relationship_edges) -> dict[str, Any]:
+    """Index existing evidence only; never traverse calls or infer test coverage."""
+    files = {node["id"]: node for node in file_nodes}
+    symbols = {node["id"]: node for node in symbol_nodes}
+    links = []
+    candidates = 0
+    used_bytes = 0
+    for signal, index, edges, kind in (
+        ("symbol-call", symbols, relationship_edges, "calls"),
+        ("module-import", files, import_edges, "imports"),
+    ):
+        for edge in sorted(edges, key=lambda item: item["id"]):
+            source, target = index.get(edge["source"]), index.get(edge["target"])
+            if edge["kind"] != kind or source is None or target is None:
+                continue
+            if not is_test_path(source["path"]) or is_test_path(target["path"]):
+                continue
+            # Low-confidence candidate targets are not promoted to direct links.
+            confidence = float(edge.get("confidence", 0))
+            if confidence < 0.9:
+                continue
+            candidates += 1
+            link = {
+                "signal": signal, "source_node_id": source["id"],
+                "target_node_id": target["id"], "edge_id": edge["id"],
+                "classification": "heuristic", "confidence": min(0.6, confidence),
+            }
+            size = len(json.dumps(link, ensure_ascii=False).encode("utf-8"))
+            if len(links) >= MAX_TEST_PROXIMITY_LINKS or used_bytes + size > MAX_TEST_PROXIMITY_BYTES:
+                continue
+            links.append(link)
+            used_bytes += size
+    return {
+        "version": "1", "scope": "recorded-direct-edges",
+        "test_files_identified": sum(is_test_path(node["path"]) for node in file_nodes),
+        "candidate_links": candidates, "links_truncated": candidates > len(links),
+        "links": links,
+        "provenance": "Common Python test-path heuristics combined with recorded calls/imports; source locations are retained on referenced edges.",
+        "limitations": [
+            "Test paths include helpers and fixtures; test collection and custom runner configuration are not evaluated.",
+            "Recorded calls and module imports do not prove execution, assertions, passing tests, or coverage of a symbol.",
+            "Module imports are file-level evidence, not evidence for every symbol in that module.",
+            "Only existing calls/imports with confidence at least 0.9 are indexed; candidate dispatch and transitive paths are excluded.",
+            "Absent links do not mean untested code. Parse failures, source/file limits and unresolved relationships can hide evidence.",
+            "Confidence is a fixed heuristic score, not a calibrated probability or a coverage percentage.",
+        ],
+    }
+
+
 def detect_risk_findings(
     file_nodes: list[dict[str, Any]],
     symbol_nodes: list[dict[str, Any]],
@@ -1398,14 +1472,25 @@ def detect_risk_findings(
     """Produce bounded, evidence-backed structural risk heuristics."""
     findings: list[dict[str, Any]] = []
     file_index = {node["id"]: node for node in file_nodes}
-    incoming_counts: dict[str, int] = {}
-    outgoing_counts: dict[str, int] = {}
+    symbol_index = {node["id"]: node for node in symbol_nodes}
+    incoming_callers: dict[str, set[str]] = {}
+    outgoing_collaborators: dict[str, set[str]] = {}
     structural_kinds = {"calls", "depends-on", "may-dispatch-to", "reads", "writes"}
     for edge in relationship_edges:
         if edge["kind"] not in structural_kinds:
             continue
-        outgoing_counts[edge["source"]] = outgoing_counts.get(edge["source"], 0) + 1
-        incoming_counts[edge["target"]] = incoming_counts.get(edge["target"], 0) + 1
+        source = symbol_index.get(edge["source"])
+        target = symbol_index.get(edge["target"])
+        if source is None or target is None:
+            continue
+        source_test = is_test_path(source["path"])
+        target_test = is_test_path(target["path"])
+        # Keep every edge in the report. Only hotspot scoring is deduplicated
+        # and excludes test-only neighbors of production symbols.
+        if source_test or not target_test:
+            outgoing_collaborators.setdefault(source["id"], set()).add(target["id"])
+        if target_test or not source_test:
+            incoming_callers.setdefault(target["id"], set()).add(source["id"])
 
     for symbol in sorted(symbol_nodes, key=lambda node: node["id"]):
         line_span = symbol["end_line"] - symbol["definition_line"] + 1
@@ -1434,23 +1519,24 @@ def detect_risk_findings(
                     "metrics": {"line_span": line_span, "threshold": LARGE_SYMBOL_LINES},
                 }
             )
-        fan_in = incoming_counts.get(symbol["id"], 0)
+        neighbor_scope = "repository" if is_test_path(symbol["path"]) else "non-test"
+        fan_in = len(incoming_callers.get(symbol["id"], set()))
         if fan_in >= HIGH_SYMBOL_FAN_IN:
             findings.append(
                 {
                     "id": f"risk:high-fan-in:{symbol['id']}",
                     "rule_id": "high-fan-in",
                     "node_id": symbol["id"],
-                    "related_node_ids": [],
+                    "related_node_ids": sorted(incoming_callers[symbol["id"]]),
                     "title": "Change-amplification hotspot",
                     "severity": "high" if fan_in >= HIGH_SYMBOL_FAN_IN * 2 else "medium",
                     "classification": "heuristic",
                     "confidence": 0.88,
                     "summary": (
-                        f"{symbol['qualified_name']} has {fan_in} incoming execution relationships; "
+                        f"{symbol['qualified_name']} has {fan_in} distinct {neighbor_scope} caller symbols in the recorded graph; "
                         "changes here may affect many callers."
                     ),
-                    "provenance": "Resolved symbol relationship graph",
+                    "provenance": "Distinct recorded caller symbols; production scoring excludes neighbors identified by common Python test-path heuristics; custom collection rules are not interpreted; candidate edges may contribute",
                     "evidence": {
                         "path": symbol["path"],
                         "line": symbol["definition_line"],
@@ -1460,23 +1546,23 @@ def detect_risk_findings(
                     "metrics": {"fan_in": fan_in, "threshold": HIGH_SYMBOL_FAN_IN},
                 }
             )
-        fan_out = outgoing_counts.get(symbol["id"], 0)
+        fan_out = len(outgoing_collaborators.get(symbol["id"], set()))
         if fan_out >= HIGH_SYMBOL_FAN_OUT:
             findings.append(
                 {
                     "id": f"risk:high-fan-out:{symbol['id']}",
                     "rule_id": "high-fan-out",
                     "node_id": symbol["id"],
-                    "related_node_ids": [],
+                    "related_node_ids": sorted(outgoing_collaborators[symbol["id"]]),
                     "title": "Coordination hotspot",
                     "severity": "high" if fan_out >= HIGH_SYMBOL_FAN_OUT * 2 else "medium",
                     "classification": "heuristic",
                     "confidence": 0.88,
                     "summary": (
-                        f"{symbol['qualified_name']} has {fan_out} outgoing execution relationships; "
+                        f"{symbol['qualified_name']} has {fan_out} distinct {neighbor_scope} collaborator symbols in the recorded graph; "
                         "it coordinates many collaborators and may carry several responsibilities."
                     ),
-                    "provenance": "Resolved symbol relationship graph",
+                    "provenance": "Distinct recorded collaborator symbols; production scoring excludes neighbors identified by common Python test-path heuristics; custom collection rules are not interpreted; candidate edges may contribute",
                     "evidence": {
                         "path": symbol["path"],
                         "line": symbol["definition_line"],
@@ -1643,7 +1729,7 @@ def detect_risk_findings(
 
 def evidence_layer(path: str) -> tuple[str, str, str]:
     """Return a bounded architectural role and interpretation for a source path."""
-    if path.startswith("tests/"):
+    if is_test_path(path):
         return (
             "test",
             "Verifies production behavior and records an expected outcome.",
@@ -1782,7 +1868,7 @@ def build_symbol_evidence_packets(
                 "classification": "fact",
                 "text": (
                     f"{len(symbol_outgoing)} outgoing and {len(symbol_incoming)} incoming execution or structural "
-                    "relationships were resolved."
+                    "relationships were recorded, including candidates where applicable."
                 ),
                 "confidence": 1.0,
                 "provenance": "Resolved relationship edge IDs in this evidence packet",
@@ -1796,11 +1882,13 @@ def build_symbol_evidence_packets(
             target = symbol_index.get(edge["target"])
             if target is None:
                 continue
+            candidate = edge["kind"] == "may-dispatch-to" or float(edge.get("confidence", 1.0)) < 0.9
+            relationship = f"{edge['kind'].replace('-', ' ')} {target['qualified_name']}."
             claims.append(
                 {
                     "id": f"claim:{symbol['id']}:edge:{edge['id']}",
-                    "classification": "fact" if edge["kind"] != "may-dispatch-to" else "heuristic",
-                    "text": f"{edge['kind'].replace('-', ' ').capitalize()} {target['qualified_name']}.",
+                    "classification": "heuristic" if candidate else "fact",
+                    "text": f"Candidate relationship: {relationship}" if candidate else relationship[0].upper() + relationship[1:],
                     "confidence": float(edge.get("confidence", 1.0)),
                     "provenance": (
                         f"{edge.get('resolution_method', 'static relationship')} at "
@@ -1884,7 +1972,7 @@ def detect_architecture_patterns(
     relationship_edges: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """Detect bounded architectural patterns while retaining their evidence."""
-    production_symbols = [node for node in symbol_nodes if not node["path"].startswith("tests/")]
+    production_symbols = [node for node in symbol_nodes if not is_test_path(node["path"])]
     node_index = {node["id"]: node for node in production_symbols}
     # Pattern claims describe production architecture. Keep test-only and
     # test-to-production relationships in the graph, but not in these claims.
@@ -2171,6 +2259,8 @@ def analyze_repository(repo_root: Path) -> dict[str, Any]:
     return {
         "schema_version": "1.1",
         "repo_root": str(repo_root),
+        "project_discovery": discover_project(repo_root),
+        "test_proximity": build_test_proximity(file_nodes, symbol_nodes, import_edges, relationship_edges),
         "python_files_total_found": total_files_found,
         "python_files_analyzed": len(python_files),
         "python_files_truncated": files_truncated,
