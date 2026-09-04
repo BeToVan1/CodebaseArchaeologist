@@ -134,6 +134,12 @@ export type ArchitecturePattern = {
   metrics: Record<string, number>;
 };
 export type Graph = {
+  test_proximity?: {
+    version: "1"; scope: "recorded-direct-edges";
+    test_files_identified: number; candidate_links: number; links_truncated: boolean;
+    provenance: string; limitations: string[];
+    links: { signal: "symbol-call" | "module-import"; source_node_id: string; target_node_id: string; edge_id: string; classification: "heuristic"; confidence: 0.6 }[];
+  };
   project_discovery?: {
     version: "1";
     scope: "root-pyproject-only";

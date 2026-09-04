@@ -304,6 +304,13 @@
 .project-details small { display: block; font-size: 14px; line-height: 1.5; margin-bottom: 10px; }
 .project-declarations > details, .project-source { border-top: 1px solid var(--line); }
 .project-details-trust { padding: 10px; background: #f2ecd9; border-radius: 6px; color: #51462b; }
+.test-evidence { margin: 20px 0; overflow-wrap: anywhere; }
+.test-evidence p, .test-evidence li { font-size: 16px; line-height: 1.5; margin: 10px 0; }
+.test-evidence summary, .test-evidence small { font-size: 14px; line-height: 1.5; }
+.test-evidence summary { cursor: pointer; padding: 12px 0; }
+.test-evidence article { padding: 12px 0; border-top: 1px solid var(--line); }
+.test-evidence button { width: 100%; min-height: 44px; padding: 10px; text-align: left; white-space: normal; overflow-wrap: anywhere; font-size: 14px; border: 1px solid var(--line); border-radius: 6px; background: #f3f6ef; color: #26362b; cursor: pointer; }
+.test-evidence button:focus-visible, .test-evidence summary:focus-visible { outline: 3px solid #64834b; outline-offset: 3px; }
 @media (max-width: 940px) { .graph-surface { height: 620px; } .detail { max-height: none; } }
 @media (max-width: 650px) { .graph-surface { height: 560px; } .flow-browser { display: block; } .flow-catalog { border-right: 0; border-bottom: 1px solid var(--line); } .flow-inspector, .risk-browser, .pattern-browser { padding: 20px; } .risk-list-heading, .pattern-list-heading, .remediation-panel > header, .remediation-panel > footer { display: block; } .risk-list-heading p, .pattern-list-heading p, .remediation-panel > header > strong, .remediation-panel > footer button { margin-top: 8px; } .risk-list, .pattern-list, .remediation-actions { grid-template-columns: 1fr; } }
 

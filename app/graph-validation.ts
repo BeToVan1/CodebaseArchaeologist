@@ -1,4 +1,5 @@
 import type { Graph, GraphEdge, EvidenceStatement, ExecutionFlow } from "./graph-types";
+import { validateTestProximity } from "./test-proximity.ts";
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -231,5 +232,6 @@ export function validateGraph(value: unknown): Graph {
       }
     }
   }
+  validateTestProximity(value.test_proximity, value as Graph);
   return value as Graph;
 }

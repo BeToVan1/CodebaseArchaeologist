@@ -19,6 +19,7 @@ import type { Graph, GraphNode, GraphEdge, EvidenceStatement, Claim, ExecutionFl
 import { isRecord, validateGraph } from "./graph-validation";
 import { canonicalGithubUrl, readReportFile, reportFilename, serializeReport } from "./graph-report";
 import { ProjectDetails } from "./project-details";
+import { TestEvidence } from "./test-evidence";
 
 import { changedFileSelection, explainFile, selectionMetadata, evidenceLocation, currentReportLabel, type Explanation, type ReportOrigin } from "./graph-presentation";
 type AIInterpretationSection = {
@@ -683,6 +684,7 @@ export default function Home() {
                 </button>)}
               </div> : <p className="no-symbols">{inventory ? "Symbols were not analyzed in inventory mode." : "No class or function definitions found."}</p>}
             </section>
+            {graph && <TestEvidence graph={graph} selected={selectedSymbol ?? selected} imported={reportOrigin === "imported"} onOpen={node => node.kind === "file" ? selectFileNode(node.id) : selectSymbolNode(node.id)} />}
             {selectedNodeFindings.length > 0 && <section className="node-risks">
               <div className="section-heading"><h3>Risk evidence</h3><span>{selectedNodeFindings.length}</span></div>
               {selectedNodeFindings.map((finding) => <article className={`node-risk ${finding.severity}`} key={finding.id}>
