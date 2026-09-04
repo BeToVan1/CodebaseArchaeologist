@@ -14,17 +14,16 @@ import "@xyflow/react/dist/style.css";
 import "./graph.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { inventoryStatus, inventoryUnavailable } from "./analysis-status";
+import { submitAnalysis, type AnalysisMode } from "./analysis-client";
 import type { Graph, GraphNode, GraphEdge, EvidenceStatement, Claim, ExecutionFlow, RiskFinding, ArchitecturePattern } from "./graph-types";
 import { isRecord, validateGraph } from "./graph-validation";
 import { canonicalGithubUrl, readReportFile, reportFilename, serializeReport } from "./graph-report";
+import { ProjectDetails } from "./project-details";
+import { TestEvidence } from "./test-evidence";
+import { isTestPath } from "./test-proximity";
+import { pathMatchesScope, revealedNodeSelection } from "./graph-presentation";
 
-type Explanation = {
-  summary: string;
-  role: string;
-  rationale: string;
-  claims: Claim[];
-  grounding?: { summary: EvidenceStatement; role: EvidenceStatement; rationale: EvidenceStatement };
-};
+import { changedFileSelection, explainFile, selectionMetadata, evidenceLocation, currentReportLabel, type Explanation, type ReportOrigin } from "./graph-presentation";
 type AIInterpretationSection = {
   text: string;
   classification: "interpretation";
@@ -48,7 +47,7 @@ const ANALYZER_API_URL = process.env.NEXT_PUBLIC_ANALYZER_API_URL ?? (process.en
 const LOCAL_INTERPRETATION_ENABLED = Boolean(ANALYZER_API_URL);
 
 const layerFor = (path: string) => {
-  if (path.startsWith("tests/")) return { key: "tests", label: "Tests", order: 0 };
+  if (isTestPath(path)) return { key: "tests", label: "Tests", order: 0 };
   if (path.includes("/entrypoints/") || path.endsWith("bootstrap.py") || path.endsWith("views.py")) return { key: "entrypoints", label: "Entry points", order: 1 };
   if (path.includes("/service_layer/")) return { key: "services", label: "Application", order: 2 };
   if (path.includes("/domain/")) return { key: "domain", label: "Domain", order: 3 };
@@ -73,12 +72,7 @@ function formatBytes(bytes: number | undefined) {
   return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
 }
 
-function symbolsIn(source: string | undefined) {
-  if (!source) return [];
-  return [...source.matchAll(/^(?:async\s+)?(?:class|def)\s+([A-Za-z_]\w*)/gm)].map((match) => match[1]).slice(0, 5);
-}
-
-function explainNode(node: GraphNode, incoming: GraphEdge[], outgoing: GraphEdge[], inventory = false): Explanation {
+function explainNode(node: GraphNode, incoming: GraphEdge[], outgoing: GraphEdge[], inventory = false, symbols: GraphNode[] = []): Explanation {
   if (inventory) return {
     summary: node.source_error ? "The snapshot lists this Python file, but its source could not be read." : `The snapshot lists this Python file. ${node.source_truncated ? "Only a bounded source excerpt is available." : "Its source is available below."}`,
     role: "Execution behavior is not analyzed by the hosted inventory scanner.",
@@ -88,52 +82,7 @@ function explainNode(node: GraphNode, incoming: GraphEdge[], outgoing: GraphEdge
       { classification: "heuristic", text: `${outgoing.length} outgoing and ${incoming.length} incoming candidate import connections in this bounded inventory. These are not runtime or AST-verified dependencies.`, confidence: 0.75, provenance: "Lexical scan and snapshot module-path matching; not Python AST", evidence_refs: [...new Set([node.id, ...incoming.map((edge) => edge.id), ...outgoing.map((edge) => edge.id)])] },
     ],
   };
-  const layer = layerFor(node.path);
-  const symbols = symbolsIn(node.source);
-  const roles: Record<string, string> = {
-    entrypoints: "Boundary code that starts or receives an execution flow and delegates work inward.",
-    services: "Application orchestration that coordinates use cases across domain and infrastructure code.",
-    domain: "Core business behavior and vocabulary, kept separate from delivery and persistence concerns.",
-    adapters: "Infrastructure integration that translates between the application and external systems.",
-    tests: "Verification code that exercises production behavior and documents expected outcomes.",
-    support: "Supporting configuration or package setup used by multiple architectural layers.",
-  };
-  const rationales: Record<string, string> = {
-    entrypoints: "Keeping boundary concerns here prevents HTTP, messaging, or startup details from leaking into business rules.",
-    services: "A service layer provides one place to coordinate a use case without coupling domain objects to infrastructure.",
-    domain: "This placement suggests the project is protecting business logic from framework and database dependencies.",
-    adapters: "The adapter boundary makes external technology replaceable behind application-facing interfaces.",
-    tests: "The test hierarchy mirrors the type of confidence each test provides: unit, integration, or end-to-end.",
-    support: "Cross-cutting setup is separated so feature modules can remain focused on their primary responsibility.",
-  };
-  const summary = symbols.length
-    ? `Defines ${symbols.join(", ")}${symbols.length === 5 ? ", and other symbols" : ""}.`
-    : node.source_error ? "The file could not be read, so behavior could not be determined." : "Contains package setup or module-level behavior with no top-level class or function definitions.";
-  return {
-    summary,
-    role: roles[layer.key],
-    rationale: rationales[layer.key],
-    claims: [
-      {
-        classification: "fact",
-        text: `${outgoing.length} internal import${outgoing.length === 1 ? "" : "s"} out; ${incoming.length} internal importer${incoming.length === 1 ? "" : "s"} in.`,
-        confidence: 1,
-        provenance: "Python AST import statements and resolved repository paths",
-      },
-      {
-        classification: "heuristic",
-        text: `Likely belongs to the ${layer.label.toLowerCase()} layer.`,
-        confidence: 0.9,
-        provenance: `Path convention: ${node.path}`,
-      },
-      {
-        classification: "interpretation",
-        text: rationales[layer.key],
-        confidence: 0.72,
-        provenance: "Layered Python architecture pattern inferred from path and dependency direction",
-      },
-    ],
-  };
+  return explainFile(node, symbols, incoming, outgoing, layerFor(node.path));
 }
 
 function explainSymbol(symbol: GraphNode, incoming: GraphEdge[], outgoing: GraphEdge[]): Explanation {
@@ -242,7 +191,7 @@ function primaryNodeId(graph: Graph) {
     degree.set(edge.target, (degree.get(edge.target) ?? 0) + 1);
   });
   return graph.nodes
-    .filter((node) => node.kind === "file" && !node.path.startsWith("tests/"))
+    .filter((node) => node.kind === "file" && !isTestPath(node.path))
     .sort((a, b) => (degree.get(b.id) ?? 0) - (degree.get(a.id) ?? 0))[0]?.id
     ?? graph.nodes[0]?.id
     ?? null;
@@ -260,11 +209,15 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [submittedUrl, setSubmittedUrl] = useState("https://github.com/cosmicpython/code");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisMode, setAnalysisMode] = useState<AnalysisMode>(ANALYZER_API_URL ? "local" : "inventory");
+  const [deepAvailable, setDeepAvailable] = useState(false);
+  const analysisController = useRef<AbortController | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [aiInterpretation, setAIInterpretation] = useState<AIInterpretation | null>(null);
   const [isInterpreting, setIsInterpreting] = useState(false);
   const [interpretationError, setInterpretationError] = useState<string | null>(null);
   const [importedReport, setImportedReport] = useState<string | null>(null);
+  const [reportOrigin, setReportOrigin] = useState<ReportOrigin>("example");
   const [isLoadingReport, setIsLoadingReport] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
   const graphRequest = useRef(0);
@@ -272,13 +225,14 @@ export default function Home() {
   const reportInput = useRef<HTMLInputElement>(null);
   const isBusy = isAnalyzing || isLoadingReport;
 
-  function installGraph(validated: Graph, reportName: string | null = null) {
+  function installGraph(validated: Graph, reportName: string | null = null, origin: ReportOrigin = "analysis") {
     interpretationRequest.current++;
     setAIInterpretation(null);
     setInterpretationError(null);
     setIsInterpreting(false);
     setGraph(validated);
     setImportedReport(reportName);
+    setReportOrigin(reportName ? "imported" : origin);
     setError(null);
     setAnalysisError(null);
     setReportError(null);
@@ -299,7 +253,7 @@ export default function Home() {
       const response = await fetch("/graph.json");
       if (!response.ok) throw new Error(`Example request failed (${response.status})`);
       const validated = validateGraph(await response.json());
-      if (requestId === graphRequest.current) installGraph(validated);
+      if (requestId === graphRequest.current) installGraph(validated, null, "example");
     } catch (cause) {
       if (requestId === graphRequest.current) {
         const message = cause instanceof Error ? cause.message : "Could not load the example report.";
@@ -313,7 +267,10 @@ export default function Home() {
 
   useEffect(() => {
     void loadExample();
-    return () => { graphRequest.current++; interpretationRequest.current++; };
+    const controller = new AbortController();
+    void fetch("/api/analysis-capabilities", { signal: controller.signal })
+      .then(async (response) => { if (response.ok) setDeepAvailable((await response.json()).deep === true); }).catch(() => {});
+    return () => { graphRequest.current++; interpretationRequest.current++; controller.abort(); analysisController.current?.abort(); };
   }, []);
 
   async function openReport(file: File) {
@@ -357,22 +314,17 @@ export default function Home() {
     const requestId = ++graphRequest.current;
     setIsAnalyzing(true);
     setAnalysisError(null);
+    const controller = new AbortController();
+    analysisController.current = controller;
+    const timer = setTimeout(() => controller.abort(new DOMException("Analysis timed out", "TimeoutError")), 90_000);
     try {
-      const response = await fetch(`${ANALYZER_API_URL}/api/analyze`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ repositoryUrl: submittedUrl }),
-      });
-      const data: unknown = await response.json();
-      if (!response.ok) {
-        const detail = isRecord(data) && typeof data.detail === "string" ? data.detail : `Analysis failed (${response.status})`;
-        throw new Error(detail);
-      }
-      const validated = validateGraph(data);
+      const validated = await submitAnalysis(analysisMode, submittedUrl, ANALYZER_API_URL, controller.signal);
       if (requestId === graphRequest.current) installGraph(validated);
     } catch (cause: unknown) {
       if (requestId === graphRequest.current) setAnalysisError(cause instanceof Error ? cause.message : "Repository analysis failed");
     } finally {
+      clearTimeout(timer);
+      if (analysisController.current === controller) analysisController.current = null;
       if (requestId === graphRequest.current) setIsAnalyzing(false);
     }
   }
@@ -380,8 +332,7 @@ export default function Home() {
   const visibleGraphNodes = useMemo(
     () => graph?.nodes.filter((node) =>
       node.kind === "file"
-      && (scope === "all" || !node.path.startsWith("tests/"))
-      && node.path.toLowerCase().includes(query.toLowerCase()),
+      && pathMatchesScope(node.path, scope, query),
     ) ?? [],
     [graph, query, scope],
   );
@@ -389,7 +340,10 @@ export default function Home() {
   const positions = useMemo(() => layeredPositions(visibleGraphNodes), [visibleGraphNodes]);
 
   useEffect(() => {
-    if (selectedId && !visibleIds.has(selectedId)) setSelectedId(visibleGraphNodes[0]?.id ?? null);
+    if (selectedId && !visibleIds.has(selectedId)) {
+      setSelectedId(visibleGraphNodes[0]?.id ?? null);
+      setSelectedSymbolId(null);
+    }
   }, [selectedId, visibleGraphNodes, visibleIds]);
   const flowNodes = useMemo<Node[]>(
     () => visibleGraphNodes.map((node, index) => ({
@@ -399,6 +353,7 @@ export default function Home() {
       targetPosition: Position.Left,
       data: { label: <div className="node-label"><strong>{filename(node.path)}</strong><small>{folder(node.path)}</small></div>, path: node.path },
       className: selectedId === node.id ? "flow-node selected" : "flow-node",
+      selected: selectedId === node.id,
       ariaLabel: `Open ${node.path}`,
     })),
     [positions, selectedId, visibleGraphNodes],
@@ -429,16 +384,20 @@ export default function Home() {
   const inventory = graph?.analysis?.tier === "inventory";
   const coverageStatus = inventoryStatus(graph?.coverage);
   const unavailable = inventory && mapMode !== "architecture" ? inventoryUnavailable(mapMode) : null;
-  const explanation = selectedSymbol ? explainSymbol(selectedSymbol, symbolIncoming, symbolOutgoing) : selected ? explainNode(selected, incoming, outgoing, inventory) : null;
+  const explanation = selectedSymbol ? explainSymbol(selectedSymbol, symbolIncoming, symbolOutgoing) : selected ? explainNode(selected, incoming, outgoing, inventory, symbolsForSelected) : null;
+  const metadata = selected ? selectionMetadata(selected, selectedSymbol) : null;
   const nodePath = (id: string) => graph?.nodes.find((node) => node.id === id)?.path ?? id;
   const nodeName = (id: string) => graph?.nodes.find((node) => node.id === id)?.qualified_name ?? nodePath(id);
-  const selectFileNode = (id: string) => { setSelectedId(id); setSelectedSymbolId(null); };
-  const selectSymbolNode = (id: string) => {
-    const symbol = graph?.nodes.find((node) => node.id === id && node.kind !== "file");
-    if (!symbol) return;
-    setSelectedId(`file:${symbol.path}`);
-    setSelectedSymbolId(id);
+  const revealNode = (id: string) => {
+    const selection = revealedNodeSelection(graph?.nodes ?? [], id, scope, query);
+    if (!selection) return;
+    setScope(selection.scope);
+    setQuery(selection.query);
+    setSelectedId(selection.fileId);
+    setSelectedSymbolId(selection.symbolId);
   };
+  const selectFileNode = revealNode;
+  const selectSymbolNode = revealNode;
   const relationshipLabel = (edge: GraphEdge) => `${edge.kind.replaceAll("-", " ")} · ${Math.round((edge.confidence ?? 1) * 100)}%`;
   const flows = graph?.flows ?? [];
   const selectedFlow = flows.find((flow) => flow.id === selectedFlowId) ?? flows[0] ?? null;
@@ -446,8 +405,7 @@ export default function Home() {
   const allFindings = graph?.findings ?? [];
   const patterns = graph?.patterns ?? [];
   const findings = allFindings.filter((finding) =>
-    (scope === "all" || !finding.evidence.path.startsWith("tests/"))
-    && finding.evidence.path.toLowerCase().includes(query.toLowerCase()),
+    pathMatchesScope(finding.evidence.path, scope, query),
   );
   const selectedRisk = findings.find((finding) => finding.id === selectedRiskId) ?? findings[0] ?? null;
   const selectRisk = (finding: RiskFinding) => {
@@ -539,15 +497,27 @@ export default function Home() {
       </header>
 
       <section className="workspace">
-        <aside className="rail">
+        <aside className="rail" aria-label="Repository controls" tabIndex={0}>
           <div className="eyebrow">Repository</div><h1>Dependency map</h1>
           <p className="rail-copy">Explore files, source, and internal imports from the analyzed repository.</p>
+          <section className="current-report" aria-label="Current report"><strong>{graph ? currentReportLabel(reportOrigin, graph.analysis?.tier ?? "unknown") : "No report loaded"}</strong>{graph && <p>{repositoryName}</p>}<small>The controls below configure the next analysis; they do not change the current report.</small></section>
           <form className="repository-form" onSubmit={analyzeSubmittedRepository}>
             <label htmlFor="repository-url">Public GitHub URL</label>
             <input id="repository-url" type="url" value={submittedUrl} onChange={(event) => setSubmittedUrl(event.target.value)} required pattern="https://github\.com/.+/.+" disabled={isBusy} />
+            <label htmlFor="analysis-mode">Next analysis mode</label>
+            <select id="analysis-mode" value={analysisMode} disabled={isBusy} onChange={(event) => setAnalysisMode(event.target.value as AnalysisMode)}>
+              <option value="inventory">Inventory · files and candidate imports</option>
+              <option value="deep" disabled={!deepAvailable}>Deep analysis{deepAvailable ? " · symbols, flows and risks" : " · not configured"}</option>
+              {ANALYZER_API_URL && <option value="local">Local Python analyzer</option>}
+            </select>
             <button type="submit" disabled={isBusy}>{isAnalyzing ? "Analyzing…" : "Analyze repository"}</button>
-            <small>{ANALYZER_API_URL ? "Full analyzer service" : "Hosted inventory"} · public Python repositories only</small>
-            {analysisError && <p className="analysis-error" role="alert">{analysisError}</p>}
+            {isAnalyzing && <button type="button" onClick={() => {
+              analysisController.current?.abort(); graphRequest.current++; setIsAnalyzing(false);
+              setAnalysisError("Analysis cancelled. Your current map is unchanged.");
+            }}>Cancel analysis</button>}
+            <small>{analysisMode === "deep" ? "Bounded Python AST analysis · no repository code is executed. 3 attempts per network / 10 minutes; 30 total / hour. Failed attempts count. No automatic fallback." : analysisMode === "local" ? "Local Python analyzer" : "Inventory only: symbols, flows, patterns and risks are not analyzed."} Public Python repositories only.</small>
+            {!deepAvailable && <small>Hosted deep analysis is not configured. Inventory and local reports remain available.</small>}
+            {analysisError && <p className="analysis-error" role="alert">{analysisError}{graph && " Your existing map has not been replaced."}</p>}
           </form>
           <section className="report-controls" aria-label="Portable analysis reports">
             <strong>Analysis reports</strong>
@@ -565,6 +535,7 @@ export default function Home() {
           </section>
           {importedReport && <div className="analysis-tier-notice imported-report" role="status"><strong>Imported report · {graph?.analysis?.tier}</strong><p>{importedReport}</p><small>Claims and commit metadata are supplied by this file, not independently verified by this site. AI requests are disabled for imported reports. Reloading clears the imported report.</small><details><summary>Reported analysis limitations</summary><ul>{graph?.analysis?.limitations.map((message, index) => <li key={index}>{message}</li>)}</ul></details></div>}
           {graph && <div className="origin"><span>{repositorySource === "github" ? "Pinned GitHub snapshot" : "Local directory"}</span>{pinnedRepositoryUrl ? <a href={pinnedRepositoryUrl} target="_blank" rel="noreferrer">{commitSha ? `${commitSha.slice(0, 12)} ↗` : "Open repository ↗"}</a> : <strong>{repositoryName}</strong>}</div>}
+          <ProjectDetails graph={graph} imported={reportOrigin === "imported"} />
           {inventory && <div className="analysis-tier-notice" role="status"><strong>{coverageStatus.partial ? "Partial inventory" : "Inventory analysis"}</strong><p>{coverageStatus.summary}</p><small>Import edges are heuristics. Symbols, flows, patterns, and risks were not analyzed.</small><details><summary>Coverage and limitations</summary><ul>{[...coverageStatus.warnings, ...(graph?.analysis?.limitations ?? [])].map((message) => <li key={message}>{message}</li>)}</ul></details></div>}
           <label className="search"><span aria-hidden="true">⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter files" aria-label="Filter files" /></label>
           <div className="scope-switch" aria-label="Graph scope">
@@ -584,6 +555,10 @@ export default function Home() {
         </aside>
 
         <section className="canvas" aria-label="Repository dependency graph">
+          {graph && reportOrigin === "example" && <section className="example-report-banner" aria-label="Example report" role="status">
+            <strong>Example report · Cosmic Python</strong>
+            <p>You’re exploring the preloaded cosmicpython/code example, not a repository you submitted. Enter your GitHub URL and choose Analyze repository to create your own map.</p>
+          </section>}
           <div className="canvas-head"><div><div className="eyebrow">{canvasCopy[0]}</div><h2>{canvasCopy[1]}</h2><p className="relationship-help">{canvasCopy[2]}</p></div>{unavailable ? <div className="risk-summary">Not analyzed</div> : mapMode === "architecture" ? <div className="legend"><span /> Selected <i /> {inventory ? "Candidate imports →" : "Imports →"}</div> : mapMode === "flows" ? <div className="legend flow-legend"><span /> Proven <i /> Candidate</div> : mapMode === "patterns" ? <div className="pattern-summary"><strong>{factPatternCount}</strong> facts · <strong>{patterns.length - factPatternCount}</strong> heuristics</div> : <div className="risk-summary"><strong>{highRiskCount}</strong> high · <strong>{riskCount - highRiskCount}</strong> medium/low</div>}</div>
           {mapMode === "architecture" && <div className="layer-guide" aria-hidden="true">
             {(scope === "all" ? ["Tests"] : []).concat(["Entry points", "Application", "Domain", "Infrastructure", "Support"]).map((layer) => <span key={layer}>{layer}</span>)}
@@ -661,7 +636,7 @@ export default function Home() {
                       return <li key={`${selectedFlow.id}:${nodeId}:${index}`}>
                         {edge && <span className={`flow-edge-kind ${edge.kind === "may-dispatch-to" ? "candidate" : ["reads", "writes"].includes(edge.kind) ? "persistence" : ""}`}>{edge.kind.replaceAll("-", " ")} · {Math.round((edge.confidence ?? 1) * 100)}%</span>}
                         <button onClick={() => selectSymbolNode(nodeId)}>
-                          <strong>{nodeName(nodeId)}</strong><small>{nodePath(nodeId)}{edge?.evidence?.line ? ` · evidence line ${edge.evidence.line}` : ""}</small>
+                          <strong>{nodeName(nodeId)}</strong><small>Destination: {nodePath(nodeId)}</small>{edge && <small>Evidence: {evidenceLocation(edge)}</small>}
                         </button>
                       </li>;
                     })}
@@ -680,6 +655,10 @@ export default function Home() {
                 nodes={flowNodes}
                 edges={flowEdges}
                 onNodeClick={(_, node) => { setSelectedId(node.id); setSelectedSymbolId(null); }}
+                onNodesChange={(changes) => {
+                  const id = changedFileSelection(changes, visibleIds);
+                  if (id) selectFileNode(id);
+                }}
                 fitView
                 fitViewOptions={{ padding: 0.24 }}
                 minZoom={0.35}
@@ -696,12 +675,12 @@ export default function Home() {
           </div>
         </section>
 
-        <aside className="detail" aria-live="polite">
+        <aside className="detail" aria-label="Selected code details" aria-live="polite" tabIndex={0}>
           <div className="detail-top"><span className="pill">{selectedSymbol ? selectedSymbol.kind : "FILE"}</span><span className="connection-count">{selectedSymbol ? symbolIncoming.length + symbolOutgoing.length : incoming.length + outgoing.length} connections</span></div>
           {selected ? <>
             <div className="detail-icon">PY</div><h2>{filename(selected.path)}</h2><p className="full-path">{selected.path}</p>
             <div className="divider" />
-            <dl><div><dt>Kind</dt><dd>Python file</dd></div><div><dt>Size</dt><dd>{formatBytes(selected.size_bytes)}</dd></div><div><dt>Node ID</dt><dd><code>{selected.id}</code></dd></div><div><dt>Folder</dt><dd>{folder(selected.path)}</dd></div></dl>
+            <dl aria-label="Selected node metadata"><div><dt>Kind</dt><dd>{metadata?.kind}</dd></div>{selectedSymbol && <div><dt>Symbol</dt><dd>{metadata?.name}</dd></div>}{metadata?.range && <div><dt>Source lines</dt><dd>{metadata.range}</dd></div>}<div><dt>Node ID</dt><dd><code>{metadata?.id}</code></dd></div><div><dt>Containing file</dt><dd>{selected.path}</dd></div><div><dt>File size</dt><dd>{formatBytes(selected.size_bytes)}</dd></div><div><dt>Folder</dt><dd>{folder(selected.path)}</dd></div></dl>
             <section className="symbols-section">
               <div className="section-heading"><h3>Symbols</h3><span>{symbolsForSelected.length}</span></div>
               {symbolsForSelected.length ? <div className="symbol-list">
@@ -711,6 +690,7 @@ export default function Home() {
                 </button>)}
               </div> : <p className="no-symbols">{inventory ? "Symbols were not analyzed in inventory mode." : "No class or function definitions found."}</p>}
             </section>
+            {graph && <TestEvidence graph={graph} selected={selectedSymbol ?? selected} imported={reportOrigin === "imported"} onOpen={node => node.kind === "file" ? selectFileNode(node.id) : selectSymbolNode(node.id)} />}
             {selectedNodeFindings.length > 0 && <section className="node-risks">
               <div className="section-heading"><h3>Risk evidence</h3><span>{selectedNodeFindings.length}</span></div>
               {selectedNodeFindings.map((finding) => <article className={`node-risk ${finding.severity}`} key={finding.id}>

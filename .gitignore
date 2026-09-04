@@ -14,7 +14,9 @@ __pycache__/
 /.vinext/
 /out/
 /dist/
+/artifacts/
 /.wrangler/
+*.tsbuildinfo
 
 # local files
 .DS_Store

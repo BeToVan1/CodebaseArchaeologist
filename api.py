@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
@@ -41,6 +42,13 @@ app.add_middleware(
     allow_methods=["POST", "GET"],
     allow_headers=["Content-Type"],
 )
+
+# Local development only. Do not import or expose these routes in the normal
+# API or Oracle validation image unless explicitly enabled at process startup.
+if os.getenv("ARCHAEOLOGIST_LOCAL_EVIDENCE_ENABLED") == "true":
+    from local_evidence_api import create_local_evidence_app
+
+    app.mount("/api/evidence", create_local_evidence_app())
 
 
 @app.get("/health")
