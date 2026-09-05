@@ -15,6 +15,20 @@ export interface WorkersAI {
   run(model: string, input: Record<string, unknown>): Promise<unknown>;
 }
 
+export type InterpretationFailureCategory = "authentication" | "quota" | "request" | "availability" | "structured-output";
+export class InterpretationProviderFailure extends Error {
+  readonly category: InterpretationFailureCategory;
+  readonly providerStatus?: number;
+  constructor(category: InterpretationFailureCategory, providerStatus?: number) {
+    super(category === "structured-output"
+      ? "Workers AI returned an invalid or ungrounded interpretation."
+      : "Workers AI request failed.");
+    this.name = "InterpretationProviderFailure";
+    this.category = category;
+    this.providerStatus = providerStatus;
+  }
+}
+
 const sectionSchema = {
   type: "object", additionalProperties: false,
   properties: {
@@ -102,10 +116,13 @@ export class CloudflareWorkersAIProvider implements InterpretationProvider {
   private readonly ai: WorkersAI;
   constructor(ai: WorkersAI) { this.ai = ai; }
   async generate(packet: Record<string, unknown>, sourceExcerpt: string): Promise<GeneratedInterpretation> {
-    const result = await this.ai.run(WORKERS_AI_MODEL, inferenceInput(packet, sourceExcerpt));
-    if (!object(result) || !("response" in result))
-      throw new Error("Workers AI returned an invalid or ungrounded interpretation.");
-    return validateGeneratedInterpretation(result.response, packet);
+    const input = inferenceInput(packet, sourceExcerpt);
+    let result: unknown;
+    try { result = await this.ai.run(WORKERS_AI_MODEL, input); }
+    catch { throw new InterpretationProviderFailure("availability"); }
+    if (!object(result) || !("response" in result)) throw new InterpretationProviderFailure("structured-output");
+    try { return validateGeneratedInterpretation(result.response, packet); }
+    catch { throw new InterpretationProviderFailure("structured-output"); }
   }
 }
 
@@ -121,22 +138,31 @@ export class CloudflareWorkersAIRestProvider implements InterpretationProvider {
     this.fetcher = fetcher;
   }
   async generate(packet: Record<string, unknown>, sourceExcerpt: string, signal?: AbortSignal): Promise<GeneratedInterpretation> {
-    const response = await this.fetcher(this.endpoint, {
-      method: "POST", redirect: "manual", signal,
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.token}` },
-      body: JSON.stringify(inferenceInput(packet, sourceExcerpt)),
-    });
+    const input = inferenceInput(packet, sourceExcerpt);
+    let response: Response;
+    try {
+      response = await this.fetcher(this.endpoint, {
+        method: "POST", redirect: "manual", signal,
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.token}` },
+        body: JSON.stringify(input),
+      });
+    } catch { throw new InterpretationProviderFailure("availability"); }
     if (!response.ok) {
       await response.body?.cancel();
-      throw new Error("Workers AI REST request failed.");
+      const category: InterpretationFailureCategory = [401, 403].includes(response.status) ? "authentication"
+        : response.status === 429 ? "quota"
+        : [400, 404, 405, 422].includes(response.status) ? "request"
+        : "availability";
+      throw new InterpretationProviderFailure(category, response.status);
     }
     const text = await response.text();
     if (new TextEncoder().encode(text).length > 64 * 1024)
-      throw new Error("Workers AI returned an oversized response.");
+      throw new InterpretationProviderFailure("structured-output");
     let envelope: unknown;
-    try { envelope = JSON.parse(text); } catch { throw new Error("Workers AI returned an invalid response."); }
+    try { envelope = JSON.parse(text); } catch { throw new InterpretationProviderFailure("structured-output"); }
     if (!object(envelope) || envelope.success !== true || !object(envelope.result) || !("response" in envelope.result))
-      throw new Error("Workers AI returned an invalid response.");
-    return validateGeneratedInterpretation(envelope.result.response, packet);
+      throw new InterpretationProviderFailure("structured-output");
+    try { return validateGeneratedInterpretation(envelope.result.response, packet); }
+    catch { throw new InterpretationProviderFailure("structured-output"); }
   }
 }
