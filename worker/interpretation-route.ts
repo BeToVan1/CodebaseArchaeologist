@@ -1,7 +1,7 @@
 import { readBoundedBody } from "./github-analyzer.ts";
 import { networkKey } from "./deep-limits.ts";
 import { deepConfigured, withDeadline, type DeepEnv } from "./deep-proxy.ts";
-import { CloudflareWorkersAIProvider, CloudflareWorkersAIRestProvider, WORKERS_AI_MODEL, type WorkersAI } from "./interpretation-provider.ts";
+import { CloudflareWorkersAIProvider, CloudflareWorkersAIRestProvider, InterpretationProviderFailure, WORKERS_AI_MODEL, type WorkersAI } from "./interpretation-provider.ts";
 
 export const EVIDENCE_ENDPOINT = "https://codebase-archaeologist.duckdns.org/api/evidence/prepare";
 const REPORT_ID = /^[A-Za-z0-9_-]{43}$/;
@@ -120,10 +120,26 @@ export async function handleInterpretationRequest(
       structural_rationale: section(generated.structural_rationale),
       uncertainties: generated.uncertainties,
     }, { headers: { "Cache-Control": "no-store" } });
-  } catch {
+  } catch (error) {
     if (request.signal.aborted) return reply("Interpretation cancelled.", 499);
     if (signal.aborted) return reply("Interpretation timed out.", 504);
     if (phase === "input" && inputSignal?.aborted) return reply("Request body timed out.", 408);
+    if (phase === "provider" && error instanceof InterpretationProviderFailure) {
+      console.error(JSON.stringify({
+        event: "hosted_interpretation_failed",
+        category: error.category,
+        providerStatus: error.providerStatus ?? null,
+      }));
+      if (error.category === "authentication")
+        return reply("AI provider credentials were rejected; deterministic evidence is unchanged.", 503);
+      if (error.category === "quota")
+        return reply("The free AI allowance is currently unavailable; deterministic evidence is unchanged.", 429);
+      if (error.category === "request")
+        return reply("The AI provider rejected this model request; deterministic evidence is unchanged.", 502);
+      if (error.category === "structured-output")
+        return reply("AI returned an unusable grounded response; deterministic evidence is unchanged.", 502);
+      return reply("The AI provider is temporarily unavailable; deterministic evidence is unchanged.", 502);
+    }
     return reply(providerStarted
       ? "AI interpretation is temporarily unavailable; deterministic evidence is unchanged."
       : "Trusted interpretation evidence is invalid or unavailable.", providerStarted ? 502 : 503);

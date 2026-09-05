@@ -114,3 +114,45 @@ test("expired, malformed and model-invalid paths are sanitized without retries",
   assert.equal(ai.calls, 0);
   assert.ok(!(await response.text()).includes("unknown"));
 });
+
+test("REST failures expose only safe diagnostic categories and never retry", async () => {
+  const account = "a".repeat(32);
+  const restToken = "cloudflare-test-token-" + "x".repeat(32);
+  const env = environment({ AI: undefined, ARCHAEOLOGIST_CF_ACCOUNT_ID: account, ARCHAEOLOGIST_CF_AI_TOKEN: restToken });
+  for (const [providerStatus, expectedStatus, expectedDetail] of [
+    [401, 503, "credentials were rejected"],
+    [429, 429, "free AI allowance"],
+    [400, 502, "rejected this model request"],
+    [500, 502, "temporarily unavailable"],
+  ]) {
+    let calls = 0;
+    const response = await handleInterpretationRequest(request(), env, async () => prepared(), async () => {
+      calls++;
+      return new Response("private provider detail", { status: providerStatus });
+    });
+    const body = await response.text();
+    assert.equal(response.status, expectedStatus);
+    assert.match(body, new RegExp(expectedDetail));
+    assert.ok(!body.includes("private provider detail"));
+    assert.ok(!body.includes(restToken));
+    assert.equal(calls, 1);
+  }
+});
+
+test("malformed REST output is identified without exposing provider content", async () => {
+  const env = environment({
+    AI: undefined,
+    ARCHAEOLOGIST_CF_ACCOUNT_ID: "a".repeat(32),
+    ARCHAEOLOGIST_CF_AI_TOKEN: "cloudflare-test-token-" + "x".repeat(32),
+  });
+  let calls = 0;
+  const response = await handleInterpretationRequest(request(), env, async () => prepared(), async () => {
+    calls++;
+    return Response.json({ success: true, result: { response: { secret: "provider output" } } });
+  });
+  const body = await response.text();
+  assert.equal(response.status, 502);
+  assert.match(body, /unusable grounded response/);
+  assert.ok(!body.includes("provider output"));
+  assert.equal(calls, 1);
+});
