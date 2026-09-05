@@ -12,6 +12,7 @@ from pydantic import ValidationError
 from interpretation import EvidencePacket, GeneratedInterpretation, build_interpretation_input, known_evidence_refs
 
 WORKERS_AI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+MAX_PROVIDER_REQUEST_BYTES = 128 * 1024
 MAX_PROVIDER_RESPONSE_BYTES = 64 * 1024
 ACCOUNT_ID = re.compile(r"^[a-f0-9]{32}$")
 TOKEN = re.compile(r"^[\x21-\x7e]{32,256}$")
@@ -45,6 +46,14 @@ class WorkersAIConfig:
 
 def _request_body(packet: EvidencePacket, source_excerpt: str) -> dict:
     evidence = json.loads(build_interpretation_input(packet, source_excerpt))
+    schema = GeneratedInterpretation.model_json_schema()
+    schema["additionalProperties"] = False
+    section_schema = schema["$defs"]["GeneratedSection"]
+    section_schema["additionalProperties"] = False
+    section_schema["properties"]["evidence_refs"]["items"] = {
+        "type": "string",
+        "enum": sorted(known_evidence_refs(packet)),
+    }
     return {
         "messages": [
             {
@@ -57,7 +66,7 @@ def _request_body(packet: EvidencePacket, source_excerpt: str) -> dict:
             },
             {"role": "user", "content": json.dumps(evidence, sort_keys=True, ensure_ascii=False)},
         ],
-        "response_format": {"type": "json_schema", "json_schema": GeneratedInterpretation.model_json_schema()},
+        "response_format": {"type": "json_schema", "json_schema": schema},
         "max_tokens": 1024,
         "temperature": 0,
         "stream": False,
@@ -97,6 +106,11 @@ async def generate_workers_ai(
 ) -> dict:
     """Make one non-streaming provider request; never retry or expose provider output."""
     endpoint = f"https://api.cloudflare.com/client/v4/accounts/{config.account_id}/ai/run/{WORKERS_AI_MODEL}"
+    encoded_request = json.dumps(
+        _request_body(packet, source_excerpt), sort_keys=True, ensure_ascii=False,
+    ).encode("utf-8")
+    if len(encoded_request) > MAX_PROVIDER_REQUEST_BYTES:
+        raise WorkersAIError("request")
     own_client = client is None
     client = client or httpx.AsyncClient(timeout=httpx.Timeout(25), follow_redirects=False)
     try:
@@ -104,7 +118,7 @@ async def generate_workers_ai(
             async with client.stream(
                 "POST", endpoint,
                 headers={"Authorization": f"Bearer {config.token}", "Content-Type": "application/json"},
-                json=_request_body(packet, source_excerpt),
+                content=encoded_request,
             ) as response:
                 if response.status_code != 200:
                     category: FailureCategory = (
