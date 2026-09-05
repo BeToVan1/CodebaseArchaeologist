@@ -1,8 +1,10 @@
 """Offline tests for the pinned Workers AI bridge release; no host changes."""
 import hashlib
+import io
 import json
 from pathlib import Path
 import tarfile
+import urllib.error
 from unittest.mock import patch
 
 import test_upgrade_oracle_evidence_reference as previous_tests
@@ -55,20 +57,36 @@ class WorkersAIBridgeUpgradeTests(previous_tests.EvidenceReferenceUpgradeTests):
         graph = {'schema_version': '1.1'}
         response = json.dumps({'detail': 'AI interpretation is not configured.'}).encode()
         with patch.object(release.previous, 'real_analysis', return_value=graph) as analysis, \
-             patch.object(release.updater.common, 'request', return_value=(503, response)) as request:
+             patch.object(release, 'disabled_interpretation_response', return_value=(503, response)) as request:
             self.assertIs(release.real_analysis('private-token'), graph)
         analysis.assert_called_once_with('private-token')
-        request.assert_called_once()
-        self.assertEqual(request.call_args.args[1], '/api/interpret/quota-v1')
+        request.assert_called_once_with('private-token')
+
+    def test_disabled_check_retains_only_bounded_http_error_body(self):
+        body = json.dumps({'detail': 'AI interpretation is not configured.'}).encode()
+        error = urllib.error.HTTPError(
+            'https://fixed.invalid', 503, 'unavailable', {}, io.BytesIO(body))
+        with patch.object(release.updater.common.HTTP, 'open', side_effect=error) as opened:
+            self.assertEqual(release.disabled_interpretation_response('private-token'), (503, body))
+        request = opened.call_args.args[0]
+        self.assertEqual(request.full_url,
+            release.updater.common.BASE + '/api/interpret/quota-v1')
+        self.assertEqual(request.get_header('Authorization'), 'Bearer private-token')
+
+        oversized = urllib.error.HTTPError(
+            'https://fixed.invalid', 503, 'unavailable', {}, io.BytesIO(b'x' * 2049))
+        with patch.object(release.updater.common.HTTP, 'open', side_effect=oversized):
+            with self.assertRaisesRegex(release.updater.common.UpgradeError, 'output limit'):
+                release.disabled_interpretation_response('private-token')
 
     def test_enabled_or_malformed_route_response_stops_upgrade(self):
         with patch.object(release.previous, 'real_analysis', return_value={}), \
-             patch.object(release.updater.common, 'request', return_value=(200, b'not-json')):
+             patch.object(release, 'disabled_interpretation_response', return_value=(200, b'not-json')):
             with self.assertRaisesRegex(release.updater.common.UpgradeError, 'invalid JSON'):
                 release.real_analysis('private-token')
 
         enabled = json.dumps({'model': 'unexpected-live-call'}).encode()
         with patch.object(release.previous, 'real_analysis', return_value={}), \
-             patch.object(release.updater.common, 'request', return_value=(200, enabled)):
+             patch.object(release, 'disabled_interpretation_response', return_value=(200, enabled)):
             with self.assertRaisesRegex(release.updater.common.UpgradeError, 'fail-closed'):
                 release.real_analysis('private-token')
