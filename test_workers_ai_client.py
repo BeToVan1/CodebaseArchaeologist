@@ -78,13 +78,13 @@ def test_provider_status_is_safely_classified_without_retry(status, category):
     assert calls == 1
 
 
-@pytest.mark.parametrize("response", [
-    {"success": True, "result": {"response": generated("unknown")}},
-    {"success": True, "result": {"response": {**generated(), "extra": "private"}}},
-    {"success": True, "result": {"response": {**generated(), "what_it_does": {**generated()["what_it_does"], "extra": "private"}}}},
-    {"success": True, "result": {"response": {**generated(), "execution_role": {**generated()["execution_role"], "confidence": 1}}}},
+@pytest.mark.parametrize("response,reason", [
+    ({"success": True, "result": {"response": generated("unknown")}}, "unknown-evidence"),
+    ({"success": True, "result": {"response": {**generated(), "extra": "private"}}}, "response-shape"),
+    ({"success": True, "result": {"response": {**generated(), "what_it_does": {**generated()["what_it_does"], "extra": "private"}}}}, "response-shape"),
+    ({"success": True, "result": {"response": {**generated(), "execution_role": {**generated()["execution_role"], "confidence": 1}}}}, "schema-validation"),
 ])
-def test_invalid_or_ungrounded_output_is_rejected(response):
+def test_invalid_or_ungrounded_output_is_rejected(response, reason):
     async def handler(_request):
         return httpx.Response(200, json=response)
 
@@ -94,6 +94,34 @@ def test_invalid_or_ungrounded_output_is_rejected(response):
     with pytest.raises(WorkersAIError) as caught:
         asyncio.run(scenario())
     assert caught.value.category == "structured-output"
+    assert caught.value.structured_reason == reason
+
+
+@pytest.mark.parametrize("response,reason", [
+    ({"success": False, "result": {}}, "provider-envelope"),
+    ({"success": True, "result": {}}, "provider-result"),
+    ({"success": True, "result": {"response": "not-an-object"}}, "response-shape"),
+])
+def test_provider_envelope_failures_have_only_fixed_reason_codes(response, reason):
+    async def handler(_request):
+        return httpx.Response(200, json=response)
+    with pytest.raises(WorkersAIError) as caught:
+        run_with(handler)
+    assert caught.value.category == "structured-output"
+    assert caught.value.structured_reason == reason
+
+
+@pytest.mark.parametrize("content,reason", [
+    (b"not-json", "response-json"),
+    (b"x" * (64 * 1024 + 1), "response-size"),
+], ids=["invalid-json", "oversized"])
+def test_invalid_or_oversized_provider_body_has_fixed_reason(content, reason):
+    async def handler(_request):
+        return httpx.Response(200, content=content)
+    with pytest.raises(WorkersAIError) as caught:
+        run_with(handler)
+    assert caught.value.category == "structured-output"
+    assert caught.value.structured_reason == reason
 
 
 def test_config_requires_exact_safe_formats():
