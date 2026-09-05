@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import json
 import asyncio
+from unittest.mock import patch
 
 import httpx
 import pytest
 
 from test_interpretation import packet
+import workers_ai_client as provider
 from workers_ai_client import WORKERS_AI_MODEL, WorkersAIConfig, WorkersAIError, generate_workers_ai
 
 
@@ -46,6 +48,14 @@ def test_sends_one_bounded_json_mode_request_and_validates_grounding():
         assert body["temperature"] == 0
         assert body["max_tokens"] == 1024
         assert body["response_format"]["type"] == "json_schema"
+        schema = body["response_format"]["json_schema"]
+        assert schema["additionalProperties"] is False
+        assert schema["$defs"]["GeneratedSection"]["additionalProperties"] is False
+        allowed = schema["$defs"]["GeneratedSection"]["properties"]["evidence_refs"]["items"]["enum"]
+        assert allowed == sorted({
+            "claim:1", "edge:1", "flow:1",
+            "pattern:layered-architecture", "symbol:example.py:run",
+        })
         supplied = json.loads(body["messages"][1]["content"])
         assert supplied["evidence_packet"]["node_id"] == packet().node_id
         return httpx.Response(200, json={"success": True, "result": {"response": generated()}})
@@ -122,6 +132,16 @@ def test_invalid_or_oversized_provider_body_has_fixed_reason(content, reason):
         run_with(handler)
     assert caught.value.category == "structured-output"
     assert caught.value.structured_reason == reason
+
+
+def test_oversized_provider_request_fails_before_network():
+    async def handler(_request):
+        raise AssertionError("network must not be reached")
+    with patch.object(provider, "_request_body", return_value={"oversized": "x" * (128 * 1024)}):
+        with pytest.raises(WorkersAIError) as caught:
+            run_with(handler)
+    assert caught.value.category == "request"
+    assert caught.value.provider_status is None
 
 
 def test_config_requires_exact_safe_formats():
