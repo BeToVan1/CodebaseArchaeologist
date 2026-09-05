@@ -16,6 +16,8 @@ from starlette.requests import ClientDisconnect
 from deep_quota import CLIENT_KEY, QuotaUnavailable, reserve
 from evidence_store import EvidenceSnapshotStore, SnapshotCapacityError, SnapshotUnavailable
 from interpretation_evidence import EvidencePreparationError, MAX_SOURCE_FILE_BYTES
+from interpretation import EvidencePacket
+from workers_ai_client import WorkersAIConfig, WorkersAIError, generate_workers_ai
 
 from repository_loader import RepositoryLoadError, validate_github_url, public_git_environment
 
@@ -168,6 +170,12 @@ def create_app(token: str | None = None, quota_path: str | None = None,
     app = FastAPI(title="Private deep analysis service", docs_url=None, redoc_url=None, openapi_url=None)
     quota_path = quota_path if quota_path is not None else os.environ.get("ARCHAEOLOGIST_QUOTA_PATH", "")
     active = False
+    interpretation_active = False
+    interpretation_enabled = os.environ.get("ARCHAEOLOGIST_INTERPRETATION_ENABLED") == "true"
+    workers_ai = WorkersAIConfig.optional(
+        os.environ.get("ARCHAEOLOGIST_CF_ACCOUNT_ID", ""),
+        os.environ.get("ARCHAEOLOGIST_CF_AI_TOKEN", ""),
+    )
     # Match the three-per-hour admission allowance so an owner's third valid
     # analysis is not rejected solely because its first two references remain live.
     store = evidence_store or EvidenceSnapshotStore(max_per_owner=3)
@@ -292,5 +300,74 @@ def create_app(token: str | None = None, quota_path: str | None = None,
             "evidencePacket": prepared.packet.model_dump(mode="json"),
             "sourceExcerpt": prepared.source_excerpt,
         }
+
+    @app.post("/api/interpret/quota-v1")
+    async def interpret(request: Request):
+        nonlocal interpretation_active
+        owner_key = authorize(request)
+        if not interpretation_enabled or workers_ai is None:
+            raise HTTPException(503, "AI interpretation is not configured.")
+        if interpretation_active:
+            raise HTTPException(429, "The interpretation worker is busy. Retry shortly.", headers={"Retry-After": "5"})
+        payload = await read_bounded_json(request)
+        report_id = payload.get("reportId") if isinstance(payload, dict) else None
+        node_id = payload.get("nodeId") if isinstance(payload, dict) else None
+        if (not isinstance(payload, dict) or set(payload) != {"reportId", "nodeId"}
+                or not isinstance(report_id, str) or len(report_id) != 43
+                or not isinstance(node_id, str) or not node_id or len(node_id) > 1000):
+            raise HTTPException(400, "A valid reportId and nodeId are required.")
+        try:
+            prepared = store.prepare(owner_key=owner_key, report_id=report_id, node_id=node_id)
+        except SnapshotUnavailable as exc:
+            raise HTTPException(404, "Analysis evidence is unavailable; run a new analysis.") from exc
+        except EvidencePreparationError as exc:
+            raise HTTPException(422, "The selected symbol cannot be prepared from trusted evidence.") from exc
+
+        interpretation_active = True
+        task = asyncio.create_task(generate_workers_ai(
+            EvidencePacket.model_validate(prepared.packet.model_dump(mode="json")),
+            prepared.source_excerpt,
+            workers_ai,
+        ))
+        try:
+            while not task.done():
+                if await request.is_disconnected():
+                    task.cancel()
+                    raise ClientDisconnect()
+                await asyncio.wait({task}, timeout=0.2)
+            result = await task
+            return {
+                **result,
+                "commitSha": prepared.commit_sha,
+                "nodeId": node_id,
+            }
+        except WorkersAIError as exc:
+            print(json.dumps({
+                "event": "workers_ai_failed",
+                "category": exc.category,
+                "providerStatus": exc.provider_status,
+            }), file=sys.stderr, flush=True)
+            if exc.category == "authentication":
+                raise HTTPException(503, "AI provider credentials were rejected.") from exc
+            if exc.category == "quota":
+                raise HTTPException(429, "The free AI allowance is currently unavailable.") from exc
+            if exc.category == "request":
+                raise HTTPException(502, "The AI provider rejected the model request.") from exc
+            if exc.category == "structured-output":
+                raise HTTPException(502, "AI returned an unusable grounded response.") from exc
+            raise HTTPException(502, "The AI provider is temporarily unavailable.") from exc
+        except ClientDisconnect:
+            return Response(status_code=499)
+        finally:
+            if not task.done():
+                task.cancel()
+            while not task.done():
+                try:
+                    await asyncio.shield(task)
+                except (asyncio.CancelledError, Exception):
+                    break
+            if not task.cancelled():
+                task.exception()
+            interpretation_active = False
 
     return app

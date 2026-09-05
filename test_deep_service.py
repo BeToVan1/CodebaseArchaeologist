@@ -22,6 +22,8 @@ def quota_storage(tmp_path, monkeypatch):
     path = tmp_path / "quota.sqlite3"
     initialize(path)
     monkeypatch.setenv("ARCHAEOLOGIST_QUOTA_PATH", str(path))
+    for key in ("ARCHAEOLOGIST_INTERPRETATION_ENABLED", "ARCHAEOLOGIST_CF_ACCOUNT_ID", "ARCHAEOLOGIST_CF_AI_TOKEN"):
+        monkeypatch.delenv(key, raising=False)
     return path
 
 
@@ -105,6 +107,57 @@ def test_prepare_uses_only_server_retained_evidence_and_owner_binding():
         "reportId": ref.report_id, "nodeId": NODE,
         "sourceExcerpt": "browser supplied", "evidencePacket": {},
     }).status_code == 400
+
+
+def test_oracle_interpretation_uses_only_retained_owner_bound_evidence(monkeypatch):
+    from evidence_store import EvidenceSnapshotStore
+    from test_interpretation_evidence import NODE, PIN as EVIDENCE_PIN, report
+
+    monkeypatch.setenv("ARCHAEOLOGIST_INTERPRETATION_ENABLED", "true")
+    monkeypatch.setenv("ARCHAEOLOGIST_CF_ACCOUNT_ID", "a" * 32)
+    monkeypatch.setenv("ARCHAEOLOGIST_CF_AI_TOKEN", "token-" + "x" * 40)
+    store = EvidenceSnapshotStore()
+    ref = store.register_trusted_snapshot(
+        owner_key="a" * 64, graph=report(),
+        source_files={"example.py": b"def run():\n    pass\n"}, commit_sha=EVIDENCE_PIN,
+    )
+    generated = {
+        "model": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+        "classification": "interpretation",
+        "what_it_does": {"text": "Runs.", "confidence": 0.7, "evidence_refs": [NODE], "classification": "interpretation", "provenance": "safe"},
+        "execution_role": {"text": "Called.", "confidence": 0.6, "evidence_refs": [NODE], "classification": "interpretation", "provenance": "safe"},
+        "structural_rationale": {"text": "Unknown.", "confidence": 0.3, "evidence_refs": [NODE], "classification": "interpretation", "provenance": "safe"},
+        "uncertainties": ["Runtime behavior is not observed."],
+    }
+    client = TestClient(service.create_app(TOKEN, evidence_store=store))
+    with patch.object(service, "generate_workers_ai", new_callable=AsyncMock, return_value=generated) as provider:
+        response = client.post("/api/interpret/quota-v1", headers=HEADERS,
+                               json={"reportId": ref.report_id, "nodeId": NODE})
+        assert response.status_code == 200
+        assert response.json() == {**generated, "commitSha": EVIDENCE_PIN, "nodeId": NODE}
+        packet_arg, source_arg, config_arg = provider.await_args.args
+        assert packet_arg.node_id == NODE
+        assert source_arg == "def run():\n    pass"
+        assert config_arg.account_id == "a" * 32
+        assert config_arg.token == "token-" + "x" * 40
+        assert provider.await_count == 1
+
+    wrong_owner = {**HEADERS, "X-Archaeologist-Client-Key": "b" * 64}
+    with patch.object(service, "generate_workers_ai", new_callable=AsyncMock) as provider:
+        assert client.post("/api/interpret/quota-v1", headers=wrong_owner,
+                           json={"reportId": ref.report_id, "nodeId": NODE}).status_code == 404
+        assert client.post("/api/interpret/quota-v1", headers=HEADERS, json={
+            "reportId": ref.report_id, "nodeId": NODE, "sourceExcerpt": "forged",
+        }).status_code == 400
+        provider.assert_not_awaited()
+
+
+def test_oracle_interpretation_fails_closed_without_configuration():
+    client = TestClient(service.create_app(TOKEN))
+    with patch.object(service, "generate_workers_ai", new_callable=AsyncMock) as provider:
+        assert client.post("/api/interpret/quota-v1", headers=HEADERS,
+                           json={"reportId": "R" * 43, "nodeId": "symbol:x"}).status_code == 503
+        provider.assert_not_awaited()
 
 
 def test_concurrent_request_is_rejected_without_queueing():

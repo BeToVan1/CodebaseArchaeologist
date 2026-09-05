@@ -14,6 +14,7 @@
 !deep_quota.py
 !api.py
 !interpretation.py
+!workers_ai_client.py
 !test_*.py
 !tests/
 !tests/fixtures/
