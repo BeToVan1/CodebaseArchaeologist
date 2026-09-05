@@ -1,0 +1,102 @@
+from __future__ import annotations
+
+import json
+import asyncio
+
+import httpx
+import pytest
+
+from test_interpretation import packet
+from workers_ai_client import WORKERS_AI_MODEL, WorkersAIConfig, WorkersAIError, generate_workers_ai
+
+
+def generated(reference: str = "pattern:layered-architecture") -> dict:
+    section = {"text": "Coordinates the operation.", "confidence": 0.8, "evidence_refs": [reference]}
+    return {
+        "what_it_does": section,
+        "execution_role": section,
+        "structural_rationale": section,
+        "uncertainties": ["Dynamic behavior is not observed."],
+    }
+
+
+def config() -> WorkersAIConfig:
+    value = WorkersAIConfig.optional("a" * 32, "token-" + "x" * 40)
+    assert value is not None
+    return value
+
+
+def run_with(handler, source="def run(): pass"):
+    async def scenario():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return await generate_workers_ai(packet(), source, config(), client=client)
+    return asyncio.run(scenario())
+
+
+def test_sends_one_bounded_json_mode_request_and_validates_grounding():
+    calls = 0
+
+    async def handler(request: httpx.Request):
+        nonlocal calls
+        calls += 1
+        assert request.url == f"https://api.cloudflare.com/client/v4/accounts/{'a' * 32}/ai/run/{WORKERS_AI_MODEL}"
+        assert request.headers["authorization"] == "Bearer token-" + "x" * 40
+        body = json.loads(request.content)
+        assert body["stream"] is False
+        assert body["temperature"] == 0
+        assert body["max_tokens"] == 1024
+        assert body["response_format"]["type"] == "json_schema"
+        supplied = json.loads(body["messages"][1]["content"])
+        assert supplied["evidence_packet"]["node_id"] == packet().node_id
+        return httpx.Response(200, json={"success": True, "result": {"response": generated()}})
+
+    result = run_with(handler)
+    assert calls == 1
+    assert result["model"] == WORKERS_AI_MODEL
+    assert result["classification"] == "interpretation"
+    assert result["what_it_does"]["classification"] == "interpretation"
+    assert "server-retained evidence" in result["what_it_does"]["provenance"]
+
+
+@pytest.mark.parametrize("status,category", [(401, "authentication"), (403, "authentication"), (429, "quota"), (400, "request"), (500, "availability")])
+def test_provider_status_is_safely_classified_without_retry(status, category):
+    calls = 0
+
+    async def handler(_request):
+        nonlocal calls
+        calls += 1
+        return httpx.Response(status, text="private provider detail")
+
+    async def scenario():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            await generate_workers_ai(packet(), "pass", config(), client=client)
+    with pytest.raises(WorkersAIError) as caught:
+        asyncio.run(scenario())
+    assert caught.value.category == category
+    assert caught.value.provider_status == status
+    assert "private provider detail" not in str(caught.value)
+    assert calls == 1
+
+
+@pytest.mark.parametrize("response", [
+    {"success": True, "result": {"response": generated("unknown")}},
+    {"success": True, "result": {"response": {**generated(), "extra": "private"}}},
+    {"success": True, "result": {"response": {**generated(), "what_it_does": {**generated()["what_it_does"], "extra": "private"}}}},
+    {"success": True, "result": {"response": {**generated(), "execution_role": {**generated()["execution_role"], "confidence": 1}}}},
+])
+def test_invalid_or_ungrounded_output_is_rejected(response):
+    async def handler(_request):
+        return httpx.Response(200, json=response)
+
+    async def scenario():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            await generate_workers_ai(packet(), "pass", config(), client=client)
+    with pytest.raises(WorkersAIError) as caught:
+        asyncio.run(scenario())
+    assert caught.value.category == "structured-output"
+
+
+def test_config_requires_exact_safe_formats():
+    assert WorkersAIConfig.optional("a" * 32, "x" * 32)
+    for account, token in [("A" * 32, "x" * 32), ("a" * 31, "x" * 32), ("a" * 32, "short"), ("a" * 32, "x" * 32 + "\n")]:
+        assert WorkersAIConfig.optional(account, token) is None
