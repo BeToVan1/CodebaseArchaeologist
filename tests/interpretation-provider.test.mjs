@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CloudflareWorkersAIProvider, WORKERS_AI_MODEL, validateGeneratedInterpretation } from "../worker/interpretation-provider.ts";
+import { CloudflareWorkersAIProvider, CloudflareWorkersAIRestProvider, WORKERS_AI_MODEL, validateGeneratedInterpretation } from "../worker/interpretation-provider.ts";
 
 const packet = { version: "1", node_id: "symbol:run", related_edge_ids: ["edge:1"], flow_ids: [],
   finding_ids: [], pattern_ids: ["pattern:1"], claims: [{ id: "claim:1", evidence_refs: ["edge:1"] }] };
@@ -48,4 +48,33 @@ test("provider rejects oversized source before inference", async () => {
   const provider = new CloudflareWorkersAIProvider({ run: async () => { calls++; return { response: output() }; } });
   await assert.rejects(provider.generate(packet, "x".repeat(12001)), /evidence is invalid/);
   assert.equal(calls, 0);
+});
+
+test("REST provider sends one authenticated request to the fixed account and model", async () => {
+  const account = "a".repeat(32);
+  const token = "cloudflare-test-token-" + "x".repeat(32);
+  let calls = 0;
+  const provider = new CloudflareWorkersAIRestProvider(account, token, async (url, options) => {
+    calls++;
+    assert.equal(url, `https://api.cloudflare.com/client/v4/accounts/${account}/ai/run/${WORKERS_AI_MODEL}`);
+    assert.equal(options.redirect, "manual");
+    assert.equal(options.headers.Authorization, `Bearer ${token}`);
+    const request = JSON.parse(options.body);
+    assert.equal(request.max_tokens, 1024);
+    assert.equal(request.stream, false);
+    return Response.json({ success: true, result: { response: output() }, errors: [], messages: [] });
+  });
+  assert.equal((await provider.generate(packet, "def run(): pass")).execution_role.confidence, .6);
+  assert.equal(calls, 1);
+});
+
+test("REST provider rejects failed or malformed envelopes without retry", async () => {
+  const account = "a".repeat(32);
+  const token = "cloudflare-test-token-" + "x".repeat(32);
+  for (const response of [new Response("private", { status: 429 }), Response.json({ success: false, result: null })]) {
+    let calls = 0;
+    const provider = new CloudflareWorkersAIRestProvider(account, token, async () => { calls++; return response; });
+    await assert.rejects(provider.generate(packet, "code"), /Workers AI/);
+    assert.equal(calls, 1);
+  }
 });

@@ -52,6 +52,22 @@ test("interpretation stays fail-closed without every server binding", async () =
   }
 });
 
+test("REST credentials can enable interpretation without a managed AI binding", async () => {
+  const account = "a".repeat(32);
+  const restToken = "cloudflare-test-token-" + "x".repeat(32);
+  const env = environment({ AI: undefined, ARCHAEOLOGIST_CF_ACCOUNT_ID: account, ARCHAEOLOGIST_CF_AI_TOKEN: restToken });
+  assert.equal(interpretationConfigured(env), true);
+  let inferenceCalls = 0;
+  const response = await handleInterpretationRequest(request(), env, async () => prepared(), async (url, options) => {
+    inferenceCalls++;
+    assert.equal(url, `https://api.cloudflare.com/client/v4/accounts/${account}/ai/run/${WORKERS_AI_MODEL}`);
+    assert.equal(options.headers.Authorization, `Bearer ${restToken}`);
+    return Response.json({ success: true, result: { response: generated }, errors: [], messages: [] });
+  });
+  assert.equal(response.status, 200);
+  assert.equal(inferenceCalls, 1);
+});
+
 test("rejects untrusted methods, origins, body fields and network identity before evidence or AI", async () => {
   const start = ai.calls;
   assert.equal((await handleInterpretationRequest(new Request("https://site.test/api/interpret/deep"), environment(), forbidden)).status, 405);
