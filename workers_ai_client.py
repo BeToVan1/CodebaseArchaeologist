@@ -16,13 +16,19 @@ MAX_PROVIDER_RESPONSE_BYTES = 64 * 1024
 ACCOUNT_ID = re.compile(r"^[a-f0-9]{32}$")
 TOKEN = re.compile(r"^[\x21-\x7e]{32,256}$")
 FailureCategory = Literal["authentication", "quota", "request", "availability", "structured-output"]
+StructuredReason = Literal[
+    "provider-envelope", "provider-result", "response-shape", "schema-validation",
+    "unknown-evidence", "response-size", "response-json",
+]
 
 
 class WorkersAIError(RuntimeError):
-    def __init__(self, category: FailureCategory, provider_status: int | None = None):
+    def __init__(self, category: FailureCategory, provider_status: int | None = None,
+                 structured_reason: StructuredReason | None = None):
         super().__init__("Workers AI request failed.")
         self.category = category
         self.provider_status = provider_status
+        self.structured_reason = structured_reason
 
 
 @dataclass(frozen=True)
@@ -60,25 +66,25 @@ def _request_body(packet: EvidencePacket, source_excerpt: str) -> dict:
 
 def _validated_response(value: object, packet: EvidencePacket) -> GeneratedInterpretation:
     if not isinstance(value, dict) or value.get("success") is not True:
-        raise WorkersAIError("structured-output")
+        raise WorkersAIError("structured-output", structured_reason="provider-envelope")
     result = value.get("result")
     if not isinstance(result, dict) or "response" not in result:
-        raise WorkersAIError("structured-output")
+        raise WorkersAIError("structured-output", structured_reason="provider-result")
     raw = result["response"]
     if (not isinstance(raw, dict)
             or set(raw) != {"what_it_does", "execution_role", "structural_rationale", "uncertainties"}
             or any(not isinstance(raw.get(key), dict)
                    or set(raw[key]) != {"text", "confidence", "evidence_refs"}
                    for key in ("what_it_does", "execution_role", "structural_rationale"))):
-        raise WorkersAIError("structured-output")
+        raise WorkersAIError("structured-output", structured_reason="response-shape")
     try:
         generated = GeneratedInterpretation.model_validate(raw)
     except ValidationError as exc:
-        raise WorkersAIError("structured-output") from exc
+        raise WorkersAIError("structured-output", structured_reason="schema-validation") from exc
     allowed = known_evidence_refs(packet)
     for section in (generated.what_it_does, generated.execution_role, generated.structural_rationale):
         if set(section.evidence_refs) - allowed:
-            raise WorkersAIError("structured-output")
+            raise WorkersAIError("structured-output", structured_reason="unknown-evidence")
     return generated
 
 
@@ -111,7 +117,7 @@ async def generate_workers_ai(
                 body = bytearray()
                 async for chunk in response.aiter_bytes():
                     if len(body) + len(chunk) > MAX_PROVIDER_RESPONSE_BYTES:
-                        raise WorkersAIError("structured-output")
+                        raise WorkersAIError("structured-output", structured_reason="response-size")
                     body.extend(chunk)
         except WorkersAIError:
             raise
@@ -120,7 +126,7 @@ async def generate_workers_ai(
         try:
             envelope = json.loads(body)
         except (ValueError, UnicodeError) as exc:
-            raise WorkersAIError("structured-output") from exc
+            raise WorkersAIError("structured-output", structured_reason="response-json") from exc
         generated = _validated_response(envelope, packet)
         provenance = f"Cloudflare Workers AI {WORKERS_AI_MODEL} interpretation of server-retained evidence"
         section = lambda item: {

@@ -346,6 +346,7 @@ def create_app(token: str | None = None, quota_path: str | None = None,
                 "event": "workers_ai_failed",
                 "category": exc.category,
                 "providerStatus": exc.provider_status,
+                "structuredReason": exc.structured_reason,
             }), file=sys.stderr, flush=True)
             if exc.category == "authentication":
                 raise HTTPException(503, "AI provider credentials were rejected.") from exc
