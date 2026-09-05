@@ -8,6 +8,8 @@ change quota policy, or modify website files.
 import json
 import signal
 import sys
+import urllib.error
+import urllib.request
 
 import upgrade_oracle_evidence_reference as previous
 
@@ -22,17 +24,37 @@ SETTINGS = {name: value for name, value in (
     ('OLD_UNIT', OLD_UNIT), ('NEW_UNIT', NEW_UNIT), ('BACKUP', BACKUP))}
 
 
+def disabled_interpretation_response(token):
+    """Read only the bounded fail-closed response; never expose its contents."""
+    request = urllib.request.Request(
+        updater.common.BASE + '/api/interpret/quota-v1',
+        headers={
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token,
+            'X-Archaeologist-Client-Key': 'd' * 64,
+        },
+        data=json.dumps({
+            'reportId': 'R' * 43,
+            'nodeId': 'symbol:disabled-check',
+        }).encode(),
+    )
+    try:
+        with updater.common.HTTP.open(request, timeout=10) as response:
+            body = response.read(2049)
+            code = response.status
+    except urllib.error.HTTPError as error:
+        code = error.code
+        body = error.read(2049)
+        error.close()
+    updater.common.require(len(body) <= 2048,
+        'Disabled interpretation response exceeded the output limit.')
+    return code, body
+
+
 def real_analysis(token):
     """Reuse the one release analysis, then prove AI remains fail-closed."""
     graph = previous.real_analysis(token)
-    code, body = updater.common.request(
-        updater.common.BASE,
-        '/api/interpret/quota-v1',
-        token,
-        {'reportId': 'R' * 43, 'nodeId': 'symbol:disabled-check'},
-        'd' * 64,
-        timeout=10,
-    )
+    code, body = disabled_interpretation_response(token)
     try:
         response = json.loads(body)
     except (ValueError, UnicodeError):
