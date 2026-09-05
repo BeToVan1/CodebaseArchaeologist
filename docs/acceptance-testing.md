@@ -36,6 +36,13 @@ The owner subsequently required a provider that cannot bill beyond a free alloca
 - Four route tests cover fail-closed configuration, origin/input/network rejection, fixed authenticated retrieval plus one grounded provider call, expiry, malformed evidence, invalid model citations, sanitization, and no retries. All 125 JavaScript tests pass; TypeScript and the production build pass with the existing Vite JSON-import and route-classification warnings.
 - No AI binding is declared by the current Sites manifest, `ARCHAEOLOGIST_INTERPRETATION_ENABLED` remains false, and the frontend does not retain or submit the runtime-only report reference yet. No provider call, Neuron use, Sites publication, public behavior, or Oracle change occurred in this slice. Next gate: confirm a supported hosted binding/account on Workers Free, then add runtime-only frontend reference handling and an explicitly activated interpretation panel.
 
+### Runtime-only frontend handoff and REST provider (local, disabled)
+
+- The browser now keeps the analyzer's opaque report reference and expiry separately from the validated graph. It is cleared whenever an example or imported report is installed and is not serialized into downloaded JSON. Hosted interpretation sends only the report reference and selected symbol ID; the response must match the installed commit and selected node before rendering.
+- The existing panel is capability-gated, so it remains absent unless the server reports a fully configured provider. Local development retains its separate legacy path. Hosted copy identifies commit-bound server-retained evidence rather than implying that browser-provided source is trusted.
+- Added a server-only Cloudflare REST adapter for Sites environments without a managed Workers AI binding. It uses a fixed account/model URL, a scoped secret token, one non-streaming request, the same input/output limits, and no retry. Configuration accepts either the binding or both REST credentials, always with the explicit interpretation enable flag and existing Oracle trust configuration.
+- All 130 JavaScript tests pass, including reference separation, missing-header rejection, commit/node response binding, exact hosted request fields, and fixed authenticated REST dispatch. TypeScript and the production build pass with the existing Vite warnings. REST tests use mocked transport only: no token was configured, no model call or Neuron usage occurred, and neither Sites nor Oracle was changed.
+
 ## Observed browser results
 
 | Check | Result | Evidence / limitation |

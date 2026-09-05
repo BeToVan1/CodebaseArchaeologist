@@ -4,7 +4,7 @@ import test from "node:test";
 import { createHmac } from "node:crypto";
 import { deepConfigured, DEEP_ENDPOINT, handleDeepRequest, withDeadline } from "../worker/deep-proxy.ts";
 import { networkKey } from "../worker/deep-limits.ts";
-import { analysisEndpoint, submitAnalysis } from "../app/analysis-client.ts";
+import { analysisEndpoint, submitAnalysis, submitAnalysisResult } from "../app/analysis-client.ts";
 import { readBoundedBody } from "../worker/github-analyzer.ts";
 
 const graph = JSON.parse(await readFile(new URL("../public/graph.json", import.meta.url), "utf8"));
@@ -115,6 +115,18 @@ test("browser uses same-origin deep route even when a local API URL exists", asy
   });
   assert.equal(browserOptions.headers.Authorization, undefined);
   assert.deepEqual(result, graph);
+});
+test("browser retains the opaque evidence reference separately from the exportable graph", async () => {
+  const before = Date.now();
+  const result = await submitAnalysisResult("deep", graph.repository.url, "", new AbortController().signal,
+    async () => graphResponse(graph));
+  assert.deepEqual(result.graph, graph);
+  assert.equal(result.evidenceReference.reportId, "R".repeat(43));
+  assert.ok(result.evidenceReference.expiresAt >= before + 899_000);
+  assert.equal(Object.hasOwn(result.graph, "evidenceReference"), false);
+
+  await assert.rejects(submitAnalysisResult("deep", graph.repository.url, "", new AbortController().signal,
+    async () => Response.json(graph)), /trusted evidence reference/i);
 });
 test("browser surfaces busy response instead of installing an error as graph", async () => {
   await assert.rejects(submitAnalysis("deep", graph.repository.url, "", new AbortController().signal,

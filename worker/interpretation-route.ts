@@ -1,13 +1,15 @@
 import { readBoundedBody } from "./github-analyzer.ts";
 import { networkKey } from "./deep-limits.ts";
 import { deepConfigured, withDeadline, type DeepEnv } from "./deep-proxy.ts";
-import { CloudflareWorkersAIProvider, WORKERS_AI_MODEL, type WorkersAI } from "./interpretation-provider.ts";
+import { CloudflareWorkersAIProvider, CloudflareWorkersAIRestProvider, WORKERS_AI_MODEL, type WorkersAI } from "./interpretation-provider.ts";
 
 export const EVIDENCE_ENDPOINT = "https://codebase-archaeologist.duckdns.org/api/evidence/prepare";
 const REPORT_ID = /^[A-Za-z0-9_-]{43}$/;
 
 export interface HostedInterpretationEnv extends DeepEnv {
   ARCHAEOLOGIST_INTERPRETATION_ENABLED?: string;
+  ARCHAEOLOGIST_CF_ACCOUNT_ID?: string;
+  ARCHAEOLOGIST_CF_AI_TOKEN?: string;
   AI?: WorkersAI;
 }
 
@@ -25,12 +27,17 @@ function exactKeys(value: Record<string, unknown>, expected: string[]) {
   return actual.length === wanted.length && actual.every((key, index) => key === wanted[index]);
 }
 export function interpretationConfigured(env: HostedInterpretationEnv): boolean {
+  const binding = object(env.AI) && typeof env.AI.run === "function";
+  const rest = typeof env.ARCHAEOLOGIST_CF_ACCOUNT_ID === "string"
+    && /^[a-f0-9]{32}$/.test(env.ARCHAEOLOGIST_CF_ACCOUNT_ID)
+    && typeof env.ARCHAEOLOGIST_CF_AI_TOKEN === "string"
+    && /^[\x21-\x7e]{32,256}$/.test(env.ARCHAEOLOGIST_CF_AI_TOKEN);
   return env.ARCHAEOLOGIST_INTERPRETATION_ENABLED === "true"
-    && deepConfigured(env) && object(env.AI) && typeof env.AI.run === "function";
+    && deepConfigured(env) && (binding || rest);
 }
 
 export async function handleInterpretationRequest(
-  request: Request, env: HostedInterpretationEnv, fetcher: typeof fetch = fetch,
+  request: Request, env: HostedInterpretationEnv, fetcher: typeof fetch = fetch, aiFetcher: typeof fetch = fetch,
 ): Promise<Response> {
   if (request.method !== "POST") return reply("Method not allowed.", 405);
   if (request.headers.get("origin") !== new URL(request.url).origin
@@ -95,8 +102,10 @@ export async function handleInterpretationRequest(
 
     providerStarted = true;
     phase = "provider";
-    const generated = await withDeadline(signal, () =>
-      new CloudflareWorkersAIProvider(env.AI!).generate(evidencePacket, sourceExcerpt));
+    const provider = object(env.AI) && typeof env.AI.run === "function"
+      ? new CloudflareWorkersAIProvider(env.AI)
+      : new CloudflareWorkersAIRestProvider(env.ARCHAEOLOGIST_CF_ACCOUNT_ID!, env.ARCHAEOLOGIST_CF_AI_TOKEN!, aiFetcher);
+    const generated = await withDeadline(signal, () => provider.generate(evidencePacket, sourceExcerpt, signal));
     const section = (value: typeof generated.what_it_does) => ({
       ...value, classification: "interpretation" as const,
       provenance: `Cloudflare Workers AI ${WORKERS_AI_MODEL} interpretation of server-retained evidence`,

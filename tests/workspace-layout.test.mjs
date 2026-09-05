@@ -25,3 +25,11 @@ test("prominent example notice is tied to loaded report origin, not a repository
   assert.match(page, /not a repository you submitted/);
   assert.match(page, /choose Analyze repository to create your own map/);
 });
+
+test("hosted AI uses only the runtime report reference and selected node", () => {
+  assert.match(page, /useHostedInterpretation \? "\/api\/interpret\/deep"/);
+  assert.match(page, /\? \{ reportId: evidenceReference\.reportId, nodeId: selectedSymbol\.id \}/);
+  assert.match(page, /setEvidenceReference\(trustedEvidence\)/);
+  assert.doesNotMatch(page, /serializeReport\([^)]*evidenceReference/);
+  assert.match(page, /data\.commitSha !== graph\?\.snapshot\?\.commit_sha \|\| data\.nodeId !== selectedSymbol\.id/);
+});

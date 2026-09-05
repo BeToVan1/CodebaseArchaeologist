@@ -14,7 +14,7 @@ import "@xyflow/react/dist/style.css";
 import "./graph.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { inventoryStatus, inventoryUnavailable } from "./analysis-status";
-import { submitAnalysis, type AnalysisMode } from "./analysis-client";
+import { submitAnalysisResult, type AnalysisMode, type EvidenceReference } from "./analysis-client";
 import type { Graph, GraphNode, GraphEdge, EvidenceStatement, Claim, ExecutionFlow, RiskFinding, ArchitecturePattern } from "./graph-types";
 import { isRecord, validateGraph } from "./graph-validation";
 import { canonicalGithubUrl, readReportFile, reportFilename, serializeReport } from "./graph-report";
@@ -211,6 +211,8 @@ export default function Home() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisMode, setAnalysisMode] = useState<AnalysisMode>(ANALYZER_API_URL ? "local" : "inventory");
   const [deepAvailable, setDeepAvailable] = useState(false);
+  const [hostedInterpretationAvailable, setHostedInterpretationAvailable] = useState(false);
+  const [evidenceReference, setEvidenceReference] = useState<EvidenceReference | null>(null);
   const analysisController = useRef<AbortController | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [aiInterpretation, setAIInterpretation] = useState<AIInterpretation | null>(null);
@@ -225,11 +227,12 @@ export default function Home() {
   const reportInput = useRef<HTMLInputElement>(null);
   const isBusy = isAnalyzing || isLoadingReport;
 
-  function installGraph(validated: Graph, reportName: string | null = null, origin: ReportOrigin = "analysis") {
+  function installGraph(validated: Graph, reportName: string | null = null, origin: ReportOrigin = "analysis", trustedEvidence: EvidenceReference | null = null) {
     interpretationRequest.current++;
     setAIInterpretation(null);
     setInterpretationError(null);
     setIsInterpreting(false);
+    setEvidenceReference(trustedEvidence);
     setGraph(validated);
     setImportedReport(reportName);
     setReportOrigin(reportName ? "imported" : origin);
@@ -269,7 +272,13 @@ export default function Home() {
     void loadExample();
     const controller = new AbortController();
     void fetch("/api/analysis-capabilities", { signal: controller.signal })
-      .then(async (response) => { if (response.ok) setDeepAvailable((await response.json()).deep === true); }).catch(() => {});
+      .then(async (response) => {
+        if (!response.ok) return;
+        const capabilities: unknown = await response.json();
+        if (!isRecord(capabilities)) return;
+        setDeepAvailable(capabilities.deep === true);
+        setHostedInterpretationAvailable(capabilities.interpretation === true);
+      }).catch(() => {});
     return () => { graphRequest.current++; interpretationRequest.current++; controller.abort(); analysisController.current?.abort(); };
   }, []);
 
@@ -318,8 +327,8 @@ export default function Home() {
     analysisController.current = controller;
     const timer = setTimeout(() => controller.abort(new DOMException("Analysis timed out", "TimeoutError")), 90_000);
     try {
-      const validated = await submitAnalysis(analysisMode, submittedUrl, ANALYZER_API_URL, controller.signal);
-      if (requestId === graphRequest.current) installGraph(validated);
+      const result = await submitAnalysisResult(analysisMode, submittedUrl, ANALYZER_API_URL, controller.signal);
+      if (requestId === graphRequest.current) installGraph(result.graph, null, "analysis", result.evidenceReference);
     } catch (cause: unknown) {
       if (requestId === graphRequest.current) setAnalysisError(cause instanceof Error ? cause.message : "Repository analysis failed");
     } finally {
@@ -430,17 +439,22 @@ export default function Home() {
 
   async function interpretSelectedSymbol() {
     if (!selectedSymbol?.evidence_packet || importedReport) return;
+    const useHostedInterpretation = hostedInterpretationAvailable
+      && graph?.analysis?.tier === "deep"
+      && evidenceReference !== null;
+    if (!useHostedInterpretation && !LOCAL_INTERPRETATION_ENABLED) return;
     const requestId = ++interpretationRequest.current;
     setIsInterpreting(true);
     setInterpretationError(null);
     try {
-      const response = await fetch(`${ANALYZER_API_URL}/api/interpret`, {
+      if (useHostedInterpretation && evidenceReference.expiresAt <= Date.now())
+        throw new Error("The retained analysis evidence expired. Run a new deep analysis to generate an interpretation.");
+      const response = await fetch(useHostedInterpretation ? "/api/interpret/deep" : `${ANALYZER_API_URL}/api/interpret`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          evidencePacket: selectedSymbol.evidence_packet,
-          sourceExcerpt: sourceLines.join("\n").slice(0, 12_000),
-        }),
+        body: JSON.stringify(useHostedInterpretation
+          ? { reportId: evidenceReference.reportId, nodeId: selectedSymbol.id }
+          : { evidencePacket: selectedSymbol.evidence_packet, sourceExcerpt: sourceLines.join("\n").slice(0, 12_000) }),
       });
       const data: unknown = await response.json();
       if (!response.ok) {
@@ -449,6 +463,9 @@ export default function Home() {
           : `AI interpretation failed (${response.status})`;
         throw new Error(detail);
       }
+      if (useHostedInterpretation && (!isRecord(data)
+          || data.commitSha !== graph?.snapshot?.commit_sha || data.nodeId !== selectedSymbol.id))
+        throw new Error("The AI interpretation does not match the selected commit and symbol.");
       if (requestId === interpretationRequest.current) setAIInterpretation(validateAIInterpretation(data));
     } catch (cause: unknown) {
       if (requestId === interpretationRequest.current) {
@@ -459,6 +476,9 @@ export default function Home() {
       if (requestId === interpretationRequest.current) setIsInterpreting(false);
     }
   }
+  const canInterpretSelected = Boolean(selectedSymbol?.evidence_packet && !importedReport && (
+    LOCAL_INTERPRETATION_ENABLED || (hostedInterpretationAvailable && graph?.analysis?.tier === "deep" && evidenceReference)
+  ));
   const selectedRangeAvailable = !selectedSymbol || sourceStartLine <= fileSourceLines.length;
   const sourceIsTruncated = Boolean(
     selected?.source_truncated || (selected?.source && selected.source.length > MAX_SOURCE_CHARACTERS),
@@ -709,9 +729,9 @@ export default function Home() {
                 <p>{claim.text}</p><small>Provenance: {claim.provenance}{claim.evidence_refs?.length ? ` · ${claim.evidence_refs.length} evidence reference${claim.evidence_refs.length === 1 ? "" : "s"}` : ""}</small>
               </article>)}</div>
             </section>}
-            {selectedSymbol?.evidence_packet && LOCAL_INTERPRETATION_ENABLED && !importedReport && <section className="ai-interpretation-section">
+            {canInterpretSelected && <section className="ai-interpretation-section">
               <div className="section-heading"><h3>AI interpretation</h3><span className="interpretation-label">Optional</span></div>
-              <p className="ai-intro">Generate a deeper explanation from this symbol’s evidence packet and visible source. Static facts above remain unchanged.</p>
+              <p className="ai-intro">Generate a deeper explanation from commit-bound evidence retained by the analyzer. Static facts above remain unchanged.</p>
               {!aiInterpretation && <button className="interpret-button" type="button" onClick={interpretSelectedSymbol} disabled={isInterpreting}>
                 {isInterpreting ? "Interpreting evidence…" : "Generate grounded interpretation"}
               </button>}
