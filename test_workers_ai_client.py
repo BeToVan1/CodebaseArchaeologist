@@ -50,6 +50,20 @@ def run_with(handler, source="def run(): pass"):
     return asyncio.run(scenario())
 
 
+def test_prompt_covers_delegation_outcomes_without_a_case_specific_answer():
+    body = provider._request_body(packet(), 'def run(action):\n    action()\n    return True')
+    prompt = body['messages'][0]['content']
+    for guidance in ('normal call completion', 'used, returned, or ignored',
+                     "each return's actual condition", 'exceptions as a fallback return value',
+                     'dependency as a parameter', 'Omit unsupported stories'):
+        assert guidance in prompt
+    assert 'save_if_valid' not in prompt
+    assert 'load_order' not in prompt
+    assert body['max_tokens'] == 1024
+    assert body['temperature'] == 0
+    assert body['stream'] is False
+
+
 def test_sends_one_bounded_json_mode_request_and_validates_grounding():
     calls = 0
 
