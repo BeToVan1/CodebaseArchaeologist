@@ -54,6 +54,9 @@ def test_success_records_assessable_output_without_answer_key(tmp_path):
     assert asyncio.run(runner.execute(cases, 1, destination, config(), provider=provider)) == 0
     samples = json.loads((destination / 'candidates.json').read_text())
     assert len(samples) == 1
+    plan = json.loads((destination / 'plan.json').read_text())
+    assert len(plan['systemPromptSha256']) == 64
+    assert len(plan['providerAdapterSha256']) == 64
     assert samples[0]['inputSha256'] == cases[0]['inputSha256']
     assert 'rubric' not in json.loads((destination / '00-started.json').read_text())['input']
 

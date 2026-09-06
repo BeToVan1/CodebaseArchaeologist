@@ -5,13 +5,14 @@ Never accepts arbitrary source, model, endpoint, or automatic retries.
 """
 import argparse
 import asyncio
+import hashlib
 import json
 import os
 from pathlib import Path
 
 from interpretation import EvidencePacket
 from interpretation_evaluation import build_cases
-from workers_ai_client import WORKERS_AI_MODEL, WorkersAIConfig, WorkersAIError, generate_workers_ai
+from workers_ai_client import SYSTEM_PROMPT, WORKERS_AI_MODEL, WorkersAIConfig, WorkersAIError, generate_workers_ai
 
 
 def select_cases(case_ids, max_requests):
@@ -39,6 +40,9 @@ async def execute(cases, max_requests, directory, config, *, provider=generate_w
     directory.mkdir(mode=0o700, parents=False, exist_ok=False)
     write_record(directory, 'plan.json', {
         'model': WORKERS_AI_MODEL, 'maxRequests': max_requests,
+        'systemPromptSha256': hashlib.sha256(SYSTEM_PROMPT.encode('utf-8')).hexdigest(),
+        'providerAdapterSha256': hashlib.sha256(
+            Path(__file__).with_name('workers_ai_client.py').read_bytes()).hexdigest(),
         'scope': 'checked-in synthetic corpus; not a live repository report',
         'settings': {'max_tokens': 1024, 'temperature': 0, 'stream': False},
         'cases': [{'caseId': c['caseId'], 'inputSha256': c['inputSha256']} for c in cases],
