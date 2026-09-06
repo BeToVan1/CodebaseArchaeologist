@@ -26,9 +26,11 @@ and uncertainty guidance for a reviewer. Do not send that rubric to the model
 whose independent explanation is being evaluated. The source is parsed, never
 imported or executed. Temporary fixture directories are removed afterward.
 
-There is deliberately no model-running command yet. A future approved runner
-must use the budget-gated path, record the exact model and request settings,
-and preserve failed/refused outputs rather than selectively dropping them.
+The opt-in synthetic runner `interpretation_eval_runner.py` defaults to dry-run.
+See [the runner handoff](ai-quality-review-handoff.md) for explicit approval,
+free-only attestation, per-run caps, and protected output requirements. It uses
+the screened Workers AI adapter, not the public report API or its quota ledger.
+Failures are recorded separately and stop the run; no automatic retry occurs.
 
 Candidate files are JSON arrays with one object per case:
 
