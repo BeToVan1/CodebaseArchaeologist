@@ -148,3 +148,51 @@ def test_config_requires_exact_safe_formats():
     assert WorkersAIConfig.optional("a" * 32, "x" * 32)
     for account, token in [("A" * 32, "x" * 32), ("a" * 31, "x" * 32), ("a" * 32, "short"), ("a" * 32, "x" * 32 + "\n")]:
         assert WorkersAIConfig.optional(account, token) is None
+
+
+@pytest.mark.parametrize("source", [
+    'password = "synthetic-example"',
+    'API_KEY: str = "synthetic-example"',
+    '{"client_secret": "synthetic-example"}',
+    '# -----BEGIN RSA PRIVATE KEY-----',
+    '# ghp_' + 'a' * 36,
+    '# github_pat_' + 'a' * 40,
+    '# AKIA' + 'A' * 16,
+    '# sk-proj-' + 'a' * 32,
+    '# https://user:synthetic-example@example.test/path',
+    '# Authorization: Bearer synthetic-example',
+    '# Authorization: Basic dXNlcjpwYXNz',
+])
+def test_sensitive_source_never_constructs_provider_client(source):
+    with patch.object(provider.httpx, "AsyncClient") as client:
+        with pytest.raises(WorkersAIError) as caught:
+            asyncio.run(generate_workers_ai(packet(), source, config()))
+        client.assert_not_called()
+    assert caught.value.category == "sensitive-input"
+    assert str(caught.value) == "Workers AI request failed."
+    assert caught.value.provider_status is None
+
+
+def test_nested_evidence_is_screened_before_json_encoding():
+    evidence = {"claims": [{"description": 'api_key = "synthetic-example"'}]}
+    with patch.object(provider, "build_interpretation_input", return_value=json.dumps(evidence)):
+        with patch.object(provider.httpx, "AsyncClient") as client:
+            with pytest.raises(WorkersAIError, match="Workers AI request failed"):
+                asyncio.run(generate_workers_ai(packet(), "pass", config()))
+            client.assert_not_called()
+
+
+@pytest.mark.parametrize("source", [
+    'token = os.getenv("API_TOKEN")',
+    'password: str = get_password()',
+    'def validate_token(token: str): return bool(token)',
+    '# https://github.com/pallets/itsdangerous',
+    'token = ""',
+])
+def test_nonliteral_credential_access_and_normal_source_are_allowed(source):
+    calls = []
+    async def handler(request):
+        calls.append(request)
+        return httpx.Response(200, json={"success": True, "result": {"response": generated()}})
+    run_with(handler, source)
+    assert len(calls) == 1

@@ -3,8 +3,9 @@
 The public website supports both a bounded file/import inventory and explicit **Deep analysis**
 for public Python repositories. Deep analysis uses the isolated Oracle Python service for AST
 symbols, supported execution flows, architectural patterns, risks and remediation guidance.
-Optional LLM interpretation is implemented behind a disabled, fail-closed hosted route; it is not
-enabled on the public website. This is an early beta, not a complete runtime understanding of
+Optional LLM interpretation is enabled on public Sites version 24 through the Oracle-backed,
+reference-only route. Semantic explanation quality still requires human evaluation.
+This is an early beta, not a complete runtime understanding of
 arbitrary Python programs. See [acceptance results](docs/acceptance-testing.md) for verified
 workflows, known issues and remaining release checks.
 
@@ -96,16 +97,23 @@ these fields, create the ledger, select a model, or supply replacement evidence.
 No live pricing, real key, or paid budget has been configured. The OpenAI execution prototype
 is retained only for offline compatibility tests; it is not the selected public provider.
 
-The selected hosted direction is Cloudflare Workers AI on the Free plan. The adapter uses
-`@cf/meta/llama-3.3-70b-instruct-fp8-fast` because it supports JSON Mode and remains available on
-the free plan. A same-origin Worker route is implemented but remains disabled without an explicit
-enable flag and either a managed AI binding or server-only Cloudflare account ID and scoped API
-token. The REST option calls only Cloudflare's fixed account/model endpoint. It sends one bounded request,
+The configured hosted provider is Cloudflare Workers AI, using
+`@cf/meta/llama-3.3-70b-instruct-fp8-fast`. The published same-origin Sites route forwards only
+the report reference and node ID to Oracle; Oracle retrieves owner-bound evidence and calls
+Cloudflare using server-only credentials. It sends one bounded request,
 does not stream or retry, treats source as untrusted data, and validates every returned section,
 confidence and evidence reference. Free-allocation enforcement is owned by Cloudflare, not this
-adapter; production must remain disabled until the account is verified as Workers Free.
+adapter; operators must keep the account on the approved free-only configuration.
 
-The private deep-analysis service now has the server side of the public trust boundary locally:
+The Oracle backend now screens the decoded excerpt and all evidence strings before the AI
+request. Likely private keys, common token formats, credential-bearing URLs, authorization
+literals, and named credential literals cause a sanitized 422 without a model call.
+The owner confirmed deployment after container validation. It rejects rather than redacts to preserve source spans.
+It is heuristic: false positives and missed encoded, split, or novel secrets are possible.
+It does not sanitize downloaded reports, scan the entire repository, or protect the legacy
+local OpenAI prototype. Do not treat a passing scan as proof that source is safe to share.
+
+The deployed deep-analysis service maintains the server side of the public trust boundary:
 its isolated worker captures the exact commit-verified Python bytes used for analysis, passes them
 to a bounded in-memory store, and returns an opaque 15-minute report reference in response headers.
 `POST /api/evidence/prepare` accepts only that reference and a selected symbol ID, requires the
@@ -114,13 +122,13 @@ source excerpt. It never accepts a client packet, source range, source text, or 
 The evidence-capable image is deployed on Oracle. The frontend now retains the opaque report
 reference only in memory and sends only that reference plus the selected node ID to the same-origin
 route. It verifies the returned commit and node before rendering. The reference is never added to
-downloaded reports. These website changes have not been published, and inference remains disabled.
+downloaded reports. This reference-only integration is published in Sites version 24.
 Provider/grounding failures get a sanitized 502; exhausted budget gets 429;
 unavailable execution policy, capacity, storage, or incomplete output gets 503.
 None causes an automatic retry or refund. Repeating a valid request is a new
 reservation and can incur another provider call; there is no idempotency cache.
 
-Requests require a loopback transport peer and no browser `Origin` header.
+The separate local developer preview requires a loopback transport peer and no browser `Origin` header.
 This is a single-local-operator credential, **not public multi-user authentication**.
 Rotating it prevents the new token from accessing the old token's references.
 Restarting loses all references; they otherwise expire after 15 minutes. Existing
@@ -130,9 +138,8 @@ or wrong-owner references get 404. The routes are absent when disabled at startu
 
 The legacy local `/api/interpret` still accepts caller-supplied evidence and can
 call the provider when configured; this preview does not secure or replace it.
-Do not expose either local development API publicly. Public LLM integration still needs Workers
-Free account verification, scoped server credentials, explicit activation approval, and semantic
-review. Body-read timeout handling here
+Do not expose either local development API publicly. The public Oracle-backed integration is
+active; independent semantic review remains outstanding. Local preview body-read timeout handling
 does not cancel an already-running synchronous analysis job.
 
 ### Start the web application

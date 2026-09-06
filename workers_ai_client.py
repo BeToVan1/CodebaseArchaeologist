@@ -16,7 +16,7 @@ MAX_PROVIDER_REQUEST_BYTES = 128 * 1024
 MAX_PROVIDER_RESPONSE_BYTES = 64 * 1024
 ACCOUNT_ID = re.compile(r"^[a-f0-9]{32}$")
 TOKEN = re.compile(r"^[\x21-\x7e]{32,256}$")
-FailureCategory = Literal["authentication", "quota", "request", "availability", "structured-output"]
+FailureCategory = Literal["authentication", "quota", "request", "availability", "structured-output", "sensitive-input"]
 StructuredReason = Literal[
     "provider-envelope", "provider-result", "response-shape", "schema-validation",
     "unknown-evidence", "response-size", "response-json",
@@ -44,8 +44,38 @@ class WorkersAIConfig:
         return None
 
 
+# Deliberately conservative heuristics, not a guarantee that input is secret-free.
+# Reject instead of redacting: changing source would invalidate evidence spans.
+_SENSITIVE_PATTERNS = tuple(re.compile(pattern, re.IGNORECASE) for pattern in (
+    r"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----",
+    r"\b(?:gh[pousr]_[a-z0-9]{20,}|github_pat_[a-z0-9_]{20,}|AKIA[A-Z0-9]{16}|ASIA[A-Z0-9]{16}|sk-(?:proj-)?[a-z0-9_-]{20,})\b",
+    r"\b[a-z][a-z0-9+.-]*://[^\s/@:]+:[^\s/@]+@",
+    r"\b(?:Bearer|Basic)[ \t]+[a-z0-9+/_.=-]{8,}",
+    r"\b(?:[a-z0-9]+_)*(?:password|passwd|pwd|secret|token|api_?key|access_?key|private_?key)(?:_[a-z0-9]+)*\b[\"']?\s*(?::\s*str\s*)?[:=]\s*[rubf]*[\"'][^\"'\r\n]+[\"']",
+))
+
+
+def _screen_evidence(value: object) -> None:
+    """Screen decoded strings, including metadata and IDs, before any egress.
+
+    No matched content or location is retained in errors or diagnostics. Encoded,
+    split, or novel secrets may evade these rules; false positives are possible.
+    """
+    if isinstance(value, str):
+        if any(pattern.search(value) for pattern in _SENSITIVE_PATTERNS):
+            raise WorkersAIError("sensitive-input")
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            _screen_evidence(key)
+            _screen_evidence(item)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            _screen_evidence(item)
+
+
 def _request_body(packet: EvidencePacket, source_excerpt: str) -> dict:
     evidence = json.loads(build_interpretation_input(packet, source_excerpt))
+    _screen_evidence(evidence)
     schema = GeneratedInterpretation.model_json_schema()
     schema["additionalProperties"] = False
     section_schema = schema["$defs"]["GeneratedSection"]

@@ -1,5 +1,32 @@
 # Acceptance testing — 2026-09-03
 
+## Current status update — 2026-09-05
+
+Public Sites version 24 enables the Oracle-backed, reference-only AI route.
+The published capabilities endpoint reports deep analysis and interpretation enabled.
+One live model response passed schema/citation checks, not semantic review.
+Earlier entries below are historical; their disabled/pending activation statements
+do not describe the current deployment. Human acceptance remains incomplete.
+
+Deployed follow-up: credential-pattern screening rejects suspicious source and
+evidence before the Oracle provider client is constructed. No match text is logged.
+This is heuristic screening, not a comprehensive secret detector.
+The owner reported successful Oracle deployment, HTTPS analysis, authorization,
+and quota preservation. Website files and provider configuration were unchanged.
+
+- Image: `sha256:a6174b5914dd3ad10d4366dcfbadce8aebe3d86e62d128e9bfb18aed3ba567e2`.
+- Archive SHA256: `94576224319c4b871783eda60f4a26ff404405831e9a41f8c64ecd4c7757e70b`.
+- Owner-run Oracle suite: 318 passed, 1 skipped, 9 subtests; runtime smoke passed.
+- Local full Python suite: 450 passed, 4 skipped, 9 subtests.
+- Pinned updater: 22 offline tests and 14 subtests passed.
+- Rollback backup: `/etc/codebase-archaeologist/pre-secret-screening-v1.service`;
+  retain the previous image. No live model call was used for this release.
+
+Next: follow the [quality review handoff](ai-quality-review-handoff.md). Semantic
+quality remains pending; these infrastructure tests do not establish accuracy.
+
+## Historical acceptance record
+
 Status: early beta; core journeys work, but acceptance is not complete.
 Tested public Sites version 15, source `3601f835ba4a6ba64f784714f5e9f4a1c2bade3b`,
 with deep enabled. No application source or public configuration was changed

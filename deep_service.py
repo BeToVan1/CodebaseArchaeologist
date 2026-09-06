@@ -348,6 +348,8 @@ def create_app(token: str | None = None, quota_path: str | None = None,
                 "providerStatus": exc.provider_status,
                 "structuredReason": exc.structured_reason,
             }), file=sys.stderr, flush=True)
+            if exc.category == "sensitive-input":
+                raise HTTPException(422, "AI input may contain credentials; no model request was made.") from exc
             if exc.category == "authentication":
                 raise HTTPException(503, "AI provider credentials were rejected.") from exc
             if exc.category == "quota":
