@@ -32,8 +32,30 @@ outputs or passing reviews to fill missing cases.
 
 Before running, agree on an explicit maximum request count and verify the
 free-only provider configuration. Use the existing fixed model and screened
-Oracle request boundary; do not use the paid legacy local prototype. An automated
-corpus runner through that boundary still needs implementation and testing.
+Oracle provider adapter; do not use the paid legacy local prototype. Synthetic
+evaluation is a separate operator-run path, not the public report API.
+
+The synthetic runner is now implemented locally with a no-network default:
+
+```powershell
+python interpretation_eval_runner.py --case direct-transform --max-requests 1
+```
+
+This prints a plan only. Execution requires Linux, `--execute`, explicit
+`--confirm-free-only`, a new `--output` directory, and server-side Cloudflare
+configuration. Do not execute until a specific request count is approved.
+The confirmation is an operator attestation, not an automatic account billing
+check. The cap is per run, not a global spending ledger. Do not repeatedly start
+new runs to bypass the agreed allowance.
+
+This runner uses only checked-in synthetic cases and the same screened provider
+adapter as Oracle. It does not send a fabricated report to the hosted reference
+API, and does not inherit that API's admission quotas. Records are created with
+owner-only permissions and never overwritten. It stores exact synthetic inputs,
+validated output, and sanitized failure categories; it stops on the first failure
+without retrying. An interrupted attempt remains recorded as started, with an
+unknown outcome. Failed cases remain missing from `candidates.json` and therefore
+cannot pass corpus evaluation. Answer keys are never included in model input.
 
 Start with one selected symbol. Retain the exact input hash, pinned repository
 commit, node ID, model, request settings, returned output, and screening/refusal
