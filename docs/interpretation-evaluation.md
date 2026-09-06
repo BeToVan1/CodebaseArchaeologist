@@ -98,5 +98,6 @@ accuracy percentage or grant release approval.
 Next, have a second reviewer calibrate the rubric, add held-out real-repository
 cases and repeated generations, and assess actual budget-approved outputs.
 Include failures, disagreements, prompt-injection variants and missing context.
-Public integration remains disabled until the broader authorization, spending,
-resource/cancellation, and quality requirements are satisfied.
+Public integration is enabled in Sites version 24 through the Oracle-backed route.
+One live response passed mechanical validation; that is not a semantic quality pass.
+Independent reviews and the broader quality acceptance work remain outstanding.

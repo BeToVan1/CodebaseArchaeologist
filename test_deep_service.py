@@ -152,6 +152,35 @@ def test_oracle_interpretation_uses_only_retained_owner_bound_evidence(monkeypat
         provider.assert_not_awaited()
 
 
+def test_sensitive_ai_input_is_rejected_without_egress_and_releases_slot(monkeypatch, capsys):
+    from evidence_store import EvidenceSnapshotStore
+    from test_interpretation_evidence import NODE, PIN as EVIDENCE_PIN, report
+    import workers_ai_client
+
+    monkeypatch.setenv("ARCHAEOLOGIST_INTERPRETATION_ENABLED", "true")
+    monkeypatch.setenv("ARCHAEOLOGIST_CF_ACCOUNT_ID", "a" * 32)
+    monkeypatch.setenv("ARCHAEOLOGIST_CF_AI_TOKEN", "token-" + "x" * 40)
+    store = EvidenceSnapshotStore()
+    ref = store.register_trusted_snapshot(
+        owner_key="a" * 64, graph=report(),
+        source_files={"example.py": b'def run():\n    password = "synthetic-sensitive-value"\n'},
+        commit_sha=EVIDENCE_PIN,
+    )
+    client = TestClient(service.create_app(TOKEN, evidence_store=store))
+    with patch.object(workers_ai_client.httpx, "AsyncClient") as provider_client:
+        for _ in range(2):
+            response = client.post("/api/interpret/quota-v1", headers=HEADERS,
+                                   json={"reportId": ref.report_id, "nodeId": NODE})
+            assert response.status_code == 422  # Not stuck busy after rejection.
+            assert "no model request was made" in response.text
+            assert "synthetic-sensitive-value" not in response.text
+        provider_client.assert_not_called()
+    logs = capsys.readouterr().err
+    assert "sensitive-input" in logs
+    assert "synthetic-sensitive-value" not in logs
+    assert client.get("/health").status_code == 200
+
+
 def test_oracle_interpretation_fails_closed_without_configuration():
     client = TestClient(service.create_app(TOKEN))
     with patch.object(service, "generate_workers_ai", new_callable=AsyncMock) as provider:
