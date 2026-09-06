@@ -1,0 +1,36 @@
+name: Python regression
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: python-regression-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+            requirements-service.txt
+      - name: Install test dependencies
+        run: python -m pip install -r requirements-dev.txt -r requirements-service.txt
+      - name: Run offline root regression suite
+        # Explicit root files exclude owner-only deployment tests that require
+        # local Docker export archives. No model or deployment credentials.
+        run: python -m pytest -q -p no:cacheprovider test_*.py

@@ -3,6 +3,16 @@
 Status: prepared, not executed. No new provider requests are authorized or
 submitted by this checklist. Human review may be done later.
 
+## Automated regression prerequisite
+
+The Python regression workflow runs the root test suite on pull requests and
+pushes to main using Linux/Python 3.13, read-only repository permissions, and no
+model/deployment credentials. Dependencies are downloaded during setup; tests
+use synthetic inputs and mocked provider transports. Owner-only updater tests
+under `scripts/` remain separate because they require validated local image
+archives. This workflow does not run live model evaluation, publish the website,
+or upgrade Oracle. A green run is a regression result, not a semantic quality pass.
+
 ## Offline preparation
 
 Use the project's Python environment from the repository root:
