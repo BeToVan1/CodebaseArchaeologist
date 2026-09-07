@@ -158,6 +158,44 @@ def symbol_start_line(node: ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDe
     return min([node.lineno, *decorator_lines])
 
 
+def guarded_call_facts(node: ast.AST) -> list[dict[str, Any]]:
+    """Exact synchronous None-guard/call/True body only; not a runtime trace."""
+    if not isinstance(node, ast.FunctionDef):
+        return []
+    body = node.body
+    if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) and isinstance(body[0].value.value, str):
+        body = body[1:]
+    if len(body) != 3:
+        return []
+    guard, call, final = body
+    if not (isinstance(guard, ast.If) and not guard.orelse and len(guard.body) == 1
+            and isinstance(guard.test, ast.Compare) and isinstance(guard.test.left, ast.Name)
+            and len(guard.test.ops) == 1 and isinstance(guard.test.ops[0], ast.Is)
+            and len(guard.test.comparators) == 1
+            and isinstance(guard.test.comparators[0], ast.Constant)
+            and guard.test.comparators[0].value is None
+            and isinstance(guard.body[0], ast.Return)
+            and isinstance(guard.body[0].value, ast.Constant) and guard.body[0].value.value is False
+            and isinstance(call, ast.Expr) and isinstance(call.value, ast.Call)
+            and isinstance(final, ast.Return) and isinstance(final.value, ast.Constant)
+            and final.value.value is True):
+        return []
+    if any(isinstance(item, (ast.Yield, ast.YieldFrom, ast.Await)) for item in ast.walk(call)):
+        return []
+    name = guard.test.left.id
+    parameters = [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]
+    if name not in {arg.arg for arg in parameters} or len(name) > 120:
+        return []
+    return [
+        {'line': guard.lineno, 'end_line': guard.body[0].end_lineno,
+         'text': f'In this function body, if parameter {name} is None, False is returned before the call at line {call.lineno}. This is only a None check, not general validity checking.'},
+        {'line': call.lineno, 'end_line': final.end_lineno,
+         'text': f'Otherwise, the call expression at line {call.lineno} is evaluated as a standalone statement and its result is ignored. True is returned at line {final.lineno} only after normal completion. This does not establish operation success or durable side effects.'},
+        {'line': call.lineno, 'end_line': final.end_lineno,
+         'text': 'There is no exception handler in this function body. An exception during call evaluation propagates out of the body instead of producing False or reaching the final True return. Whether such an exception occurs is unknown.'},
+    ]
+
+
 class SymbolVisitor(ast.NodeVisitor):
     """Extract nested class, function, and method nodes with containment edges."""
 
@@ -198,6 +236,9 @@ class SymbolVisitor(ast.NodeVisitor):
             symbol["bases"] = [ast.unparse(base) for base in node.bases]
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             symbol["is_async"] = isinstance(node, ast.AsyncFunctionDef)
+            facts = guarded_call_facts(node)
+            if facts:
+                symbol["local_execution_facts"] = facts
         docstring = ast.get_docstring(node, clean=True)
         if docstring:
             symbol["docstring"] = docstring
@@ -1878,6 +1919,14 @@ def build_symbol_evidence_packets(
                 ],
             },
         ]
+        for index, fact in enumerate(symbol.get("local_execution_facts", [])):
+            claims.append({
+                "id": f"claim:{symbol['id']}:local-execution:{index}",
+                "classification": "fact", "confidence": 1.0,
+                "text": fact["text"],
+                "provenance": f"Exact Python AST guarded-call body at {symbol['path']}:{fact['line']}-{fact['end_line']}; not a runtime trace",
+                "evidence_refs": [symbol["id"]],
+            })
         for edge in symbol_outgoing[:6]:
             target = symbol_index.get(edge["target"])
             if target is None:
