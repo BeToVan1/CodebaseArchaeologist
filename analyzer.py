@@ -196,6 +196,22 @@ def guarded_call_facts(node: ast.AST) -> list[dict[str, Any]]:
     ]
 
 
+def identity_return_facts(node: ast.AST) -> list[dict[str, Any]]:
+    """Only a synchronous body returning an unchanged bound parameter."""
+    if not isinstance(node, ast.FunctionDef):
+        return []
+    body = node.body
+    if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) and isinstance(body[0].value.value, str):
+        body = body[1:]
+    if len(body) != 1 or not isinstance(body[0], ast.Return) or not isinstance(body[0].value, ast.Name):
+        return []
+    name = body[0].value.id
+    if name not in {arg.arg for arg in [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]} or len(name) > 120:
+        return []
+    return [{'line': body[0].lineno, 'end_line': body[0].end_lineno,
+             'text': f'After argument binding, this function body returns the same object bound to parameter {name}, without transforming it or making calls. The return statement itself imposes no runtime type restriction; the concrete type is unknown. Returning a value is not itself a side effect. This describes the body only, not decorators, argument evaluation, or caller behavior.'}]
+
+
 class SymbolVisitor(ast.NodeVisitor):
     """Extract nested class, function, and method nodes with containment edges."""
 
@@ -234,9 +250,13 @@ class SymbolVisitor(ast.NodeVisitor):
         }
         if isinstance(node, ast.ClassDef):
             symbol["bases"] = [ast.unparse(base) for base in node.bases]
+            class_body = node.body
+            if class_body and isinstance(class_body[0], ast.Expr) and isinstance(class_body[0].value, ast.Constant) and isinstance(class_body[0].value.value, str):
+                class_body = class_body[1:]
+            symbol['pass_only_body'] = bool(class_body) and all(isinstance(statement, ast.Pass) for statement in class_body)
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             symbol["is_async"] = isinstance(node, ast.AsyncFunctionDef)
-            facts = guarded_call_facts(node)
+            facts = guarded_call_facts(node) or identity_return_facts(node)
             if facts:
                 symbol["local_execution_facts"] = facts
         docstring = ast.get_docstring(node, clean=True)
@@ -1924,9 +1944,24 @@ def build_symbol_evidence_packets(
                 "id": f"claim:{symbol['id']}:local-execution:{index}",
                 "classification": "fact", "confidence": 1.0,
                 "text": fact["text"],
-                "provenance": f"Exact Python AST guarded-call body at {symbol['path']}:{fact['line']}-{fact['end_line']}; not a runtime trace",
+                "provenance": f"Exact Python AST supported function body at {symbol['path']}:{fact['line']}-{fact['end_line']}; not a runtime trace",
                 "evidence_refs": [symbol["id"]],
             })
+        if symbol['kind'] == 'class':
+            bases = symbol.get('bases', [])
+            # Bounded source syntax, not resolved runtime inheritance or delegation.
+            if len(bases) <= 8 and sum(len(base) for base in bases) <= 1000:
+                declaration = ('Declared base expressions: ' + ', '.join(bases) + '.'
+                               if bases else 'No explicit base expressions are declared.')
+                if symbol.get('pass_only_body'):
+                    declaration += ' Apart from an optional docstring, the body contains only pass statements; no methods or attributes are defined in that body. Inherited behavior, decorators, and metaclass effects are not established by this observation.'
+                claims.append({
+                    'id': f"claim:{symbol['id']}:class-declaration",
+                    'classification': 'fact', 'confidence': 1.0,
+                    'text': declaration + ' This records class declaration syntax, not a function return or an instance creation. Parameterized base syntax alone does not establish persistence, runtime type enforcement, or delegated calls.',
+                    'provenance': f"Python AST ClassDef.bases at {symbol['path']}:{symbol['definition_line']}",
+                    'evidence_refs': [symbol['id']],
+                })
         for edge in symbol_outgoing[:6]:
             target = symbol_index.get(edge["target"])
             if target is None:

@@ -2,7 +2,7 @@ import ast
 
 import pytest
 
-from analyzer import analyze_repository, guarded_call_facts
+from analyzer import analyze_repository, guarded_call_facts, identity_return_facts
 from interpretation import EvidencePacket, build_interpretation_input, known_evidence_refs
 
 SOURCE = 'def f(value, store):\n    if value is None:\n        return False\n    store.save(value)\n    return True\n'
@@ -49,3 +49,49 @@ def test_nested_body_not_attributed_to_outer_and_decorators_are_body_scoped(tmp_
     assert 'local_execution_facts' not in outer
     f = next(n for n in nodes if n.get('name') == 'f')
     assert 'function body' in f['local_execution_facts'][0]['text']
+
+
+@pytest.mark.parametrize('source', [
+    'def f(value): return value',
+    'def f(value, /): return value',
+    'def f(*, value): return value',
+    '@wrapper\ndef f(value):\n    "doc"\n    return value',
+])
+def test_identity_facts_preserve_object_identity_and_body_scope(tmp_path, source):
+    (tmp_path / 'example.py').write_text(source)
+    node = next(n for n in analyze_repository(tmp_path)['nodes'] if n.get('name') == 'f')
+    packet = EvidencePacket.model_validate(node['evidence_packet'])
+    claim = next(c for c in packet.claims if ':local-execution:' in (c.id or ''))
+    assert claim.classification == 'fact' and claim.confidence == 1
+    assert claim.evidence_refs == [node['id']]
+    assert claim.id in known_evidence_refs(packet)
+    assert 'same object' in claim.text and 'no runtime type restriction' in claim.text
+    assert 'body only' in claim.text and 'not itself a side effect' in claim.text
+
+
+@pytest.mark.parametrize('source', [
+    'async def f(value): return value',
+    'def f(value): return value.copy()',
+    'def f(value): return other',
+    'def f(value):\n    value = 3\n    return value',
+    'def f(value):\n    yield value\n    return value',
+    'def f(value):\n    def inner(): return value',
+])
+def test_identity_rejects_unsupported_bodies(source):
+    assert identity_return_facts(ast.parse(source).body[0]) == []
+
+
+def test_class_declaration_preserves_parameterized_syntax_without_runtime_claims(tmp_path):
+    (tmp_path / 'example.py').write_text('class Empty(Repository[Order]):\n    "doc"\n    pass\nclass Active:\n    def run(self): return self\n')
+    nodes = analyze_repository(tmp_path)['nodes']
+    for name in ('Empty', 'Active'):
+        node = next(n for n in nodes if n.get('name') == name)
+        packet = EvidencePacket.model_validate(node['evidence_packet'])
+        claim = next(c for c in packet.claims if (c.id or '').endswith(':class-declaration'))
+        assert claim.evidence_refs == [node['id']]
+        assert claim.id in known_evidence_refs(packet)
+        assert 'not a function return or an instance creation' in claim.text
+        assert ('only pass statements' in claim.text) == (name == 'Empty')
+        if name == 'Empty':
+            assert 'Repository[Order]' in claim.text
+        assert 'local_execution_facts' not in node

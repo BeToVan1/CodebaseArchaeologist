@@ -1,7 +1,9 @@
 # AI explanation quality: next evaluation
 
-Status: the owner-approved six-case batch stopped on its second case. See
-[the batch outcome and provisional review](ai-six-case-batch-review.md).
+Status: the first owner-approved batch stopped on its second case; the separately
+approved revised batch recorded all six outputs with semantic issues remaining.
+See [the first batch review](ai-six-case-batch-review.md) and
+[the revised batch review](ai-revised-batch-review.md).
 No further provider requests are authorized or submitted by this checklist.
 Independent human review remains pending.
 
