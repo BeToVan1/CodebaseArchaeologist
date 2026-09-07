@@ -33,12 +33,11 @@ def write_record(directory, name, value):
         stream.write('\n')
 
 
-async def execute(cases, max_requests, directory, config, *, provider=generate_workers_ai):
+def build_plan(cases, max_requests):
+    """Describe the exact proposed run without credentials, writes, or inference."""
     if not cases or len(cases) > max_requests or not 1 <= max_requests <= 6:
         raise ValueError('Invalid request cap.')
-    # Require a new directory. Interrupted runs cannot silently resume/retry.
-    directory.mkdir(mode=0o700, parents=False, exist_ok=False)
-    write_record(directory, 'plan.json', {
+    return {
         'model': WORKERS_AI_MODEL, 'maxRequests': max_requests,
         'systemPromptSha256': hashlib.sha256(SYSTEM_PROMPT.encode('utf-8')).hexdigest(),
         'providerAdapterSha256': hashlib.sha256(
@@ -46,7 +45,14 @@ async def execute(cases, max_requests, directory, config, *, provider=generate_w
         'scope': 'checked-in synthetic corpus; not a live repository report',
         'settings': {'max_tokens': 1024, 'temperature': 0, 'stream': False},
         'cases': [{'caseId': c['caseId'], 'inputSha256': c['inputSha256']} for c in cases],
-    })
+    }
+
+
+async def execute(cases, max_requests, directory, config, *, provider=generate_workers_ai):
+    plan = build_plan(cases, max_requests)
+    # Require a new directory. Interrupted runs cannot silently resume/retry.
+    directory.mkdir(mode=0o700, parents=False, exist_ok=False)
+    write_record(directory, 'plan.json', plan)
     samples = []
     for index, case in enumerate(cases):
         model_input = case['input']
@@ -97,7 +103,8 @@ def main(argv=None):
         if not args.execute:
             print(json.dumps({'mode': 'dry-run', 'modelRequests': 0,
                               'maxRequests': args.max_requests, 'model': WORKERS_AI_MODEL,
-                              'cases': [c['caseId'] for c in cases]}))
+                              'cases': [c['caseId'] for c in cases],
+                              'plan': build_plan(cases, args.max_requests)}))
             return 0
         if os.name != 'posix' or not args.confirm_free_only or args.output is None:
             raise ValueError('Execution requires Linux, free-only confirmation, and a new output directory.')
