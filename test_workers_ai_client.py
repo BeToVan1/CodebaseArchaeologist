@@ -179,6 +179,35 @@ def test_config_requires_exact_safe_formats():
         assert WorkersAIConfig.optional(account, token) is None
 
 
+@pytest.mark.parametrize('placeholder', ['confidence', 'evidence_refs', 'text',
+    'what_it_does', 'execution_role', 'structural_rationale', 'uncertainties',
+    '  CONFIDENCE  ', '`text`', '"evidence_refs"'])
+def test_uncertainty_schema_echo_rejects_entire_response_without_retry(placeholder):
+    calls = []
+    async def handler(request):
+        calls.append(request)
+        output = generated()
+        output['uncertainties'] = ['Callers are unknown.', placeholder]
+        return httpx.Response(200, json={'success': True, 'result': {'response': output}})
+    with pytest.raises(WorkersAIError) as caught:
+        run_with(handler)
+    assert len(calls) == 1
+    assert caught.value.category == 'structured-output'
+    assert caught.value.structured_reason == 'uncertainty-placeholder'
+    assert str(caught.value) == 'Workers AI request failed.'
+
+
+@pytest.mark.parametrize('uncertainties', [[], ['The confidence field is not calibrated.'],
+    ['The source does not establish what text is returned.'],
+    ['The evidence_refs do not establish runtime behavior.']])
+def test_meaningful_sentences_mentioning_fields_are_not_placeholder_matches(uncertainties):
+    async def handler(request):
+        output = generated()
+        output['uncertainties'] = uncertainties
+        return httpx.Response(200, json={'success': True, 'result': {'response': output}})
+    assert run_with(handler)['uncertainties'] == uncertainties
+
+
 @pytest.mark.parametrize("source", [
     'password = "synthetic-example"',
     'API_KEY: str = "synthetic-example"',
