@@ -44,7 +44,7 @@ TOKEN = re.compile(r"^[\x21-\x7e]{32,256}$")
 FailureCategory = Literal["authentication", "quota", "request", "availability", "structured-output", "sensitive-input"]
 StructuredReason = Literal[
     "provider-envelope", "provider-result", "response-shape", "schema-validation",
-    "unknown-evidence", "response-size", "response-json",
+    "unknown-evidence", "response-size", "response-json", "uncertainty-placeholder",
 ]
 
 
@@ -141,6 +141,14 @@ def _validated_response(value: object, packet: EvidencePacket) -> GeneratedInter
         generated = GeneratedInterpretation.model_validate(raw)
     except ValidationError as exc:
         raise WorkersAIError("structured-output", structured_reason="schema-validation") from exc
+    # Exact schema-field echoes are not uncertainty statements. Do not reject
+    # ordinary sentences merely because they mention a schema field.
+    field_names = {"text", "confidence", "evidence_refs", "what_it_does",
+                   "execution_role", "structural_rationale", "uncertainties"}
+    for uncertainty in generated.uncertainties:
+        normalized = uncertainty.strip().strip('`\"\'').strip().casefold()
+        if normalized in field_names:
+            raise WorkersAIError("structured-output", structured_reason="uncertainty-placeholder")
     allowed = known_evidence_refs(packet)
     for section in (generated.what_it_does, generated.execution_role, generated.structural_rationale):
         if set(section.evidence_refs) - allowed:
