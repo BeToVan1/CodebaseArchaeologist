@@ -1,7 +1,9 @@
 # AI explanation quality: next evaluation
 
-Status: prepared, not executed. No new provider requests are authorized or
-submitted by this checklist. Human review may be done later.
+Status: the owner-approved six-case batch stopped on its second case. See
+[the batch outcome and provisional review](ai-six-case-batch-review.md).
+No further provider requests are authorized or submitted by this checklist.
+Independent human review remains pending.
 
 ## Automated regression prerequisite
 
@@ -47,6 +49,28 @@ configuration. Do not execute until a specific request count is approved.
 The confirmation is an operator attestation, not an automatic account billing
 check. The cap is per run, not a global spending ledger. Do not repeatedly start
 new runs to bypass the agreed allowance.
+
+### Reproducible offline plan
+
+Dry runs now include the same `plan` metadata written during execution: exact
+input hashes for selected cases, prompt and provider-adapter hashes, model,
+settings, and request cap. They do not read credentials or create the output
+directory even if `--output` is supplied. This is a proposal, not authorization
+or an enforced approval lock. Compare the plan again on the execution host;
+adapter byte hashes can differ with line endings, so investigate any mismatch.
+
+Prepare all six cases without calling the model:
+
+```powershell
+python interpretation_eval_runner.py --case direct-transform --case conditional-execution --case dependency-injection --case generic-base-candidate --case misleading-name --case source-instruction-injection --max-requests 6
+```
+
+Local checkpoint, 2026-09-07: this dry run completed with zero model requests.
+The evaluator with no candidate/review files supplied correctly reported pending
+for all six cases. This empty-input baseline does not erase or assess earlier
+private samples. Thirty focused runner/evaluator tests passed with mocked
+providers. At that checkpoint no execution budget had been approved; the later
+approved batch is now closed as recorded in the linked review.
 
 This runner uses only checked-in synthetic cases and the same screened provider
 adapter as Oracle. It does not send a fabricated report to the hosted reference

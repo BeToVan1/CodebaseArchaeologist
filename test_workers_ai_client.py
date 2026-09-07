@@ -64,6 +64,20 @@ def test_prompt_covers_delegation_outcomes_without_a_case_specific_answer():
     assert body['stream'] is False
 
 
+def test_prompt_requires_type_assumptions_and_evidence_for_rationale():
+    prompt = provider._request_body(packet(), 'def transform(item): return item.convert()')['messages'][0]['content']
+    for guidance in ('neither built-in semantics nor the return type',
+                     'explicit assumption', 'consistent across all sections',
+                     'unresolved input and return types in uncertainties',
+                     'reason for placement is not established and stop there',
+                     'without specific supporting evidence',
+                     'never a JSON field name'):
+        assert guidance in prompt
+    # Guidance is not an answer key or tailored response for the benchmark cases.
+    for case_name in ('example.normalize', 'save_if_valid', 'direct-transform'):
+        assert case_name not in prompt
+
+
 def test_sends_one_bounded_json_mode_request_and_validates_grounding():
     calls = 0
 
