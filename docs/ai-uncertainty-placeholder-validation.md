@@ -1,6 +1,15 @@
 # Uncertainty placeholder validation
 
-Implemented locally; not deployed or tested with another live model request.
+Deployed to Oracle, as confirmed by the owner. HTTPS analysis, authorization,
+and quota preservation passed; website files were unchanged. No new live model
+request was used to validate this release.
+
+- Image: `sha256:0aacca4abb7ac2bb82e872378e08ec973a8d67aa6da19dec2f2915fe1ca2d62c`.
+- Archive SHA256: `757abce89239b2f25f199948055305d0915635e24f81d429ae9f806cf4279933`.
+- Oracle tests: 346 passed, 1 skipped, 9 subtests; runtime smoke passed.
+- Rollback backup: `/etc/codebase-archaeologist/pre-uncertainty-validation-v1.service`.
+  Keep the previous image for rollback.
+- Updater tests: 22 passed, 14 subtests. Semantic quality remains pending.
 
 The owner-provided enriched-evidence sample for `conditional-execution` (input
 hash `220292064993c8af25458a1448ae9ed6a724fe2d6b12eb244cc3ed37355498dc`)
