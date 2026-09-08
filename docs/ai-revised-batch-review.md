@@ -34,5 +34,23 @@ instantiation, persistence, generic enforcement, or metaclass/decorator behavior
 Claims remain owner-bound with exact source provenance and reach evidence packets.
 
 These changes invalidate evaluation input hashes. Old outputs and reviews must
-remain attached to their original inputs. Changes are local, not deployed or
-evaluated with the model. Independent review and broader acceptance remain pending.
+remain attached to their original inputs. The backend changes are now deployed
+as owner-confirmed below, but have not been evaluated with the model.
+Independent review and broader acceptance remain pending.
+
+## Owner-confirmed deployment
+
+- Image: `sha256:dc2e71b75cd11d22868026d41e74c0cd93384345aeb6b0e0516eaf7a59e7519d`
+- Bundle: `oracle-a992e7baed494cdeab63495d1099d5ca`
+- Archive SHA256: `0b542edcdb20bad5b4cefa36f6f69fc3c2050403713e743087fb3d0dbe1592eb`
+- Oracle: 358 tests passed, 1 skipped, 9 subtests; runtime smoke passed.
+- Pinned updater: 22 local tests and 14 subtests passed.
+- Owner reported successful upgrade, verified HTTPS analysis, authorization,
+  and quota preservation after read-only preflight and explicit approval.
+- Backup: `/etc/codebase-archaeologist/pre-symbol-facts-v1.service`.
+- Previous image retained for rollback:
+  `sha256:0aacca4abb7ac2bb82e872378e08ec973a8d67aa6da19dec2f2915fe1ca2d62c`.
+
+The image includes the revised prompt and new deterministic evidence. No model
+inference or website-file change was performed by the upgrade. Deployment
+confirmation is based on the owner's supplied output, not a new remote probe.
