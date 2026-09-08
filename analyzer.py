@@ -1903,7 +1903,7 @@ def build_symbol_evidence_packets(
                 "infrastructure adapter": "Its path suggests infrastructure integration.",
             }
             role_text = path_roles.get(layer,
-                "The symbol's execution role is not established. Its path alone does not identify configuration, infrastructure, or business logic.")
+                "The symbol's wider application role is not established. This does not negate local behavior visible in its source or recorded execution facts. Its path alone does not identify configuration, infrastructure, or business logic.")
             role_provenance = (f"Path convention only: {symbol['path']}; not runtime evidence"
                 if layer in path_roles else "No recognized framework role or architectural path convention")
         role_confidence = 0.98 if route or model else (0.0 if layer == "supporting code" else 0.6)
@@ -1972,7 +1972,9 @@ def build_symbol_evidence_packets(
                 {
                     "id": f"claim:{symbol['id']}:edge:{edge['id']}",
                     "classification": "heuristic" if candidate else "fact",
-                    "text": f"Candidate relationship: {relationship}" if candidate else relationship[0].upper() + relationship[1:],
+                    "text": (f"Candidate relationship: {relationship}" if candidate else relationship[0].upper() + relationship[1:]) + (
+                        " This is a static inheritance relationship, not evidence of a delegated call or instance creation."
+                        if edge['kind'] == 'extends' else ''),
                     "confidence": float(edge.get("confidence", 1.0)),
                     "provenance": (
                         f"{edge.get('resolution_method', 'static relationship')} at "

@@ -7,6 +7,11 @@ See [the first batch review](ai-six-case-batch-review.md) and
 No further provider requests are authorized or submitted by this checklist.
 Independent human review remains pending.
 
+The later symbol-facts batch also recorded all six outputs; see the
+[complete provisional findings](ai-symbol-facts-batch-review.md). No batch is
+currently active or authorized for further requests. Evidence-wording corrections
+are offline only, and AI explanations remain experimental.
+
 ## Automated regression prerequisite
 
 The Python regression workflow runs the root test suite on pull requests and
