@@ -107,7 +107,7 @@ def test_parameterized_base_retains_candidate_edge_and_original_evidence(tmp_pat
     claim = next(claim for claim in nodes[edge["source"]]["evidence_packet"]["claims"]
                  if claim["evidence_refs"] == [edge["id"]])
     assert claim["classification"] == "heuristic"
-    assert claim["text"] == "Candidate relationship: extends base.Base."
+    assert claim["text"] == "Candidate relationship: extends base.Base. This is a static inheritance relationship, not evidence of a delegated call or instance creation."
     assert claim["confidence"] == edge["confidence"]
 
 
@@ -116,7 +116,7 @@ def test_direct_inheritance_claim_remains_fact(tmp_path):
     child = next(node for node in graph["nodes"] if node.get("qualified_name") == "base.Child")
     claim = next(claim for claim in child["evidence_packet"]["claims"] if ":edge:" in claim["id"])
     assert claim["classification"] == "fact"
-    assert claim["text"] == "Extends base.Base."
+    assert claim["text"] == "Extends base.Base. This is a static inheritance relationship, not evidence of a delegated call or instance creation."
 
 
 def test_unresolved_parameterized_base_does_not_guess_same_named_local_class(tmp_path):

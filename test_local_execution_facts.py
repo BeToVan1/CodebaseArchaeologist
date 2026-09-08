@@ -95,3 +95,23 @@ def test_class_declaration_preserves_parameterized_syntax_without_runtime_claims
         if name == 'Empty':
             assert 'Repository[Order]' in claim.text
         assert 'local_execution_facts' not in node
+
+
+def test_unknown_application_role_does_not_erase_local_execution(tmp_path):
+    (tmp_path / 'example.py').write_text('def identity(value): return value\n')
+    node = next(n for n in analyze_repository(tmp_path)['nodes'] if n.get('name') == 'identity')
+    packet = EvidencePacket.model_validate(node['evidence_packet'])
+    role = next(c for c in packet.claims if (c.id or '').endswith(':role'))
+    assert 'wider application role is not established' in role.text
+    assert 'does not negate local behavior' in role.text
+    assert role.classification == 'heuristic' and role.confidence == 0
+    assert any(':local-execution:' in (c.id or '') for c in packet.claims)
+
+
+def test_inheritance_claim_does_not_describe_delegated_execution(tmp_path):
+    (tmp_path / 'example.py').write_text('class Base: pass\nclass Child(Base): pass\n')
+    node = next(n for n in analyze_repository(tmp_path)['nodes'] if n.get('name') == 'Child')
+    packet = EvidencePacket.model_validate(node['evidence_packet'])
+    claims = [c for c in packet.claims if ':edge:' in (c.id or '') and 'inheritance relationship' in c.text]
+    assert claims
+    assert all('not evidence of a delegated call or instance creation' in c.text for c in claims)
