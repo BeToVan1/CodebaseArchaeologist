@@ -1,13 +1,83 @@
 # Codebase Archaeologist
 
-The public website supports both a bounded file/import inventory and explicit **Deep analysis**
-for public Python repositories. Deep analysis uses the isolated Oracle Python service for AST
-symbols, supported execution flows, architectural patterns, risks and remediation guidance.
-Optional LLM interpretation is enabled on public Sites version 24 through the Oracle-backed,
-reference-only route. Semantic explanation quality still requires human evaluation.
-This is an early beta, not a complete runtime understanding of
-arbitrary Python programs. See [acceptance results](docs/acceptance-testing.md) for verified
-workflows, known issues and remaining release checks.
+An evidence-backed explorer that helps you understand an unfamiliar Python codebase.
+Give it a public GitHub repository, explore its dependency map, open the relevant
+source, and inspect architectural patterns, risk signals, and supported execution
+flows. Optional AI explanations interpret selected code using cited evidence.
+
+**[Open the live demo](https://python-codebase-archaeologist.bevanto49797.chatgpt.site/)**
+
+No local installation is required to use the website.
+
+## How to use the site
+
+1. **Explore the example.** The site opens with a bundled `cosmicpython/code`
+   report. This is an example, not an analysis of a repository you submitted.
+2. **Analyze your repository.** Enter a public Python GitHub URL, choose
+   **Deep analysis** under **Next analysis mode**, and click **Analyze repository**.
+   For example, try `https://github.com/pallets/itsdangerous`. Inventory mode
+   provides a lighter file/import overview rather than a full symbol analysis.
+3. **Navigate the map.** Select a file, then choose a class, function, or method
+   from its symbols. The detail panel shows source, relationships, evidence, and
+   available findings. Use the file filter and Production / All files controls
+   to narrow the view.
+4. **Explore another view.** Open **Patterns**, **Execution flows**, or
+   **Risk findings**. Where flows are available, choose an entrypoint and a path;
+   use **Open relationship source** or an unresolved step's source action to
+   inspect its evidence. A report with no recognized flows is not proof that the
+   repository has no execution paths.
+5. **Request an AI explanation, optionally.** Select a symbol in a fresh hosted
+   Deep report, find **AI interpretation**, and use its generation button when
+   available. Merely selecting code does not call the model. Read the citations
+   and uncertainties alongside the explanation.
+6. **Export or reopen a report.** Use **Download report (includes source)** to
+   save JSON, or **Open report JSON** to inspect one. Imports stay in the browser
+   tab and are labelled unverified; AI generation is disabled for imported reports.
+
+If analysis is busy or a usage limit is reached, follow the displayed message
+and try later; you can still explore the bundled example or an exported report.
+If a fresh report's AI reference expires, a new Deep analysis is needed before
+requesting an explanation. Do not repeatedly submit requests to bypass limits.
+
+## What makes it different
+
+- **Source-backed structure:** Python static analysis extracts symbols and
+  relationships with source locations; hosted analysis pins the repository to a
+  commit so the evidence does not drift with later edits.
+- **Visible uncertainty:** facts, heuristics, and AI interpretations are kept
+  distinct. Dynamic dispatch and incomplete paths remain explicit gaps.
+- **Explainable findings:** inspect dependency cycles, coupling hotspots,
+  test-proximity signals, and selected Python risk rules—not just an opaque score.
+- **Grounded AI:** the hosted model is Cloudflare Workers AI's
+  `@cf/meta/llama-3.3-70b-instruct-fp8-fast`. Responses are checked against the
+  selected evidence references; valid citations alone do not guarantee correctness.
+
+## Scope and limitations
+
+This is a **Python-first hackathon beta**, not a complete runtime analysis or a
+security audit. Framework support is intentionally bounded, with FastAPI and
+SQLAlchemy as the initial flow/persistence slice. Static paths are not proof of
+runtime order, and test proximity is not test coverage. Other languages in a
+mixed repository are not deeply analyzed.
+
+The hosted analyzer and website are released separately. The website can display
+newer report fields, but older reports and the bundled example are not
+retroactively enriched. Some latest analyzer improvements may be available only
+in locally generated reports until a backend release is validated.
+
+AI explanations can be wrong and require human judgment. Generating one sends
+selected evidence and source to the configured model provider; secret screening
+is heuristic, not a guarantee. Use public repositories intended for this purpose.
+Downloaded reports contain source and may contain local paths—review them before
+sharing. JSON export/import is not persistent cloud storage or a shareable saved
+snapshot link.
+
+See [release gates](docs/python-mvp-release-gates.md) and
+[acceptance results](docs/acceptance-testing.md) for validation and remaining work.
+
+## Technical documentation
+
+The sections below describe development, analysis details, and operational limits.
 
 ## Local development
 
@@ -267,6 +337,7 @@ or `PYTHON` must name its executable. Repository fixture code is parsed, never e
 - Symbols, flows, patterns, risks, and remediation say **not analyzed** in inventory mode. Empty
   results must not be interpreted as a clean bill of health. File details do not invent AST facts
   or architectural intent from an inventory-only response.
+
 
 
 
