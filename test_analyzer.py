@@ -409,6 +409,8 @@ def create_item_route(
         "method": "POST",
         "route_path": "/items",
         "label": "POST /items",
+        "router_prefix": "",
+        "router_prefix_evidence": {"path": "api.py", "line": 6, "column": 9, "expression": "APIRouter()"},
     }
     assert route["architectural_role"] == "route"
     assert route["entrypoint_evidence"]["line"] == 8
@@ -603,7 +605,7 @@ def list_items_route():
     model_packet = symbols["models.ItemModel"]["evidence_packet"]
     assert route_packet["execution_role"]["classification"] == "fact"
     assert route_packet["execution_role"]["text"] == (
-        "Receives GET /items and begins an HTTP execution flow."
+        "Declares GET /items on a recognized framework app or router. The complete mounted URL and runtime registration are not established."
     )
     assert persistence_flow["id"] in repository_packet["flow_ids"]
     assert persistence_edge["id"] in repository_packet["related_edge_ids"]

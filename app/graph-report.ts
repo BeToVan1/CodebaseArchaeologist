@@ -31,7 +31,7 @@ const packet = shape({ version: text, node_id: text, source_range: shape({ path:
   related_edge_ids: strings, flow_ids: strings, finding_ids: strings, pattern_ids: strings, claims: list(claim) });
 const nodeDetails = shape({ name: optional(text), qualified_name: optional(text), parent_id: optional(text), decorators: optional(strings), bases: optional(strings), docstring: optional(text),
   start_line: optional(line), end_line: optional(line), definition_line: optional(line), is_async: optional(boolean), source_truncated: optional(boolean), framework: optional(text), architectural_role: optional(text),
-  entrypoint: optional(shape({ framework: text, kind: text, method: optional(text), route_path: optional(nullable(text)), label: text })), entrypoint_evidence: optional(evidence),
+  entrypoint: optional(shape({ framework: text, kind: text, method: optional(text), route_path: optional(nullable(text)), router_prefix: optional(nullable(text)), router_prefix_evidence: optional(evidence), local_inclusions: optional(list(shape({ parent: text, path: nullable(text), evidence }))), label: text })), entrypoint_evidence: optional(evidence),
   sqlalchemy: optional(shape({ kind: choice("declarative-base", "abstract-model", "model"), table_name: optional(nullable(text)), table_expression: optional(nullable(text)), is_abstract: boolean, columns: list(member), relationships: list(member) })),
   evidence_packet: optional(packet) });
 

@@ -42,7 +42,6 @@ IGNORED_DIR_NAMES = {
 MAX_SOURCE_BYTES = 200 * 1024  # 200 KB per file, applied to the encoded UTF-8 text
 MAX_PYTHON_FILES = 2000  # hard cap on how many discovered files a single run will analyze
 MAX_FLOW_DEPTH = 8
-MAX_REPRESENTATIVE_FLOWS = 3
 MAX_FLOW_CANDIDATES_PER_ENTRYPOINT = 12
 MAX_FLOW_CANDIDATES = 500
 LARGE_SYMBOL_LINES = 80
@@ -617,10 +616,18 @@ def fastapi_route_metadata(
         if owner not in instances or method not in FASTAPI_ROUTE_METHODS:
             continue
         route_path = None
-        if decorator.args and isinstance(decorator.args[0], ast.Constant):
-            if isinstance(decorator.args[0].value, str):
-                route_path = decorator.args[0].value
-        label = f"{method.upper()} {route_path or '(dynamic path)'}"
+        path_arguments = ([decorator.args[0]] if decorator.args else []) + [
+            keyword.value for keyword in decorator.keywords if keyword.arg == "path"
+        ]
+        # This records a declaration, not successful runtime registration.
+        # Expanded options alone cannot establish a path; conflicting explicit
+        # path arguments remain unknown.
+        if len(path_arguments) == 1:
+            path_argument = path_arguments[0]
+            if isinstance(path_argument, ast.Constant) and isinstance(path_argument.value, str):
+                route_path = path_argument.value
+        displayed_path = "(dynamic path)" if route_path is None else route_path or "(empty path)"
+        label = f"{method.upper()} {displayed_path}"
         return (
             {
                 "framework": "fastapi",
@@ -632,6 +639,78 @@ def fastapi_route_metadata(
             decorator,
         )
     return None, None
+
+
+def fastapi_router_prefix_declaration(tree: ast.Module, bindings: dict[str, str], owner: str) -> dict[str, Any] | None:
+    """Read a single top-level router constructor, never infer a mounted URL.
+
+    Reassigned names, expanded options and computed prefixes remain unknown.
+    This describes source syntax only, not successful runtime registration.
+    """
+    assignments = [statement for statement in tree.body
+                   if isinstance(statement, (ast.Assign, ast.AnnAssign))
+                   and any(isinstance(target, ast.Name) and target.id == owner
+                           for target in (statement.targets if isinstance(statement, ast.Assign) else [statement.target]))]
+    if len(assignments) != 1:
+        return None
+    statement = assignments[0]
+    call = statement.value
+    if not isinstance(call, ast.Call) or expand_bound_name(dotted_expression(call.func) or "", bindings) != "fastapi.APIRouter":
+        return None
+    values = [keyword.value for keyword in call.keywords if keyword.arg == "prefix"]
+    prefix = None
+    if not call.args and not any(keyword.arg is None for keyword in call.keywords):
+        if not values:
+            prefix = ""
+        elif len(values) == 1 and isinstance(values[0], ast.Constant) and isinstance(values[0].value, str):
+            prefix = values[0].value
+    return {"prefix": prefix, "line": call.lineno, "column": call.col_offset,
+            "expression": ast.unparse(call)}
+
+
+def fastapi_local_inclusions(tree: ast.Module, bindings: dict[str, str], owner: str,
+                             route_path: str | None, route_line: int) -> list[dict[str, Any]]:
+    """Bounded parent-relative declarations, not a mounted URL or runtime proof."""
+    child = fastapi_router_prefix_declaration(tree, bindings, owner)
+    if child is None:
+        return []
+    instances = fastapi_instances(tree, bindings)
+    def stable_name(name: str, before_line: int) -> bool:
+        # Conservatively reject rebinding (including nested writes) and direct
+        # attribute mutation. This is not alias or runtime mutation analysis.
+        writes = [node for node in ast.walk(tree) if isinstance(node, ast.Name)
+                  and node.id == name and isinstance(node.ctx, (ast.Store, ast.Del))]
+        mutations = [node for node in ast.walk(tree) if isinstance(node, ast.Attribute)
+                     and isinstance(node.ctx, (ast.Store, ast.Del))
+                     and isinstance(node.value, ast.Name) and node.value.id == name]
+        return len(writes) == 1 and writes[0].lineno < before_line and not mutations
+    results = []
+    for statement in tree.body:
+        if not isinstance(statement, ast.Expr) or not isinstance(statement.value, ast.Call):
+            continue
+        call = statement.value
+        expression = dotted_expression(call.func) or ""
+        if not expression.endswith(".include_router"):
+            continue
+        parent = expression.rsplit(".", 1)[0]
+        arguments = list(call.args) + [kw.value for kw in call.keywords if kw.arg == "router"]
+        if parent not in instances or len(arguments) != 1 or not isinstance(arguments[0], ast.Name) or arguments[0].id != owner:
+            continue
+        prefixes = [kw.value for kw in call.keywords if kw.arg == "prefix"]
+        prefix = "" if not prefixes else None
+        if len(prefixes) == 1 and isinstance(prefixes[0], ast.Constant) and isinstance(prefixes[0].value, str):
+            prefix = prefixes[0].value
+        # include_router copies routes at the call site: do not compose a route
+        # defined later, or ambiguous expanded options. Keep the site visible.
+        known = (call.lineno > route_line and prefix is not None and child["prefix"] is not None
+                 and route_path is not None and not any(kw.arg is None for kw in call.keywords)
+                 and parent != owner and stable_name(parent, call.lineno)
+                 and stable_name(owner, route_line))
+        results.append({"parent": parent, "path": prefix + child["prefix"] + route_path if known else None,
+                        "line": call.lineno, "column": call.col_offset, "expression": ast.unparse(call)})
+        if len(results) >= 32:
+            break
+    return results
 
 
 def function_defaults(
@@ -1152,6 +1231,16 @@ def extract_symbol_relationship_edges(
 
             route, route_decorator = fastapi_route_metadata(ast_node, route_instances)
             if route is not None and route_decorator is not None:
+                route_owner = dotted_expression(route_decorator.func).rsplit(".", 1)[0]
+                prefix = fastapi_router_prefix_declaration(tree, bindings, route_owner)
+                if prefix is not None:
+                    route["router_prefix"] = prefix["prefix"]
+                    route["router_prefix_evidence"] = {"path": relative_posix, **{key: value for key, value in prefix.items() if key != "prefix"}}
+                    inclusions = fastapi_local_inclusions(tree, bindings, route_owner, route["route_path"], ast_node.end_lineno)
+                    if inclusions:
+                        route["local_inclusions"] = [{"parent": item["parent"], "path": item["path"],
+                            "evidence": {"path": relative_posix, "line": item["line"], "column": item["column"], "expression": item["expression"]}}
+                            for item in inclusions]
                 source_symbol["entrypoint"] = route
                 source_symbol["framework"] = "fastapi"
                 source_symbol["architectural_role"] = "route"
@@ -1163,6 +1252,10 @@ def extract_symbol_relationship_edges(
                 }
                 metrics["fastapi_routes"] += 1
 
+            # Dependency providers may themselves declare Depends parameters.
+            # The imported declaration is evidence of wiring, not a route or
+            # proof that FastAPI invokes this callable at runtime.
+            if isinstance(ast_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 for dependency in fastapi_dependency_calls(ast_node, bindings):
                     if not dependency.args:
                         metrics["unresolved_dependencies"] += 1
@@ -1312,7 +1405,11 @@ def discover_representative_flows(
         if edge["kind"] in traversable_kinds:
             adjacency.setdefault(edge["source"], []).append(edge)
     for outgoing in adjacency.values():
-        outgoing.sort(key=lambda edge: (edge["kind"] == "may-dispatch-to", edge["id"]))
+        # Keep nested provider wiring reachable before constructor/utility calls
+        # consume a branch's bounded share. This is selection, not runtime order.
+        outgoing.sort(key=lambda edge: (0 if edge["kind"] == "depends-on" else
+                                       2 if edge["kind"] == "may-dispatch-to" else 1,
+                                       edge["id"]))
 
     unresolved_by_source: dict[str, list[dict[str, Any]]] = {}
     for site in unresolved_sites:
@@ -1325,6 +1422,12 @@ def discover_representative_flows(
     symbol_index = {node["id"]: node for node in symbol_nodes}
     candidates: list[dict[str, Any]] = []
     candidate_counts: dict[str, int] = {}
+    # Reserve a fair bounded share before exploring any entrypoint. A large
+    # early router must not consume every later router's path budget.
+    entrypoint_budget = min(MAX_FLOW_CANDIDATES_PER_ENTRYPOINT,
+                            max(1, MAX_FLOW_CANDIDATES // max(1, len(entrypoints))))
+    branch_limit = entrypoint_budget
+    limited_entrypoints: set[str] = set()
 
     def walk(
         entrypoint: dict[str, Any],
@@ -1336,8 +1439,9 @@ def discover_representative_flows(
         if (
             len(candidates) >= MAX_FLOW_CANDIDATES
             or candidate_counts.get(entrypoint["id"], 0)
-            >= MAX_FLOW_CANDIDATES_PER_ENTRYPOINT
+            >= branch_limit
         ):
+            limited_entrypoints.add(entrypoint["id"])
             return
         outgoing = [
             edge for edge in adjacency.get(current_id, [])
@@ -1362,6 +1466,16 @@ def discover_representative_flows(
             for node_id in node_ids
             for step in unresolved_by_source.get(node_id, [])
         ]
+        # A bounded simple path does not expand recursive calls. Keep each
+        # skipped back edge visible instead of implying the execution ends here.
+        for index, node_id in enumerate(node_ids):
+            for edge in adjacency.get(node_id, []):
+                if edge["target"] in node_ids[:index + 1]:
+                    unresolved_steps.append({
+                        "source_id": node_id,
+                        "reason": "recursive-flow-not-expanded",
+                        "evidence": dict(edge["evidence"]),
+                    })
         if depth_truncated:
             terminal = symbol_index[current_id]
             unresolved_steps.append(
@@ -1389,8 +1503,32 @@ def discover_representative_flows(
         )
         candidate_counts[entrypoint["id"]] = candidate_counts.get(entrypoint["id"], 0) + 1
 
-    for entrypoint in entrypoints:
-        walk(entrypoint, entrypoint["id"], [entrypoint["id"]], [], 1.0)
+    for entrypoint in entrypoints[:MAX_FLOW_CANDIDATES]:
+        root_edges = [edge for edge in adjacency.get(entrypoint["id"], [])
+                      if edge["target"] != entrypoint["id"]]
+        if not root_edges:
+            branch_limit = entrypoint_budget
+            walk(entrypoint, entrypoint["id"], [entrypoint["id"]], [], 1.0)
+            continue
+        for index, edge in enumerate(root_edges):
+            used = candidate_counts.get(entrypoint["id"], 0)
+            if used >= entrypoint_budget:
+                limited_entrypoints.add(entrypoint["id"])
+                break
+            branch_limit = used + max(1, (entrypoint_budget - used) // (len(root_edges) - index))
+            walk(entrypoint, edge["target"], [entrypoint["id"], edge["target"]],
+                 [edge["id"]], float(edge.get("confidence", 1.0)))
+
+    for flow in candidates:
+        if flow["entrypoint_id"] in limited_entrypoints:
+            root = symbol_index[flow["entrypoint_id"]]
+            flow["completeness"] = "partial"
+            flow["unresolved_steps"].append({
+                "source_id": root["id"],
+                "reason": "flow-path-budget-reached",
+                "evidence": {"path": root["path"], "line": root["definition_line"],
+                             "expression": root["qualified_name"]},
+            })
 
     candidates.sort(
         key=lambda flow: (
@@ -1404,26 +1542,9 @@ def discover_representative_flows(
             flow["ordered_node_ids"],
         )
     )
-    representatives: list[dict[str, Any]] = []
-    represented_entrypoints: set[str] = set()
-    for flow in candidates:
-        if flow["entrypoint_id"] in represented_entrypoints:
-            continue
-        representatives.append(flow)
-        represented_entrypoints.add(flow["entrypoint_id"])
-        if len(representatives) == MAX_REPRESENTATIVE_FLOWS:
-            break
-    if len(representatives) < MAX_REPRESENTATIVE_FLOWS:
-        for flow in candidates:
-            if flow in representatives:
-                continue
-            representatives.append(flow)
-            if len(representatives) == MAX_REPRESENTATIVE_FLOWS:
-                break
-
-    for index, flow in enumerate(representatives, start=1):
+    for index, flow in enumerate(candidates, start=1):
         flow["id"] = f"flow:{flow['entrypoint_id']}:{index}"
-    return representatives
+    return candidates
 
 
 def import_cycle_components(
@@ -1888,7 +2009,7 @@ def build_symbol_evidence_packets(
             summary_provenance = "Python AST symbol definition"
 
         if route:
-            role_text = f"Receives {symbol['entrypoint']['label']} and begins an HTTP execution flow."
+            role_text = f"Declares {symbol['entrypoint']['label']} on a recognized framework app or router. The complete mounted URL and runtime registration are not established."
             role_provenance = "Resolved FastAPI decorator"
         elif model:
             table = symbol["sqlalchemy"].get("table_name") or "a database table"
@@ -2359,7 +2480,9 @@ def analyze_repository(repo_root: Path) -> dict[str, Any]:
             "tier": "deep",
             "engine": "python-static-analyzer",
             "limitations": [
-                "Static analysis can miss runtime dispatch, generated code, and dynamically assembled dependencies."
+                "Static analysis can miss runtime dispatch, generated code, and dynamically assembled dependencies.",
+                "Route labels describe decorator paths, not mounted URLs. Router prefixes, include_router/mount prefixes and additional decorators are not composed.",
+                "Flow discovery retains at most 500 paths across the first 500 entrypoints, at most 12 per entrypoint, and at most 8 edges per path. Budgets are shared fairly; omitted branches are not proof of absent behavior."
             ],
         },
         "coverage": {

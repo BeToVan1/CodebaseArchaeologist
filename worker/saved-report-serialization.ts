@@ -12,7 +12,7 @@ const schema: Schema = {
   analysis: { ...fields('tier engine'), limitations: [true] },
   coverage: fields('python_files_total_found python_files_analyzed python_files_truncated github_tree_truncated source_failures source_truncations unmatched_imports'),
   nodes: [{ ...fields('id kind path name qualified_name parent_id start_line end_line definition_line is_async docstring size_bytes source source_truncated source_error framework architectural_role'),
-    decorators: [true], bases: [true], entrypoint: fields('framework kind method route_path label'), entrypoint_evidence: evidence,
+    decorators: [true], bases: [true], entrypoint: { ...fields('framework kind method route_path label router_prefix'), router_prefix_evidence: evidence, local_inclusions: [{ ...fields('parent path'), evidence }] }, entrypoint_evidence: evidence,
     sqlalchemy: { ...fields('kind table_name table_expression is_abstract'), columns: [member], relationships: [member] },
     evidence_packet: { ...fields('version node_id'), source_range: fields('path start_line end_line'),
       summary: statement, execution_role: statement, structural_rationale: statement,

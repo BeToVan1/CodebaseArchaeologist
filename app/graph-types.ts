@@ -31,6 +31,9 @@ export type GraphNode = {
     kind: string;
     method?: string;
     route_path?: string | null;
+    router_prefix?: string | null;
+    local_inclusions?: { parent: string; path: string | null; evidence: { path?: string; line?: number; column?: number; expression?: string } }[];
+    router_prefix_evidence?: { path?: string; line?: number; column?: number; expression?: string };
     label: string;
   };
   entrypoint_evidence?: { path?: string; line?: number; column?: number; expression?: string };
