@@ -143,6 +143,9 @@
 .flow-catalog-heading span { display: grid; place-items: center; min-width: 22px; height: 22px; border-radius: 11px; background: #dfe9df; color: #315b3d; font-weight: 800; }
 .flow-catalog > button { position: relative; width: 100%; margin-bottom: 9px; padding: 12px; border: 1px solid transparent; border-radius: 9px; background: #fff; color: var(--ink); text-align: left; cursor: pointer; box-shadow: 0 3px 12px rgba(44,62,49,.05); }
 .flow-catalog > button:hover { border-color: #b9c6ba; }
+.flow-entrypoint-picker { display: grid; gap: 8px; margin-bottom: 12px; font-size: 14px; }
+.flow-entrypoint-picker select { width: 100%; min-width: 0; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--ink); font: inherit; }
+.flow-coverage-note { font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
 .flow-catalog > button.active { border-color: var(--moss); box-shadow: 0 0 0 2px rgba(49,91,61,.09); }
 .flow-catalog button strong, .flow-catalog button small { display: block; padding-right: 48px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .flow-catalog button strong { font: 700 11px/1.4 ui-monospace,monospace; }
@@ -248,6 +251,11 @@
 .flow-gaps ul { margin: 0; padding: 0; list-style: none; }
 .flow-gaps li { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-top: 1px solid #efe1ca; font-size: 9px; }
 .flow-gaps li:first-child { border-top: 0; }
+.flow-gaps li { flex-wrap: wrap; }
+.flow-source-button { padding: 7px 10px; border: 1px solid var(--moss); border-radius: 5px; background: white; color: var(--ink); font: inherit; font-size: 14px; cursor: pointer; }
+.flow-source-button:disabled { cursor: not-allowed; opacity: .65; }
+.flow-source-button:focus-visible, .code-line.evidence-line:focus { outline: 2px solid var(--moss); outline-offset: -2px; }
+.code-line.evidence-line { background: #e4edd0; color: #182e1c; }
 .flow-gaps li strong { font: 700 9px ui-monospace,monospace; overflow-wrap: anywhere; }
 .flow-gaps li span, .flow-gaps p { color: #806b4a; font-size: 8px; text-align: right; }
 .flow-gaps p { margin: 0; text-align: left; }

@@ -3,7 +3,70 @@
 Status: working beta; no release acceptance is implied by passing unit tests.
 Use these gates instead of counting prompt edits or merged PRs as completion.
 
+## Scope boundary — owner instruction, 2026-09-08
+
+Only implement requirements stated in the design PDF or necessary to satisfy
+them. Identify the PDF section before each new milestone. Preserve existing
+optional saved-report work, but defer expanding it unless explicitly requested.
+No deployment or live model calls without approval.
+
+Current work maps to sections 17.1 (representative flows with unresolved steps)
+and 18 (flow correctness). Recursive back edges now produce a source-backed
+`recursive-flow-not-expanded` gap rather than a falsely complete path. Synthetic
+regressions cover direct recursion, mutual recursion, recursion with a separate
+outgoing branch, and an acyclic control. This is bounded static-path validation,
+not proof of runtime order or fulfillment of three real-repository flow cases.
+The existing pinned-repository benchmark expects no supported HTTP flows; a
+pinned FastAPI vertical-slice benchmark with independently reviewed expectations
+is still required.
+
+The [first pinned FastAPI source check](fastapi-flow-benchmark.md) now records
+three expected route/use-case links and a real gap: the global three-flow report
+selection omits all three chosen entry points, despite retaining their candidate
+call edges. Source hashes verified; independent and UI acceptance remain pending.
+
+Local follow-up now retains bounded per-entrypoint paths and exposes an
+entrypoint selector. The same pinned first-hop checks pass (23 entrypoints,
+206 paths); full persistence/flow semantics and human/UI acceptance remain open.
+
+Nested FastAPI dependency providers are now included locally. The expanded
+pinned benchmark verifies the provider chain, model read and explicit unresolved
+interface dispatch. This does not close the full runtime-flow acceptance gate.
+
+Source-navigation follow-up (PDF sections 2.1, 4.1, 17.1): displayed unresolved
+steps and flow relationships now have source actions. Relationship evidence opens
+the caller/source node rather than the destination. The requested captured line
+is highlighted and receives focus after selection. Missing captured text opens
+the source-unavailable panel; inconsistent path/range/line metadata disables the
+action. Imported locations retain their unverified label. Selection/report
+replacement clears stale targets. No AI request is made by these actions.
+
+Local verification: 161 JavaScript tests pass, including 11 new source-target
+cases; TypeScript and the production build pass with existing warnings. Browser
+focus/scroll and narrow-screen visual review remain pending. This does not close
+source navigation for every claim/finding or the full acceptance gate. No
+deployment, credential changes or quota use occurred.
+
 ## 1. Facts-first explorer
+
+Same-file inclusion follow-up (PDF M3, local 2026-09-09): the analyzer records
+up to 32 direct top-level include_router sites for a locally declared router.
+Literal inclusion prefix + router prefix + decorator path is displayed relative
+to the named parent, with the inclusion's source location. Expanded options,
+computed prefixes and inclusion before route definition produce an unresolved
+path. Conditional, cross-file and nested mount composition remain unsupported;
+these entries are source declarations, not runtime registration proof or a full
+public URL. Report validation and serialization preserve the optional metadata.
+Verification: 551 Python tests, 161 JavaScript tests, TypeScript and build pass.
+Visual review and deployment remain pending; no model requests or quota changes.
+
+Router prefix follow-up (PDF M3, local 2026-09-09): route metadata now retains
+the single top-level APIRouter constructor's literal prefix and source location.
+Computed prefixes, expanded options, and reassigned router names do not establish
+a literal prefix. The flow panel displays this separately from the decorator path.
+Parent include_router/mount composition and runtime registration are still not
+established. Existing reports remain compatible; saved-report serialization retains
+the added evidence. No deployment, model calls or quota changes occurred.
 
 Implementation: local commits 078f415 and c093d3a. Publication and visual review
 are pending. Review a fresh deep report with a supported guarded-call symbol,

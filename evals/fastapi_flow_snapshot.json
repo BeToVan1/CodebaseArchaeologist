@@ -1,0 +1,1133 @@
+{
+  "repository": "BrunoTanabe/fastapi-clean-architecture-ddd-template",
+  "commit": "38d6eb0501a4481a6ed9722a60231199b1289f0a",
+  "tree": "b441989e7b466a288565318b8a1660a4cb0f62a0",
+  "scope": "All regular Python files, root pyproject.toml, README.md and LICENSE; source-only snapshot, never executed.",
+  "files": [
+    {
+      "path": "LICENSE",
+      "gitBlobSha": "ccd799deaf86e0a7fcd0a5dab39f695cd966d656",
+      "size": 1069
+    },
+    {
+      "path": "README.md",
+      "gitBlobSha": "c88330850dd46933fb8c5eac4216625c644504a8",
+      "size": 48496
+    },
+    {
+      "path": "app/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/app.py",
+      "gitBlobSha": "0da88245538a0ffe5aa8d24fb4d58745447de4a0",
+      "size": 5129
+    },
+    {
+      "path": "app/core/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/core/cache.py",
+      "gitBlobSha": "4cc9cd7ae786aa94c7605207e1aab1ea3e5cbb8c",
+      "size": 2919
+    },
+    {
+      "path": "app/core/database.py",
+      "gitBlobSha": "b8b3530e06d1c4e17ecf251dd056dcbacac6fad0",
+      "size": 3904
+    },
+    {
+      "path": "app/core/exception_handler.py",
+      "gitBlobSha": "cb61d34f2e7b4c772899bb7b574aea05e5d53012",
+      "size": 4699
+    },
+    {
+      "path": "app/core/logging.py",
+      "gitBlobSha": "741299ea434f3a012f8e55cd2dffe0b3eb313983",
+      "size": 1220
+    },
+    {
+      "path": "app/core/middleware.py",
+      "gitBlobSha": "dd58aef43c8800020a110df15c03d77e371d3119",
+      "size": 21884
+    },
+    {
+      "path": "app/core/migrations.py",
+      "gitBlobSha": "7ecb7e669655adec6ea69898780e5a87489ef8a2",
+      "size": 1958
+    },
+    {
+      "path": "app/core/resources.py",
+      "gitBlobSha": "75133f62ac7fda6efa4fd5891a64804e7c8c7ce1",
+      "size": 3012
+    },
+    {
+      "path": "app/core/security.py",
+      "gitBlobSha": "458bec95af9a32d8e1c7a5948e72af33d01049cf",
+      "size": 36417
+    },
+    {
+      "path": "app/core/settings.py",
+      "gitBlobSha": "deee5d01ecab72674a183104e3e1dfbdfb342dfc",
+      "size": 14564
+    },
+    {
+      "path": "app/modules/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/authentication/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/authentication/application/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/authentication/application/exceptions.py",
+      "gitBlobSha": "85dcdeaac50cb46eae449a282d1414c1cc243061",
+      "size": 8139
+    },
+    {
+      "path": "app/modules/authentication/application/interfaces.py",
+      "gitBlobSha": "0fc3acff56809dc9cd30252a97e364dea2dc0566",
+      "size": 1893
+    },
+    {
+      "path": "app/modules/authentication/application/mappers.py",
+      "gitBlobSha": "d3d7cb9ea24ee372e8469802c240aa865b4495ef",
+      "size": 15801
+    },
+    {
+      "path": "app/modules/authentication/application/use_cases.py",
+      "gitBlobSha": "c161b98190e937858e6cb8aaa1e7f7a30fd2daeb",
+      "size": 7332
+    },
+    {
+      "path": "app/modules/authentication/application/utils.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/authentication/domain/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/authentication/domain/entities.py",
+      "gitBlobSha": "12e7d806344e804c7586fff045274329805e8f42",
+      "size": 8041
+    },
+    {
+      "path": "app/modules/authentication/domain/enums.py",
+      "gitBlobSha": "3ff49c34534e436101afd0a6778e4d2435dcdce7",
+      "size": 74
+    },
+    {
+      "path": "app/modules/authentication/domain/value_objects.py",
+      "gitBlobSha": "aefa9bb758021a126b2922dd0ae46fab248ac295",
+      "size": 7902
+    },
+    {
+      "path": "app/modules/authentication/infrastructure/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/authentication/infrastructure/caches.py",
+      "gitBlobSha": "6f9f104555ef189167080e1c828a455be8487e27",
+      "size": 9149
+    },
+    {
+      "path": "app/modules/authentication/infrastructure/models.py",
+      "gitBlobSha": "de0ed716c53c94b7d84c39686781072bde842607",
+      "size": 10025
+    },
+    {
+      "path": "app/modules/authentication/infrastructure/repositories.py",
+      "gitBlobSha": "c53f45124e3480cb4f6beebf49bb65161b350d5c",
+      "size": 11943
+    },
+    {
+      "path": "app/modules/authentication/infrastructure/services.py",
+      "gitBlobSha": "14f5ec1f17c5cb30f6c15caaabb62fa15beb7632",
+      "size": 683
+    },
+    {
+      "path": "app/modules/authentication/presentation/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/authentication/presentation/dependencies.py",
+      "gitBlobSha": "5f3aa25d4da3ac031284e314f5e573a643472884",
+      "size": 1774
+    },
+    {
+      "path": "app/modules/authentication/presentation/docs.py",
+      "gitBlobSha": "5a2daa5a5abc88c73ea1ecdce1f8881e5cb3c1e8",
+      "size": 15004
+    },
+    {
+      "path": "app/modules/authentication/presentation/routers.py",
+      "gitBlobSha": "045d0d1e4e38c0a4ff0bf3be95e81dfe44d1a356",
+      "size": 7019
+    },
+    {
+      "path": "app/modules/authentication/presentation/schemas.py",
+      "gitBlobSha": "69bda74d97124c3bb0211af1d92dd0e4e88688e4",
+      "size": 1625
+    },
+    {
+      "path": "app/modules/example/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/example/application/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/example/application/exceptions.py",
+      "gitBlobSha": "b8e34c15c64cc34fe7f425f0fa479579409d1f88",
+      "size": 556
+    },
+    {
+      "path": "app/modules/example/application/interfaces.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/example/application/mappers.py",
+      "gitBlobSha": "ce448f62156c0f1a063dc522e08e44e6782c02e4",
+      "size": 858
+    },
+    {
+      "path": "app/modules/example/application/use_cases.py",
+      "gitBlobSha": "e7f48af09610dd02f666c63d17f4c1f987bfb389",
+      "size": 849
+    },
+    {
+      "path": "app/modules/example/application/utils.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/example/domain/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/example/domain/entities.py",
+      "gitBlobSha": "3e34395430df284eae91423533c322147aa13dc8",
+      "size": 653
+    },
+    {
+      "path": "app/modules/example/domain/enums.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/example/domain/value_objects.py",
+      "gitBlobSha": "8b9d594b5433e0f2792073492c954d3c75ecec9c",
+      "size": 716
+    },
+    {
+      "path": "app/modules/example/infrastructure/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/example/infrastructure/caches.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/example/infrastructure/models.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/example/infrastructure/repositories.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/example/infrastructure/services.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/example/presentation/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/example/presentation/dependencies.py",
+      "gitBlobSha": "06aa76178e453cb240ebe59be31b03f2ab7cd256",
+      "size": 149
+    },
+    {
+      "path": "app/modules/example/presentation/docs.py",
+      "gitBlobSha": "3b0f86b9057aa8023f2eac270a18aa054fa6c7a3",
+      "size": 7936
+    },
+    {
+      "path": "app/modules/example/presentation/routers.py",
+      "gitBlobSha": "cd58b5652155ca9292cab0e075a592bb2e994509",
+      "size": 1570
+    },
+    {
+      "path": "app/modules/example/presentation/schemas.py",
+      "gitBlobSha": "1a569045ad263e71187a013612d1c3d40a956845",
+      "size": 3553
+    },
+    {
+      "path": "app/modules/health/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/health/application/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/health/application/exceptions.py",
+      "gitBlobSha": "c61e793faa766cd00196ed02397be0312ccc3fb4",
+      "size": 974
+    },
+    {
+      "path": "app/modules/health/application/interfaces.py",
+      "gitBlobSha": "7d82138b5be78bfe897d5cd160d4c7a12512ae47",
+      "size": 209
+    },
+    {
+      "path": "app/modules/health/application/mappers.py",
+      "gitBlobSha": "4c4edba1f4daecff10c381ef256fc307bf230197",
+      "size": 833
+    },
+    {
+      "path": "app/modules/health/application/use_cases.py",
+      "gitBlobSha": "a2e6bba17c5777b281324a6e8478417dee308b04",
+      "size": 2408
+    },
+    {
+      "path": "app/modules/health/application/utils.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/health/domain/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/health/domain/entities.py",
+      "gitBlobSha": "49d9eb334a7d42e81c8f9080e283471489e371ec",
+      "size": 435
+    },
+    {
+      "path": "app/modules/health/domain/enums.py",
+      "gitBlobSha": "bbdbcdbe9ca1b2767feb7895c91e38e6dec54525",
+      "size": 87
+    },
+    {
+      "path": "app/modules/health/domain/value_objects.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/health/infrastructure/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/health/infrastructure/caches.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/health/infrastructure/models.py",
+      "gitBlobSha": "546929c187c2893a67ce602bb125ec3445a09f32",
+      "size": 276
+    },
+    {
+      "path": "app/modules/health/infrastructure/repositories.py",
+      "gitBlobSha": "ee81f8ca6ac203c47299e3090b24ae38ab70892f",
+      "size": 1788
+    },
+    {
+      "path": "app/modules/health/infrastructure/services.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/health/presentation/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/health/presentation/dependencies.py",
+      "gitBlobSha": "d8baabaed9a83330582115de235d7ad3ab3aa248",
+      "size": 742
+    },
+    {
+      "path": "app/modules/health/presentation/docs.py",
+      "gitBlobSha": "2108586d0636f9e6ca50c2dd4a85b1e62b8cefaa",
+      "size": 8572
+    },
+    {
+      "path": "app/modules/health/presentation/routers.py",
+      "gitBlobSha": "0f04a20787e2e3cc4dccaeb4ba8e5b482ae3e2ee",
+      "size": 2981
+    },
+    {
+      "path": "app/modules/health/presentation/schemas.py",
+      "gitBlobSha": "c6cb839f6b0307b17b685b90758bcacc5556aefb",
+      "size": 2121
+    },
+    {
+      "path": "app/modules/key/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/key/application/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/key/application/exceptions.py",
+      "gitBlobSha": "24dd6da68857a19986a2ed77f41ee615f82ca077",
+      "size": 2707
+    },
+    {
+      "path": "app/modules/key/application/interfaces.py",
+      "gitBlobSha": "3a3a78ed74501d91fd84c6a11176f57ab665c735",
+      "size": 890
+    },
+    {
+      "path": "app/modules/key/application/mappers.py",
+      "gitBlobSha": "3733fb7eb276b0ce322bf0d54fcffe85cb69c117",
+      "size": 9229
+    },
+    {
+      "path": "app/modules/key/application/use_cases.py",
+      "gitBlobSha": "708189c08648a95312e544051d1ec402e166deb2",
+      "size": 7953
+    },
+    {
+      "path": "app/modules/key/application/utils.py",
+      "gitBlobSha": "dcb8074c3b54a592e98390a1a0cbc8fe8f45f1ec",
+      "size": 338
+    },
+    {
+      "path": "app/modules/key/domain/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/key/domain/entities.py",
+      "gitBlobSha": "62490dec766d140126fa0e787701023467d0edd0",
+      "size": 3072
+    },
+    {
+      "path": "app/modules/key/domain/enums.py",
+      "gitBlobSha": "d89fca970f11cb658decf3da9cf7f1759b734198",
+      "size": 924
+    },
+    {
+      "path": "app/modules/key/domain/value_objects.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/key/infrastructure/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/key/infrastructure/caches.py",
+      "gitBlobSha": "c03b5ddbe516c6e85798142222cb9cb92b11f5c0",
+      "size": 3823
+    },
+    {
+      "path": "app/modules/key/infrastructure/models.py",
+      "gitBlobSha": "c032ac8aaffdd09ffe93bbc4c13e64bfb0e98790",
+      "size": 3195
+    },
+    {
+      "path": "app/modules/key/infrastructure/repositories.py",
+      "gitBlobSha": "f48d6503045fa3cc7ee7405cb258be724e8bbb32",
+      "size": 6591
+    },
+    {
+      "path": "app/modules/key/infrastructure/services.py",
+      "gitBlobSha": "a8bb9eca52dc5326ada8b46183fd9cad37ac0d1c",
+      "size": 275
+    },
+    {
+      "path": "app/modules/key/presentation/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/key/presentation/dependencies.py",
+      "gitBlobSha": "0152c8fd4eb89182d11ce4b222fe3dca5e206ade",
+      "size": 1276
+    },
+    {
+      "path": "app/modules/key/presentation/docs.py",
+      "gitBlobSha": "aff5b9752d5144620c4d1c3c5c435c2fe44c08f3",
+      "size": 27844
+    },
+    {
+      "path": "app/modules/key/presentation/routers.py",
+      "gitBlobSha": "a527484991b9d80f45d199fc34ec2879769a59b5",
+      "size": 6131
+    },
+    {
+      "path": "app/modules/key/presentation/schemas.py",
+      "gitBlobSha": "86cc70dc831eaf99c32ce1487cd2a4724d97bc5d",
+      "size": 17778
+    },
+    {
+      "path": "app/modules/knowledge/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/knowledge/application/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/knowledge/application/exceptions.py",
+      "gitBlobSha": "9c713fa121482634a28ac09ea515ef675499751f",
+      "size": 1607
+    },
+    {
+      "path": "app/modules/knowledge/application/interfaces.py",
+      "gitBlobSha": "3561734c4b5911cb2174c06ff0b32f7cbc85ea4a",
+      "size": 827
+    },
+    {
+      "path": "app/modules/knowledge/application/mappers.py",
+      "gitBlobSha": "2c117d52c65d100dfc14ae2390ebe88e40b68bed",
+      "size": 4643
+    },
+    {
+      "path": "app/modules/knowledge/application/use_cases.py",
+      "gitBlobSha": "acddaeb33da128e8c0dfe233e9550e8e864030f7",
+      "size": 7302
+    },
+    {
+      "path": "app/modules/knowledge/application/utils.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/knowledge/domain/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/knowledge/domain/entities.py",
+      "gitBlobSha": "5a0456e1329e97d36002ed9d21d9060c6d5dd831",
+      "size": 2312
+    },
+    {
+      "path": "app/modules/knowledge/domain/enums.py",
+      "gitBlobSha": "8c3e79b91484a9e158ebf7983f7f302be1b8ed8a",
+      "size": 139
+    },
+    {
+      "path": "app/modules/knowledge/domain/value_objects.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/knowledge/infrastructure/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/knowledge/infrastructure/caches.py",
+      "gitBlobSha": "e8254cc4ccf0a2d492820be3ac12f7dba87313b4",
+      "size": 408
+    },
+    {
+      "path": "app/modules/knowledge/infrastructure/models.py",
+      "gitBlobSha": "9834e7dd9d6bc927e1601c2992f4b567885d66f7",
+      "size": 2034
+    },
+    {
+      "path": "app/modules/knowledge/infrastructure/repositories.py",
+      "gitBlobSha": "c3af50fcae75e3159525b70b76f67c4b9a0740bf",
+      "size": 6088
+    },
+    {
+      "path": "app/modules/knowledge/infrastructure/services.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/knowledge/presentation/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/knowledge/presentation/dependencies.py",
+      "gitBlobSha": "23da1c555b14d96410d9d415801c094f0c27e4d4",
+      "size": 1462
+    },
+    {
+      "path": "app/modules/knowledge/presentation/docs.py",
+      "gitBlobSha": "03a634d1d9381a1cc01cb39e0b5d20b0c8494f2c",
+      "size": 20171
+    },
+    {
+      "path": "app/modules/knowledge/presentation/routers.py",
+      "gitBlobSha": "4ca4c931986ec8fceb39f79f43789523f152adb7",
+      "size": 4714
+    },
+    {
+      "path": "app/modules/knowledge/presentation/schemas.py",
+      "gitBlobSha": "5a9122240fed59360f1bada7b8e4f4819ecdf892",
+      "size": 8665
+    },
+    {
+      "path": "app/modules/notification/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/notification/application/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/notification/application/exceptions.py",
+      "gitBlobSha": "5a6a017b914fa1c122e6f4fc285c9fab9d035402",
+      "size": 904
+    },
+    {
+      "path": "app/modules/notification/application/interfaces.py",
+      "gitBlobSha": "188053aae32de5728b4cacdc73055bfa58c2b6c7",
+      "size": 738
+    },
+    {
+      "path": "app/modules/notification/application/mappers.py",
+      "gitBlobSha": "7481a6ad4aa91dd0102c07eebb34a2304a0830ad",
+      "size": 4686
+    },
+    {
+      "path": "app/modules/notification/application/use_cases.py",
+      "gitBlobSha": "27fe4b341d9c0a346237e40eff7ab70538a89f88",
+      "size": 2768
+    },
+    {
+      "path": "app/modules/notification/application/utils.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/notification/domain/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/notification/domain/entities.py",
+      "gitBlobSha": "6e47dbd92baba9ed1647054a3052302792902578",
+      "size": 2967
+    },
+    {
+      "path": "app/modules/notification/domain/enums.py",
+      "gitBlobSha": "4f4de1030a61219f42f9194f3e9a485845d9ac09",
+      "size": 321
+    },
+    {
+      "path": "app/modules/notification/domain/value_objects.py",
+      "gitBlobSha": "2a324cec98d1ee29df33bdbc141c2f94b1a371d7",
+      "size": 830
+    },
+    {
+      "path": "app/modules/notification/infrastructure/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/notification/infrastructure/caches.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/notification/infrastructure/models.py",
+      "gitBlobSha": "989e6cbc5c5fc841f662aa443d27c304a3af4f1f",
+      "size": 3196
+    },
+    {
+      "path": "app/modules/notification/infrastructure/repositories.py",
+      "gitBlobSha": "9099bf87fc2152219b830ae62e1d567162a4fdc1",
+      "size": 8914
+    },
+    {
+      "path": "app/modules/notification/infrastructure/services.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/notification/presentation/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/notification/presentation/dependencies.py",
+      "gitBlobSha": "00de8d9378dae7d871a1dbc77fea867fa59cc965",
+      "size": 834
+    },
+    {
+      "path": "app/modules/notification/presentation/docs.py",
+      "gitBlobSha": "3ca1ac3f44a28da83cc6ff04af7c1d37c8458574",
+      "size": 14635
+    },
+    {
+      "path": "app/modules/notification/presentation/routers.py",
+      "gitBlobSha": "e5ab081dd09dfc9d628b9c9061c29e671917c8fc",
+      "size": 2943
+    },
+    {
+      "path": "app/modules/notification/presentation/schemas.py",
+      "gitBlobSha": "5b1534996c47a8cf2afed3eeb45d4dd890522b61",
+      "size": 11617
+    },
+    {
+      "path": "app/modules/shared/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/shared/application/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/shared/application/exceptions.py",
+      "gitBlobSha": "4ca1b7ffe588f6131f11e1dd14b07c170ac08ca1",
+      "size": 1651
+    },
+    {
+      "path": "app/modules/shared/application/interfaces.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/shared/application/mappers.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/shared/application/use_cases.py",
+      "gitBlobSha": "de1356a9005c29a9fb1bb23c7d478423a509b7dd",
+      "size": 7036
+    },
+    {
+      "path": "app/modules/shared/application/utils.py",
+      "gitBlobSha": "563ca19964ba1233691564679aebc04a2329c171",
+      "size": 629
+    },
+    {
+      "path": "app/modules/shared/domain/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/shared/domain/entities.py",
+      "gitBlobSha": "c6a017f4e3e4e034485411cbf0bcde83b2f39132",
+      "size": 1963
+    },
+    {
+      "path": "app/modules/shared/domain/enums.py",
+      "gitBlobSha": "54f0ef2652c9bb2adebfa5202069e19d748d1ca0",
+      "size": 1871
+    },
+    {
+      "path": "app/modules/shared/domain/value_objects.py",
+      "gitBlobSha": "c947988dee3647e5eb73745e2ca0c6437d0f4d03",
+      "size": 5270
+    },
+    {
+      "path": "app/modules/shared/infrastructure/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/shared/infrastructure/caches.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/shared/infrastructure/models.py",
+      "gitBlobSha": "d43ec7da3dde70df99117bc0e4801d18f5432081",
+      "size": 1428
+    },
+    {
+      "path": "app/modules/shared/infrastructure/repositories.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/shared/infrastructure/services.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/shared/presentation/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/shared/presentation/dependencies.py",
+      "gitBlobSha": "66f893791852e097196326dad68224c62a7274eb",
+      "size": 2884
+    },
+    {
+      "path": "app/modules/shared/presentation/docs.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/shared/presentation/routers.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/shared/presentation/schemas.py",
+      "gitBlobSha": "309440a1b507099ec273909768c0dfbba32d0bf9",
+      "size": 9382
+    },
+    {
+      "path": "app/modules/user/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/user/application/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/user/application/exceptions.py",
+      "gitBlobSha": "7c1ddc79b960a0199ef6223c6f921d5a4a985abf",
+      "size": 1871
+    },
+    {
+      "path": "app/modules/user/application/interfaces.py",
+      "gitBlobSha": "101ca99868e9c707d04d48d650b773c7c7bf31e3",
+      "size": 381
+    },
+    {
+      "path": "app/modules/user/application/mappers.py",
+      "gitBlobSha": "9cddd1cb76fee3abb7cff97d6fddc98f718edb9c",
+      "size": 2803
+    },
+    {
+      "path": "app/modules/user/application/use_cases.py",
+      "gitBlobSha": "d49d827e0b702b31773643c13babc34f635b670d",
+      "size": 2210
+    },
+    {
+      "path": "app/modules/user/application/utils.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/user/domain/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/user/domain/entities.py",
+      "gitBlobSha": "7bdb23c54a37b086897a9375e211b3fcd8c3f237",
+      "size": 3775
+    },
+    {
+      "path": "app/modules/user/domain/enums.py",
+      "gitBlobSha": "0cafb8c34bd77334aeb0439ca61a2c7bffa815c0",
+      "size": 139
+    },
+    {
+      "path": "app/modules/user/domain/value_objects.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/user/infrastructure/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/user/infrastructure/caches.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/user/infrastructure/models.py",
+      "gitBlobSha": "21d41142c16a9c7e0292f34e5fa3b3c497b92de7",
+      "size": 2574
+    },
+    {
+      "path": "app/modules/user/infrastructure/repositories.py",
+      "gitBlobSha": "6809ccd88ddca765eb3313b85a676ff0cb8a5c27",
+      "size": 4291
+    },
+    {
+      "path": "app/modules/user/infrastructure/services.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/user/presentation/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/user/presentation/dependencies.py",
+      "gitBlobSha": "25f3114cde970625582652c87a237ae14a1425f0",
+      "size": 699
+    },
+    {
+      "path": "app/modules/user/presentation/docs.py",
+      "gitBlobSha": "11637499cc5c2dc01fb61679ad5c0f597563a44d",
+      "size": 12440
+    },
+    {
+      "path": "app/modules/user/presentation/routers.py",
+      "gitBlobSha": "1db28e561e5c8da1ed1d77b026f55b30ca3aa699",
+      "size": 2403
+    },
+    {
+      "path": "app/modules/user/presentation/schemas.py",
+      "gitBlobSha": "92a80095a312df8ab9eb70009c9fe32071baf18e",
+      "size": 11981
+    },
+    {
+      "path": "app/modules/websocket/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/websocket/application/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/websocket/application/exceptions.py",
+      "gitBlobSha": "0979157c4ac9c3966c478b5bec7d4d635c1b38f8",
+      "size": 539
+    },
+    {
+      "path": "app/modules/websocket/application/interfaces.py",
+      "gitBlobSha": "5c6f8e77818ceded8ab89f5f3890c82a8fa72ae7",
+      "size": 820
+    },
+    {
+      "path": "app/modules/websocket/application/mappers.py",
+      "gitBlobSha": "4660c4705547dc6ee500c135618e17ad4a89c627",
+      "size": 1156
+    },
+    {
+      "path": "app/modules/websocket/application/use_cases.py",
+      "gitBlobSha": "d6757be47d74beb04c3df68a9f221c96bc153e76",
+      "size": 1764
+    },
+    {
+      "path": "app/modules/websocket/application/utils.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/websocket/domain/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/websocket/domain/entities.py",
+      "gitBlobSha": "8c5311904b41e6f6128e5a19a96f78e86a13d31c",
+      "size": 1595
+    },
+    {
+      "path": "app/modules/websocket/domain/enums.py",
+      "gitBlobSha": "aa1fff389da395a19c604174a786159b57d613ff",
+      "size": 97
+    },
+    {
+      "path": "app/modules/websocket/domain/value_objects.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/websocket/infrastructure/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/websocket/infrastructure/caches.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/websocket/infrastructure/models.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/websocket/infrastructure/repositories.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/websocket/infrastructure/services.py",
+      "gitBlobSha": "b878672583079df28f0fbfc1c67fb2d352559549",
+      "size": 7602
+    },
+    {
+      "path": "app/modules/websocket/presentation/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "app/modules/websocket/presentation/dependencies.py",
+      "gitBlobSha": "1bd4096b14a84e9aedadcb0562070d33f3c995f5",
+      "size": 573
+    },
+    {
+      "path": "app/modules/websocket/presentation/docs.py",
+      "gitBlobSha": "b9eb2b32864346fc19ab8b39d755eb3fdf89a988",
+      "size": 9127
+    },
+    {
+      "path": "app/modules/websocket/presentation/routers.py",
+      "gitBlobSha": "947224d5c19774807f882ec52f90080c49f4d222",
+      "size": 1874
+    },
+    {
+      "path": "app/modules/websocket/presentation/schemas.py",
+      "gitBlobSha": "79a7f9b149f822e8f156446fe2be098827143679",
+      "size": 957
+    },
+    {
+      "path": "migrations/env.py",
+      "gitBlobSha": "4f1c27e66d6ac5c16de8354bcada6fea12367835",
+      "size": 1580
+    },
+    {
+      "path": "migrations/versions/2026_07_31_10_48_93b93ee0f291.py",
+      "gitBlobSha": "60faed9d9580671e3533306313e4a1143094002c",
+      "size": 23247
+    },
+    {
+      "path": "migrations/versions/2026_07_31_11_17_e8c09cdc7746.py",
+      "gitBlobSha": "59c852ef02d5422cf251c64444b583bbaa43a60b",
+      "size": 1624
+    },
+    {
+      "path": "pyproject.toml",
+      "gitBlobSha": "de8c2e57d113d5a519e750158b84e202481f78d0",
+      "size": 1461
+    },
+    {
+      "path": "scripts/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "scripts/create_module.py",
+      "gitBlobSha": "326ab9389510c13d0facee3fcc05dffba21d5814",
+      "size": 1722
+    },
+    {
+      "path": "scripts/directory_tree.py",
+      "gitBlobSha": "28f88dec9c66f5d9507d4051801b350809233175",
+      "size": 1008
+    },
+    {
+      "path": "scripts/generate_fernet.py",
+      "gitBlobSha": "260338e7ab712e077355ece37e5b177fd4cd3739",
+      "size": 107
+    },
+    {
+      "path": "scripts/generate_secret.py",
+      "gitBlobSha": "28a609c821b41f0ab6c46c5232dea0a0c401fcc0",
+      "size": 83
+    },
+    {
+      "path": "test/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "test/core/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "test/modules/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "test/modules/authentication/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "test/modules/example/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "test/modules/health/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "test/modules/key/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "test/modules/knowledge/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "test/modules/notifications/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "test/modules/shared/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "test/modules/user/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    },
+    {
+      "path": "test/modules/websocket/__init__.py",
+      "gitBlobSha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0
+    }
+  ]
+}

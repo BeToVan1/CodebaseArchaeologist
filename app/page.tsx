@@ -21,6 +21,7 @@ import { canonicalGithubUrl, readReportFile, reportFilename, serializeReport } f
 import { ProjectDetails } from "./project-details";
 import { TestEvidence } from "./test-evidence";
 import { localExecutionClaims } from "./local-execution";
+import { entrypointFlows, flowEvidenceTarget } from "./flow-presentation";
 import { isTestPath } from "./test-proximity";
 import { pathMatchesScope, revealedNodeSelection } from "./graph-presentation";
 
@@ -205,7 +206,9 @@ export default function Home() {
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<"production" | "all">("production");
   const [mapMode, setMapMode] = useState<"architecture" | "patterns" | "flows" | "risks">("architecture");
+  const [flowEntrypointId, setFlowEntrypointId] = useState<string | null>(null);
   const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
+  const [sourceFocus, setSourceFocus] = useState<ReturnType<typeof flowEvidenceTarget>>(null);
   const [selectedRiskId, setSelectedRiskId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submittedUrl, setSubmittedUrl] = useState("https://github.com/cosmicpython/code");
@@ -243,6 +246,8 @@ export default function Home() {
     setSelectedId(primaryNodeId(validated));
     setSelectedSymbolId(null);
     setSelectedFlowId(validated.flows?.[0]?.id ?? null);
+    setFlowEntrypointId(null);
+    setSourceFocus(null);
     setSelectedRiskId(validated.findings?.[0]?.id ?? null);
     setMapMode("architecture");
     setQuery("");
@@ -402,6 +407,7 @@ export default function Home() {
   const revealNode = (id: string) => {
     const selection = revealedNodeSelection(graph?.nodes ?? [], id, scope, query);
     if (!selection) return;
+    setSourceFocus(null);
     setScope(selection.scope);
     setQuery(selection.query);
     setSelectedId(selection.fileId);
@@ -409,9 +415,17 @@ export default function Home() {
   };
   const selectFileNode = revealNode;
   const selectSymbolNode = revealNode;
+  const openFlowEvidence = (target: ReturnType<typeof flowEvidenceTarget>) => {
+    if (!target) return;
+    revealNode(target.nodeId);
+    setSourceFocus(target);
+  };
   const relationshipLabel = (edge: GraphEdge) => `${edge.kind.replaceAll("-", " ")} · ${Math.round((edge.confidence ?? 1) * 100)}%`;
   const flows = graph?.flows ?? [];
-  const selectedFlow = flows.find((flow) => flow.id === selectedFlowId) ?? flows[0] ?? null;
+  const flowSelection = entrypointFlows(flows, flowEntrypointId);
+  const selectedFlow = flowSelection.paths.find((flow) => flow.id === selectedFlowId) ?? flowSelection.paths[0] ?? null;
+  const flowRoute = graph?.nodes.find((node) => node.id === selectedFlow?.entrypoint_id)?.entrypoint;
+  const recognizedEntrypoints = graph?.nodes.filter((node) => node.entrypoint).length ?? 0;
   const flowEdge = (index: number) => graph?.edges.find((edge) => edge.id === selectedFlow?.ordered_edge_ids[index]);
   const allFindings = graph?.findings ?? [];
   const patterns = graph?.patterns ?? [];
@@ -438,6 +452,15 @@ export default function Home() {
   const sourceLines = selectedSymbol
     ? fileSourceLines.slice(sourceStartLine - 1, sourceEndLine)
     : fileSourceLines;
+  const activeSourceFocus = sourceFocus?.nodeId === (selectedSymbolId ?? selectedId) ? sourceFocus : null;
+  useEffect(() => {
+    if (!sourceFocus) return;
+    if (sourceFocus.nodeId !== (selectedSymbolId ?? selectedId)) { setSourceFocus(null); return; }
+    const target = document.getElementById(`selected-source-line-${sourceFocus.line}`)
+      ?? document.getElementById("selected-source");
+    target?.focus({ preventScroll: true });
+    target?.scrollIntoView({ block: "nearest" });
+  }, [sourceFocus, selectedSymbolId, selectedId]);
 
   async function interpretSelectedSymbol() {
     if (!selectedSymbol?.evidence_packet || importedReport) return;
@@ -504,7 +527,7 @@ export default function Home() {
   const canvasCopy = {
     architecture: ["Architecture map", inventory ? "Candidate Python imports" : "Python imports", inventory ? "Dashed A → B is a lexical import candidate, not an AST-verified fact." : "A → B means file A imports file B."],
     patterns: ["Pattern detection", "Architectural patterns", "Every detected pattern reports its classification, confidence, provenance, metrics, and exact graph evidence."],
-    flows: ["Flow discovery", "Representative execution paths", "Paths begin at proven framework entrypoints and preserve uncertain or unresolved steps."],
+    flows: ["Flow discovery", "Representative execution paths", "Bounded static paths from framework entrypoints—not runtime traces or a guarantee of branch order."],
     risks: ["Risk analysis", "Evidence-backed findings", "Deterministic heuristics identify structural hotspots; each finding links to exact source evidence."],
   }[mapMode];
 
@@ -643,15 +666,27 @@ export default function Home() {
             ) : mapMode === "flows" ? flows.length && selectedFlow ? (
               <div className="flow-browser">
                 <div className="flow-catalog" aria-label="Representative execution flows">
-                  <div className="flow-catalog-heading"><strong>Entrypoint paths</strong><span>{flows.length}</span></div>
-                  {flows.map((flow) => <button className={flow.id === selectedFlow.id ? "active" : ""} key={flow.id} onClick={() => { setSelectedFlowId(flow.id); selectSymbolNode(flow.entrypoint_id); }}>
+                  <label className="flow-entrypoint-picker">Entrypoint
+                    <select value={flowSelection.entrypointId ?? ""} onChange={(event) => {
+                      setFlowEntrypointId(event.target.value); setSelectedFlowId(null); selectSymbolNode(event.target.value);
+                    }}>
+                      {flowSelection.entrypointIds.map((id) => <option key={id} value={id}>{flows.find((flow) => flow.entrypoint_id === id)?.label} · {nodePath(id)} · {nodeName(id)}</option>)}
+                    </select>
+                  </label>
+                  <p className="flow-coverage-note">Paths available for {flowSelection.entrypointIds.length} of {recognizedEntrypoints} recognized entrypoints. This is a bounded selection, not every possible path.</p>
+                  {flowSelection.entrypointIds.length < recognizedEntrypoints && <p className="flow-coverage-note">Some entrypoints have no saved paths in this report. Older reports may contain only three paths; a new analysis is needed to use newer flow discovery.</p>}
+                  <div className="flow-catalog-heading"><strong>Entrypoint paths</strong><span>{flowSelection.paths.length}</span></div>
+                  {flowSelection.paths.map((flow) => <button className={flow.id === selectedFlow.id ? "active" : ""} key={flow.id} onClick={() => { setSelectedFlowId(flow.id); selectSymbolNode(flow.entrypoint_id); }}>
                     <strong>{flow.label}</strong>
                     <small>{nodePath(flow.entrypoint_id)} · {flow.ordered_node_ids.length} steps</small>
                     <span className={`flow-status ${flow.completeness}`}>{flow.completeness}</span>
                   </button>)}
                 </div>
                 <article className="flow-inspector">
-                  <header><div><span>{selectedFlow.framework} entrypoint</span><h3>{selectedFlow.label}</h3></div><strong>{Math.round(selectedFlow.confidence * 100)}% confidence</strong></header>
+                  <header><div><span>{selectedFlow.framework} entrypoint · declared path</span><h3>{selectedFlow.label}</h3></div><strong>{Math.round(selectedFlow.confidence * 100)}% confidence</strong></header>
+                  <p className="flow-coverage-note">The displayed path is a route declaration, not a verified mounted URL. Router and mount prefixes may change it; inspect the registration source.</p>
+                  {flowRoute?.router_prefix_evidence && <p className="flow-coverage-note">Router constructor prefix: {flowRoute.router_prefix === null ? "unresolved" : JSON.stringify(flowRoute.router_prefix)}. Declared at {flowRoute.router_prefix_evidence.path}:{flowRoute.router_prefix_evidence.line}. This does not include parent router or mount prefixes.</p>}
+                  {!!flowRoute?.local_inclusions?.length && <div className="flow-coverage-note"><p>Same-file inclusion declarations (up to 32). Paths are relative to the named parent; its prefixes, mounts and runtime registration remain unverified.</p><ul>{flowRoute.local_inclusions.map((item, index) => <li key={index}>{item.parent}: {item.path === null ? "unresolved path" : item.path} · {item.evidence.path}:{item.evidence.line}</li>)}</ul></div>}
                   <ol className="flow-path">
                     {selectedFlow.ordered_node_ids.map((nodeId, index) => {
                       const edge = index ? flowEdge(index - 1) : undefined;
@@ -660,12 +695,26 @@ export default function Home() {
                         <button onClick={() => selectSymbolNode(nodeId)}>
                           <strong>{nodeName(nodeId)}</strong><small>Destination: {nodePath(nodeId)}</small>{edge && <small>Evidence: {evidenceLocation(edge)}</small>}
                         </button>
+                        {edge && <button type="button" className="flow-source-button"
+                          disabled={!flowEvidenceTarget(graph?.nodes ?? [], edge.source, edge.evidence ?? {})}
+                          onClick={() => openFlowEvidence(flowEvidenceTarget(graph?.nodes ?? [], edge.source, edge.evidence ?? {}))}>
+                          Open relationship source
+                        </button>}
                       </li>;
                     })}
                   </ol>
                   <section className="flow-gaps">
                     <div className="section-heading"><h3>Unresolved steps</h3><span>{selectedFlow.unresolved_steps.length}</span></div>
-                    {selectedFlow.unresolved_steps.length ? <><ul>{selectedFlow.unresolved_steps.slice(0, 12).map((step, index) => <li key={`${step.source_id}:${step.evidence.line}:${index}`}><strong>{step.evidence.expression ?? "Dynamic expression"}</strong><span>{step.reason.replaceAll("-", " ")}{step.evidence.line ? ` · ${step.evidence.path}:${step.evidence.line}` : ""}</span></li>)}</ul>{selectedFlow.unresolved_steps.length > 12 && <p className="flow-more-gaps">Showing 12 of {selectedFlow.unresolved_steps.length} unresolved calls on this path.</p>}</> : <p>No unresolved calls occur on this path.</p>}
+                    {selectedFlow.unresolved_steps.length ? <><ul>{selectedFlow.unresolved_steps.slice(0, 12).map((step, index) => {
+                      const target = flowEvidenceTarget(graph?.nodes ?? [], step.source_id, step.evidence);
+                      return <li key={`${step.source_id}:${step.evidence.line}:${index}`}>
+                        <strong>{step.evidence.expression ?? "Dynamic expression"}</strong>
+                        <span>{step.reason.replaceAll("-", " ")}{step.evidence.line ? ` · ${step.evidence.path}:${step.evidence.line}` : ""}</span>
+                        <button type="button" className="flow-source-button" disabled={!target} onClick={() => openFlowEvidence(target)}>
+                          {target ? `Open source at line ${target.line}` : "Source location unavailable"}
+                        </button>
+                      </li>;
+                    })}</ul>{selectedFlow.unresolved_steps.length > 12 && <p className="flow-more-gaps">Showing 12 of {selectedFlow.unresolved_steps.length} unresolved calls on this path.</p>}</> : <p>No unresolved calls were recorded on this bounded static path.</p>}
                   </section>
                 </article>
               </div>
@@ -792,11 +841,14 @@ export default function Home() {
             </section>}
             <section className="source-section" id="selected-source" tabIndex={-1}>
               <div className="section-heading"><h3>{selectedSymbol ? selectedSymbol.qualified_name : "Source"}</h3>{selectedSymbol ? <span>L{selectedSymbol.start_line}–{selectedSymbol.end_line}</span> : sourceIsTruncated && <span>Truncated</span>}</div>
+              {activeSourceFocus && <p role="status">{reportOrigin === "imported" ? "Imported, unverified evidence" : "Selected evidence"}: {activeSourceFocus.path}:{activeSourceFocus.line}
+                {displayedSource === undefined || activeSourceFocus.line > fileSourceLines.length ? " — this line is not available in the captured source." : ""}
+              </p>}
               {selectedSourceUrl && <a className="source-link" href={selectedSourceUrl} target="_blank" rel="noreferrer">Open {selectedSymbol ? "this symbol" : "this file"} at the analyzed commit ↗</a>}
               {displayedSource !== undefined && selectedRangeAvailable ? (
                 <pre className="code-viewer" aria-label={`Source code for ${selected.path}`} tabIndex={0}>
                   <code>{sourceLines.map((line, index) => (
-                    <span className="code-line" key={index}>
+                    <span className={`code-line${activeSourceFocus?.line === sourceStartLine + index ? " evidence-line" : ""}`} id={`selected-source-line-${sourceStartLine + index}`} tabIndex={-1} key={index}>
                       <span className="line-number" aria-hidden="true">{sourceStartLine + index}</span>
                       <span className="line-content">{line || " "}</span>
                     </span>
