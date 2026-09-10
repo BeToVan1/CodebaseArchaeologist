@@ -49,6 +49,20 @@ deployment, credential changes or quota use occurred.
 
 ## 1. Facts-first explorer
 
+### Browser spot-check — 2026-09-10
+
+Local preview with imported `fastapi-browser-review.json` generated from the
+pinned FastAPI source snapshot: 193 paths across 23 recognized entrypoints.
+Entrypoint selection worked; keyboard relationship-source activation focused
+and highlighted health router line 41 at 390x844 and logout router line 182 at
+1440x900. Long symbol headings and claim text caused mobile page overflow;
+wrapping fixes reduced document width to 375px in the 390px viewport. Desktop
+document width was 1440px at 1440px. Source code retains internal scrolling.
+Imported/unverified labels and disabled AI were visible. No model calls or
+deployment occurred. This is a spot-check, not acceptance of all reports,
+every evidence action, or full accessibility. JavaScript tests and build passed
+after the CSS fix. PR #51 merged with successful regression CI before this fix.
+
 Same-file inclusion follow-up (PDF M3, local 2026-09-09): the analyzer records
 up to 32 direct top-level include_router sites for a locally declared router.
 Literal inclusion prefix + router prefix + decorator path is displayed relative
