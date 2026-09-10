@@ -110,6 +110,9 @@
 .claim > div span, .claim > div strong { font-size: 8px; letter-spacing: .07em; text-transform: uppercase; }
 .claim > div span { font-weight: 800; }.claim > div strong { color: var(--muted); font-weight: 650; }
 .claim p { margin: 7px 0 5px; font-size: 10px; line-height: 1.45; }
+.claim p, .claim small { overflow-wrap: anywhere; }
+.detail .section-heading { min-width: 0; flex-wrap: wrap; }
+.detail .section-heading h3 { min-width: 0; overflow-wrap: anywhere; }
 .claim small { display: block; color: #7c867f; font-size: 8px; line-height: 1.45; }
 .section-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .section-heading h3, .connections h3 { margin: 0; font: 500 18px Georgia,serif; }
